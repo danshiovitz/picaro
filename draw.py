@@ -13,7 +13,7 @@ def flatten(*card_counts):
        flat.append(card)
    return tuple(flat)
 
-        
+
 SKILLS = (
     "Dueling",
     "Formation Fighting",
@@ -21,28 +21,28 @@ SKILLS = (
     "Shoot",
     "Throw",
     "Ride",
-    
+
     "Research",
     "Debate",
     "Charm",
     "Carousing",
     "Thaumaturgy",
     "Spirit Binding",
-    
+
     "Mechanisms",
     "Endurance",
     "Stealth",
     "Animal Training",
     "Might",
     "Climb",
-    
+
     "Desert Lore",
     "Forest Lore",
     "Sea Lore",
     "Mountain Lore",
     "Jungle Lore",
     "Plains Lore",
-        
+
     "Command",
     "Observation",
     "Mesmerism",
@@ -66,7 +66,7 @@ JOB_CARDS = flatten(
     ("Hunting Expedition", 1),
     ("Victory Celebration", 1),
     ("Test of Skill", 1),
-    ("Aftermath of Battle", 1) 
+    ("Aftermath of Battle", 1)
 )
 
 HEX_CARDS = flatten(
@@ -80,7 +80,7 @@ HEX_CARDS = flatten(
     ("Desert Mystic", 2)
 )
 
-        
+
 class Difficulty(Enum):
  EASY = 0
  MEDIUM = 1
@@ -139,15 +139,15 @@ def gen_job_deck():
         cards.append(ChallengeCard(name=hc.pop(), difficulty=Difficulty.MEDIUM))
 
     for _ in range(4):
-        cards.append(DrawCard(deck_name="project"))      
+        cards.append(DrawCard(deck_name="project"))
 
     for _ in range(4):
         cards.append(DrawCard(deck_name="lifepath"))
-        
+
     random.shuffle(cards)
     return cards[0:20]
 
-        
+
 def main():
     print("The season begins!")
     print("")
@@ -159,6 +159,6 @@ def main():
         line = input()
         print()
     print("The season has ended.")
-    
+
 if __name__ == "__main__":
     main()

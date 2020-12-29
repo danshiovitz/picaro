@@ -6,13 +6,14 @@ from common import Card, Deck, flatten
 from skills import *
 
 class Terrain:
-    def __init__(self, name, symbol, fmt, bg_fmt, base_difficulty, base_skills, deck):
+    def __init__(self, name, symbol, fmt, bg_fmt, base_difficulty, base_skills, move_distances, deck):
         self.name = name
         self.symbol = symbol
         self.fmt = fmt
         self.bg_fmt = bg_fmt
         self.base_difficulty = base_difficulty
         self.base_skills = base_skills
+        self.move_distances = move_distances
         self.deck = deck
 
 class MountainTerrain(Terrain):
@@ -20,6 +21,7 @@ class MountainTerrain(Terrain):
         fmt = colors.fg.darkgrey
         bg_fmt = colors.bg.darkgrey
         base_skills = { MOUNTAIN_LORE, MOUNTAIN_LORE, CLIMB }
+        move_distances = [0, 0, 1, 1, 1, 2]
         deck = Deck(flatten(
             (Card("Chasm", {ACROBATICS, THROW, NAVIGATION}), 2),
             (Card("Avalanche", {MIGHT, SPEED, ACROBATICS}), 2),
@@ -28,13 +30,14 @@ class MountainTerrain(Terrain):
             (Card("Dark Cave", {ARCHITECTURE, NAVIGATION, THAUMATURGY}), 2),
             (Card("Icy Wind", {ENDURANCE, ACROBATICS, MESMERISM}), 2),
         ))
-        super().__init__(name, symbol, fmt, bg_fmt, base_difficulty, base_skills, deck)
+        super().__init__(name, symbol, fmt, bg_fmt, base_difficulty, base_skills, move_distances, deck)
 
 class DesertTerrain(Terrain):
     def __init__(self, name, symbol, base_difficulty):
         fmt = colors.fg.yellow
         bg_fmt = colors.bg.orange
         base_skills = { DESERT_LORE, DESERT_LORE, ENDURANCE }
+        move_distances = [0, 1, 1, 1, 2, 3]
         deck = Deck(flatten(
             (Card("Oasis", {CAROUSING, OBSERVATION, DOCTOR}), 2),
             (Card("Sandstorm", {NAVIGATION, ENDURANCE, MIGHT}), 2),
@@ -43,11 +46,12 @@ class DesertTerrain(Terrain):
             (Card("Strange Constellations", {SPIRIT_BINDING, NAVIGATION, MESMERISM}), 2),
             (Card("Mirage", {OBSERVATION, ARCHITECTURE, MESMERISM}), 2),
         ))
-        super().__init__(name, symbol, fmt, bg_fmt, base_difficulty, base_skills, deck)
+        super().__init__(name, symbol, fmt, bg_fmt, base_difficulty, base_skills, move_distances, deck)
 
 class WaterTerrain(Terrain):
     def __init__(self, name, symbol, fmt, bg_fmt, base_difficulty):
         base_skills = { SEA_LORE, SEA_LORE, NAVIGATION }
+        move_distances = [1, 1, 2, 2, 3, 3]
         deck = Deck(flatten(
             (Card("Storm", {}), 2),
             (Card("Dangerous Rocks", {}), 2),
@@ -56,7 +60,7 @@ class WaterTerrain(Terrain):
             (Card("Ghost Ship", {}), 2),
             (Card("Becalmed", {}), 2),
         ))
-        super().__init__(name, symbol, fmt, bg_fmt, base_difficulty, base_skills, deck)
+        super().__init__(name, symbol, fmt, bg_fmt, base_difficulty, base_skills, move_distances, deck)
 
 class GrasslandsTerrain(Terrain):
     def __init__(self):
@@ -66,15 +70,16 @@ class GrasslandsTerrain(Terrain):
         bg_fmt = colors.bg.green
         base_difficulty = 1
         base_skills = { PLAINS_LORE, PLAINS_LORE, RIDE }
+        move_distances = [1, 1, 2, 2, 3, 3]
         deck = Deck(flatten(
             (Card("Circling Birds", {}), 2),
             (Card("Strange Vegetation", {}), 2),
             (Card("Distant Riders", {}), 2),
             (Card("Sudden Storm", {}), 2),
             (Card("Beasts of the Grasslands", {}), 2),
-            (Card("Dangerous Footing", {}), 2),          
+            (Card("Dangerous Footing", {}), 2),
         ))
-        super().__init__(name, symbol, fmt, bg_fmt, base_difficulty, base_skills, deck)
+        super().__init__(name, symbol, fmt, bg_fmt, base_difficulty, base_skills, move_distances, deck)
 
 class CityTerrain(Terrain):
     def __init__(self):
@@ -84,6 +89,7 @@ class CityTerrain(Terrain):
         bg_fmt = colors.bg.magenta
         base_difficulty = 2
         base_skills = { OBSERVATION, ARCHITECTURE, CAROUSING }
+        move_distances = [0, 0, 0, 1, 1, 1]
         deck = Deck(flatten(
             (Card("Street Market", {OBSERVATION, APPRAISAL, PICKPOCKET}), 2),
             (Card("Wandering Prophet", {}), 2),
@@ -92,8 +98,8 @@ class CityTerrain(Terrain):
             (Card("???", {}), 2),
             (Card("???", {}), 2),
         ))
-        super().__init__(name, symbol, fmt, bg_fmt, base_difficulty, base_skills, deck)
-    
+        super().__init__(name, symbol, fmt, bg_fmt, base_difficulty, base_skills, move_distances, deck)
+
 TERRAINS = [
     MountainTerrain("Low Mountains", "m", 2),
     MountainTerrain("High Mountains", "M", 4),
@@ -111,41 +117,52 @@ class Hex:
         self.terrain = terrain
         self.card_difficulty = terrain.base_difficulty
         self.card_skills = terrain.base_skills
+        self.move_distances = terrain.move_distances
         self.neighbors = []
         self.dirs = {}
         self.features = {}
 
-    def render(self):
+    def render(self, selected):
+        reg_fmt = self.terrain.fmt
+        inv_fmt = colors.fg.black + self.terrain.bg_fmt
         if self.features:
             sym = list(self.features.values())[0].symbol
-            return colors.fg.black + self.terrain.bg_fmt + sym + colors.reset
+            return inv_fmt + sym + colors.reset
+        elif selected:
+            return inv_fmt + self.terrain.symbol + colors.reset
         else:
-            return self.terrain.fmt + self.terrain.symbol + colors.reset
+            return reg_fmt + self.terrain.symbol + colors.reset
 
     def draw(self):
         return self.terrain.deck.draw()
-    
+
+    def get_move_distance(self):
+        return random.choice(self.move_distances)
+
 class Feature:
     def __init__(self, name, symbol):
         self.name = name
         self.symbol = symbol
         self.hex = None
-        
+
 class Hexmap:
     def __init__(self, data):
         self._set_hexes(data)
         self._features = {}
-        
-    def display(self, messages):
+
+    def display(self, messages, selected_hexes):
         for y in range(self.height):
             for x in range(self.width):
                 hn = "{},{}".format(x+1, y+1)
                 h = self._hexes[hn]
-                print(h.render(), end="")
+                print(h.render(hn in selected_hexes), end="")
             if messages:
                 print("        " + messages.pop(0))
             else:
                 print()
+
+    def get_hex(self, hex_name):
+        return self._hexes[hex_name]
 
     def add_feature(self, feature, hex_name):
         feature.hex = self._hexes[hex_name]
@@ -155,8 +172,14 @@ class Hexmap:
     def find_feature(self, feature_name):
         feature = self._features[feature_name]
         return feature.hex
-            
-    def random_move(self, feature_name, amt):
+
+    def move_feature(self, feature_name, hex_name):
+        feature = self._features[feature_name]
+        del feature.hex.features[feature_name]
+        feature.hex = self._hexes[hex_name]
+        feature.hex.features[feature.name] = feature
+
+    def random_path(self, feature_name, amt):
         feature = self._features[feature_name]
         cc = feature.hex
         excluded = {cc.name}
@@ -167,11 +190,9 @@ class Hexmap:
             cc = self._hexes[random.choice(list(neighbors))]
             print("Moved to {} - {}".format(cc.name, cc.terrain.name))
             excluded |= neighbors
-        del feature.hex.features[feature_name]
-        feature.hex = cc
-        feature.hex.features[feature.name] = feature
+        return cc
 
-    def vi_move(self, feature_name, dirs):
+    def vi_path(self, feature_name, dirs):
         feature = self._features[feature_name]
         cc = feature.hex
         for d in dirs:
@@ -181,10 +202,16 @@ class Hexmap:
                 print("Bonk!")
             else:
                 cc = cc.dirs[d]
-        del feature.hex.features[feature_name]
-        feature.hex = cc
-        feature.hex.features[feature.name] = feature
-        
+        return cc
+
+    def random_move(self, feature_name, amt):
+        target_hex = self.random_path(feature_name, amt)
+        self.move_feature(feature_name, target_hex.name)
+
+    def vi_move(self, feature_name, dirs):
+        target_hex = self.vi_path(feature_name, dirs)
+        self.move_feature(feature_name, target_hex.name)
+
     def _set_hexes(self, data):
         self.width = len(data[0])
         self.height = len(data)
@@ -219,7 +246,7 @@ class Hexmap:
                 for n in hn:
                     n.neighbors.append(h)
                     h.neighbors.append(n)
-            
+
 if __name__ == "__main__":
     MAP_DATA = (
         "MMmmDDD",
@@ -236,7 +263,7 @@ if __name__ == "__main__":
     m.add_feature(Feature("Bob3", "@"), "3,1")
     m.add_feature(Feature("Bob4", "@"), "1,6")
     m.add_feature(Feature("Bob5", "@"), "2,7")
-    m.add_feature(Feature("Bob4", "@"), "3,6")                    
+    m.add_feature(Feature("Bob4", "@"), "3,6")
     m.display([])
     m.random_move("Bob", 2)
     m.display([])

@@ -1,8 +1,16 @@
 import random
 from enum import Enum
 
-from common import Deck, Result, flatten
+from common import Deck, flatten
 from skills import SKILLS
+
+
+class Result(Enum):
+    FAILURE = 0
+    MIXED = 1
+    SUCCESS = 2
+    GREAT_SUCCESS = 3
+
 
 class Reward(Enum):
      COINS = 1,
@@ -18,7 +26,7 @@ rewards = Deck(flatten(
             (Reward.XP_BASE, 2),
             (Reward.XP_RANDOM, 1),
             (Reward.REPUTATION, 4),
-            (Reward.TOOL, 1),   
+            (Reward.TOOL, 1),
           ))
 
 
@@ -41,7 +49,7 @@ def add_reward_penalty(rank, result, base_skill, pc):
     else:
         raise Exception("Result? {}".format(result))
 
-    
+
 def add_reward (rank, base_skill, pc):
     card = rewards.draw()
     if card == Reward.COINS:
