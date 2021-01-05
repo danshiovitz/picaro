@@ -15,6 +15,7 @@ from colors import colors
 #         return reg_fmt + self.terrain.symbol + colors.reset
 
 # buncha stuff from https://www.redblobgames.com/grids/hexagons per usual
+# clean-room reimpl of the hex design from https://github.com/cmelchior/asciihexgrid
 
 class OffsetCoordinate(NamedTuple):
     row: int
