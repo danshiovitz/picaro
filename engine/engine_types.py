@@ -1,6 +1,7 @@
-from typing import List, NamedTuple
+from typing import List, NamedTuple, Optional
 
 from picaro.common.hexmap.types import OffsetCoordinate
+
 
 Terrains = [
     "Forest", "Jungle", "Hills", "Mountains", "Plains", "Desert", "Water", "City", "Swamp", "Coastal", "Arctic",
@@ -31,3 +32,13 @@ class Token(NamedTuple):
 class Hexmap(NamedTuple):
     hexes: List[Hex]
     tokens: List[Token]
+
+
+class Character(NamedTuple):
+    name: str
+    player_id: Optional[int]
+
+
+class Player(NamedTuple):
+    id: int
+    name: str

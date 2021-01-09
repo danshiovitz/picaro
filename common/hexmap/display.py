@@ -1,28 +1,6 @@
-from typing import Callable, Dict, List, NamedTuple, Optional, Set
+from typing import Callable, Dict, List, NamedTuple, Optional, Set, Tuple
 
-
-class OffsetCoordinate(NamedTuple):
-    row: int
-    column: int
-
-
-class CubeCoordinate(NamedTuple):
-    x: int
-    y: int
-    z: int
-
-    @classmethod
-    def from_row_col(cls, row: int, col: int) -> "CubeCoordinate":
-        x = col
-        z = row - (col + (col&1)) // 2
-        y = -x - z
-        return CubeCoordinate(x=x, y=y, z=z)
-
-    def distance(self, other: "CubeCoordinate") -> int:
-        return (abs(self.x - other.x) + abs(self.y - other.y) + abs(self.z - other.z)) // 2
-
-    def step(self, x_mod: int, y_mod: int, z_mod: int) -> "CubeCoordinate":
-        return CubeCoordinate(x=self.x + x_mod, y=self.y + y_mod, z=self.z + z_mod)
+from .types import OffsetCoordinate, CubeCoordinate
 
 
 class DisplayInfo(NamedTuple):
@@ -51,8 +29,8 @@ class HexLookups(NamedTuple):
     by_cube: Dict[CubeCoordinate, HexInfo]
 
 
-def render_simple(coords: Set[OffsetCoordinate], text_width: int, get_text: Callable[[OffsetCoordinate], Optional[str]]) -> List[str]:
-    window = calc_window(coords)
+def render_simple(coords: Set[OffsetCoordinate], text_width: int, get_text: Callable[[OffsetCoordinate], Optional[str]], center: Optional[OffsetCoordinate] = None, radius: int = 2) -> List[str]:
+    coords, window = _calc_window(coords, center, radius)
 
     def render_one(row, column, mod):
         rc = OffsetCoordinate(row, column)
@@ -94,10 +72,8 @@ def render_large(coords: Set[OffsetCoordinate], get_info: Callable[[OffsetCoordi
 # \•54321•/     \•  Z  •/           \•  Z  •/
 #  \•_•_•/       \•_•_•/             \•_•_•/
 #
-    lookups = make_lookups(coords, get_info)
-    if center is not None:
-        lookups = filter_lookups(lookups, center, radius)
-    window = calc_window(lookups.by_offset)
+    coords, window = _calc_window(coords, center, radius)
+    lookups = _make_lookups(coords, get_info)
 
     # The top border of the hex is written out as the bottom border of the
     # hex above; therefore, we start one row earlier than specified, and
@@ -125,14 +101,14 @@ def render_large(coords: Set[OffsetCoordinate], get_info: Callable[[OffsetCoordi
                 # remember, we print the second half of odd rows as part of
                 # the previous row
                 data_row = cur_row if (is_even or cur_line >= 3) else cur_row + 1
-                txt += get_hex_left_border(lookups, data_row, cur_col, cur_line, coords)
+                txt += _get_hex_left_border(lookups, data_row, cur_col, cur_line, coords)
                 if cur_col <= window.max_column:
-                    txt += get_hex_line(lookups, data_row, cur_col, cur_line, coords)
+                    txt += _get_hex_line(lookups, data_row, cur_col, cur_line, coords)
             if txt.strip():
                 ret.append(txt)
     return ret
 
-def get_hex_line(lookups: HexLookups, row: int, col: int, line: int, coords: Set[OffsetCoordinate]) -> str:
+def _get_hex_line(lookups: HexLookups, row: int, col: int, line: int, coords: Set[OffsetCoordinate]) -> str:
     cur = lookups.by_offset.get(OffsetCoordinate(row, col), None)
     if cur and cur.offset not in coords:
         cur = None
@@ -156,7 +132,7 @@ def get_hex_line(lookups: HexLookups, row: int, col: int, line: int, coords: Set
 
 
 # that is, the border between the hex at row, cur and the hex to its left
-def get_hex_left_border(lookups: HexLookups, row: int, col: int, line: int, coords: Set[OffsetCoordinate]) -> str:
+def _get_hex_left_border(lookups: HexLookups, row: int, col: int, line: int, coords: Set[OffsetCoordinate]) -> str:
     cur = lookups.by_offset.get(OffsetCoordinate(row, col), None)
     if cur and cur.offset not in coords:
         cur = None
@@ -183,10 +159,19 @@ def get_hex_left_border(lookups: HexLookups, row: int, col: int, line: int, coor
         raise Exception(f"Bad border line: {line}")
 
 
-def calc_window(coords: Set[OffsetCoordinate]) -> DrawWindow:
+def _calc_window(coords: Set[OffsetCoordinate], center: Optional[OffsetCoordinate], radius: int) -> Tuple[Set[OffsetCoordinate], DrawWindow]:
+    if center:
+        center_cube = CubeCoordinate.from_row_col(center.row, center.column)
+        filtered = set()
+        for coord in coords:
+            cube = CubeCoordinate.from_row_col(coord.row, coord.column)
+            if cube.distance(center_cube) <= radius:
+                filtered.add(coord)
+        coords = filtered
+
     min_row = min(x.row for x in coords)
     max_row = max(x.row for x in coords)
-    return DrawWindow(
+    return coords, DrawWindow(
         min_row=min_row,
         max_row=max_row,
         min_column=min(x.column for x in coords),
@@ -195,7 +180,7 @@ def calc_window(coords: Set[OffsetCoordinate]) -> DrawWindow:
         half_bottom=any(x.column % 2 == 0 for x in coords if x.row == max_row),
     )
 
-def make_lookups(coords: Set[OffsetCoordinate], get_info: Callable[[OffsetCoordinate], Optional[DisplayInfo]]) -> HexLookups:
+def _make_lookups(coords: Set[OffsetCoordinate], get_info: Callable[[OffsetCoordinate], Optional[DisplayInfo]]) -> HexLookups:
     lst = []
     for coord in coords:
         info = get_info(coord)
@@ -204,16 +189,6 @@ def make_lookups(coords: Set[OffsetCoordinate], get_info: Callable[[OffsetCoordi
         cube = CubeCoordinate.from_row_col(coord.row, coord.column)
         lst.append(HexInfo(offset=coord, cube=cube, info=info))
 
-    return HexLookups(
-        by_offset={hx.offset: hx for hx in lst},
-        by_cube={hx.cube: hx for hx in lst}
-    )
-
-
-def filter_lookups(lookups: HexLookups, center: OffsetCoordinate, radius: int) -> HexLookups:
-    center_cube = lookups.by_offset[center].cube
-
-    lst = [hx for cube, hx in lookups.by_cube.items() if cube.distance(center_cube) <= radius]
     return HexLookups(
         by_offset={hx.offset: hx for hx in lst},
         by_cube={hx.cube: hx for hx in lst}

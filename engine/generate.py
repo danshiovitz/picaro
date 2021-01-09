@@ -2,9 +2,10 @@ import random
 from functools import reduce
 from math import floor
 from string import ascii_uppercase
-from typing import Dict, List, NamedTuple, Set, Tuple
+from typing import Dict, List, NamedTuple, Set
 
-from .api_types import Countries, Hex, Hexmap, Terrains
+from .engine_types import Countries, Hex, Hexmap, Terrains
+from picaro.common.hexmap.utils import OffsetCoordinate, calc_offset_neighbor_map
 
 # generation code from https://welshpiper.com/hex-based-campaign-design-part-1/
 class TerrainData(NamedTuple):
@@ -24,12 +25,12 @@ TRANSITIONS = {
     "Mountains": TerrainData(primary=["Mountains"], secondary=["Hills"], tertiary=["Forest"], wildcards=["Desert"]),
 }
 
-def generate(num_rows: int, num_columns: int, starting_terrain: Dict[Tuple[int, int], str]) -> List[Hex]:
+def generate(num_rows: int, num_columns: int, starting_terrain: Dict[OffsetCoordinate, str]) -> List[Hex]:
     terrain = {k: v for k, v in starting_terrain.items()}
     if not terrain:
         terrain[(num_rows // 2, num_columns // 2)] = random.choice(list(TRANSITIONS))
 
-    neighbors_map = _calc_neighbors(num_rows, num_columns)
+    neighbors_map = calc_offset_neighbor_map(num_rows, num_columns)
 
     while True:
         terrain_neighbors = [(cur, ngh)
@@ -41,14 +42,13 @@ def generate(num_rows: int, num_columns: int, starting_terrain: Dict[Tuple[int, 
         from_hex, to_hex = random.choice(terrain_neighbors)
         terrain[to_hex] = _choose_terrain(TRANSITIONS[terrain[from_hex]])
 
-    def make_hex(coord: Tuple[int, int]) -> Hex:
-        row, column = coord
+    def make_hex(coord: OffsetCoordinate) -> Hex:
+        row, column = (coord.row, coord.column)
         rn = ascii_uppercase[row // 26] + ascii_uppercase[row % 26]
         nm = f"{rn}{column+1:02}"
         return Hex(
             name=nm,
-            row=row,
-            column=column,
+            coordinate=coord,
             terrain=terrain[coord],
             country=random.choice(Countries),
         )
@@ -77,22 +77,21 @@ def generate_from_mini(num_rows: int, num_columns: int, minimap: List[str]) -> L
         return _choose_terrain(TRANSITIONS[mini_names[sym]])
 
     terrain = {
-        (row, col): project_choose(row, col)
+        OffsetCoordinate(row=row, column=col): project_choose(row, col)
         for row in range(num_rows)
         for col in range(num_columns)
     }
 
-    neighbors_map = _calc_neighbors(num_rows, num_columns)
+    neighbors_map = calc_offset_neighbor_map(num_rows, num_columns)
     _adjust_terrain(terrain, neighbors_map)
 
-    def make_hex(coord: Tuple[int, int]) -> Hex:
-        row, column = coord
+    def make_hex(coord: OffsetCoordinate) -> Hex:
+        row, column = (coord.row, coord.column)
         rn = ascii_uppercase[row // 26] + ascii_uppercase[row % 26]
         nm = f"{rn}{column+1:02}"
         return Hex(
             name=nm,
-            row=row,
-            column=column,
+            coordinate=coord,
             terrain=terrain[coord],
             country=random.choice(Countries),
         )
@@ -100,25 +99,6 @@ def generate_from_mini(num_rows: int, num_columns: int, minimap: List[str]) -> L
     return [
         make_hex(k) for k in terrain
     ]
-
-
-def _calc_neighbors(num_rows: int, num_columns: int) -> Dict[Tuple[int, int], Set[Tuple[int, int]]]:
-    ret = {}
-    # per https://www.redblobgames.com/grids/hexagons/
-    # but we flip row/col
-    evenq_directions = [
-        [[+1, +1], [0, +1], [-1, 0],
-        [0, -1], [+1, -1], [+1, 0]],
-        [[0, +1], [-1, +1], [-1, 0],
-        [-1, -1], [0, -1], [+1, 0]],
-    ]
-    for row in range(0, num_rows):
-        for col in range(0, num_columns):
-            ret[(row, col)] = {(row + dir[0], col + dir[1])
-                for dir in evenq_directions[col & 1]
-                if (0 <= (row + dir[0]) < num_rows) and
-                   (0 <= (col + dir[1]) < num_columns)}
-    return ret
 
 
 def _calc_axis_projection(small: int, big: int) -> Dict[int, int]:
@@ -143,8 +123,8 @@ def _choose_terrain(data: TerrainData) -> str:
     return random.choice(random.choice(xs))
 
 
-def _adjust_terrain(terrain: Dict[Tuple[int, int], str], neighbor_map: Dict[Tuple[int, int], Set[Tuple[int, int]]]) -> None:
-    def _neighbor_count(coord: Tuple[int, int], ttype: str) -> int:
+def _adjust_terrain(terrain: Dict[OffsetCoordinate, str], neighbor_map: Dict[OffsetCoordinate, Set[OffsetCoordinate]]) -> None:
+    def _neighbor_count(coord: OffsetCoordinate, ttype: str) -> int:
         return len([1 for ngh in neighbor_map[coord] if terrain[ngh] == ttype])
 
     near_water = {coord: cnt for coord, cnt in (
@@ -154,7 +134,7 @@ def _adjust_terrain(terrain: Dict[Tuple[int, int], str], neighbor_map: Dict[Tupl
     ) if cnt >= 1}
 
     def nm(coord):
-        row, column = coord
+        row, column = (coord.row, coord.column)
         rn = ascii_uppercase[row // 26] + ascii_uppercase[row % 26]
         return f"{rn}{column+1:02}"
 
@@ -167,13 +147,13 @@ def _adjust_terrain(terrain: Dict[Tuple[int, int], str], neighbor_map: Dict[Tupl
 
     num_rows = max(x[0] for x in terrain) + 1
 
-    hot_forests = [coord for coord, ttype in terrain.items() if ttype == "Forest" and coord[0] >= num_rows // 2]
+    hot_forests = [coord for coord, ttype in terrain.items() if ttype == "Forest" and coord.row >= num_rows // 2]
     jungle_chance = {k: p * 10 for k, p in _calc_axis_projection(10, num_rows).items()}
     for coord in hot_forests:
-        if random.randint(1, 100) < jungle_chance[coord[0]]:
+        if random.randint(1, 100) < jungle_chance[coord.row]:
             terrain[coord] = "Jungle"
 
-    cold_lands = [coord for coord, ttype in terrain.items() if ttype not in ("Mountains", "Water") and coord[0] <= num_rows // 4]
+    cold_lands = [coord for coord, ttype in terrain.items() if ttype not in ("Mountains", "Water") and coord.row <= num_rows // 4]
     arctic_chance = {k: 80 - p * 15 for k, p in _calc_axis_projection(20, num_rows).items()}
     for coord in cold_lands:
         if random.randint(1, 100) < arctic_chance[coord[0]]:
@@ -183,9 +163,8 @@ def _adjust_terrain(terrain: Dict[Tuple[int, int], str], neighbor_map: Dict[Tupl
     clear_radius = 3
     city_spots = {coord for coord, ttype in terrain.items() if ttype != "Water"}
     for _ in range(num_cities):
-        print("Placing city ....")
         if not city_spots:
-            print("No more spots!")
+            print("No more city spots!")
         coord = random.choice(list(city_spots))
         terrain[coord] = "City"
         clear_set = {coord}

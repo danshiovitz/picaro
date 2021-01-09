@@ -1,9 +1,10 @@
 from argparse import ArgumentParser, Namespace
+from collections import defaultdict
 from typing import Type, TypeVar
 from urllib.request import Request, urlopen
 
 from picaro.client.colors import colors
-from picaro.client.hexmap_display import DisplayInfo, OffsetCoordinate, render_simple, render_large
+from picaro.common.hexmap.display import DisplayInfo, OffsetCoordinate, render_simple, render_large
 from picaro.server.serializer import deserialize
 from picaro.server.api_types import Hexmap
 
@@ -42,7 +43,7 @@ class Client:
             "Plains": (colors.fg.lightgrey, "."),
             "Desert": (colors.fg.yellow, ":"),
             "Water": (colors.fg.blue, "~"),
-            "City": (colors.fg.red, "@"),
+            "City": (colors.fg.red, "#"),
             "Swamp": (colors.fg.magenta, "&"),
             "Coastal": (colors.fg.cyan, ";"),
             "Arctic": (colors.bold, "/"),
@@ -51,26 +52,40 @@ class Client:
     def get_map(self) -> None:
         hexmap = self._get("/map", Hexmap)
         coords = {
-            OffsetCoordinate(row=hx.row, column=hx.column): hx for hx in hexmap.hexes
+            hx.coordinate: hx for hx in hexmap.hexes
         }
+
+        tokens = defaultdict(list)
+        for tok in hexmap.tokens:
+            tokens[tok.location].append(tok)
 
         if self.args.large:
             def display(coord: OffsetCoordinate) -> DisplayInfo:
                 hx = coords[coord]
                 # return self.terrains[hx.terrain][0] + hx.country[0] + colors.reset
                 color, symbol = self.terrains[hx.terrain]
+                body1 = hx.name + " "
+                body2 = (hx.country + "     ")[0:5]
+
+                if hx.name in tokens:
+                    body2 = colors.bold + (tokens[hx.name][0].name + "     ")[0:5] + colors.reset
                 return DisplayInfo(
                     fill=color + symbol + colors.reset,
-                    body1=hx.name + " ",
-                    body2=(hx.country + "     ")[0:5],
+                    body1=body1,
+                    body2=body2,
                 )
 
-            for line in render_large(set(coords), display, center=(44, 29), radius=2):
+            center_hx = [hx for hx in hexmap.hexes if hx.name == hexmap.tokens[0].location][0]
+            for line in render_large(set(coords), display, center=center_hx.coordinate, radius=2):
                 print(line)
 
         else:
             def display(coord: OffsetCoordinate) -> str:
                 hx = coords[coord]
+
+                if hx.name in tokens:
+                    return colors.bold + "@" + colors.reset
+
                 color, symbol = self.terrains[hx.terrain]
                 return (
                     color +
@@ -80,6 +95,11 @@ class Client:
 
             for line in render_simple(set(coords), 1, display):
                 print(line)
+
+        if hexmap.tokens:
+            print()
+            for tok in hexmap.tokens:
+                print(tok)
 
     def _get(self, path: str, cls: Type[T]) -> T:
         url = self.base_url
