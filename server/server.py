@@ -14,8 +14,13 @@ class Server:
         player_id = self._extract_player_id()
         return recursive_to_dict(self._engine.get_map(player_id))
 
+    def get_tableau(self, character_name) -> Dict[str, Any]:
+        player_id = self._extract_player_id()
+        return recursive_to_dict(self._engine.get_tableau(player_id, character_name))
+
     def run(self) -> None:
         bottle.route(path="/map", callback=self.get_map)
+        bottle.route(path="/tableau/<character_name>", callback=self.get_tableau)
         bottle.run(host="localhost", port=8080, debug=True)
 
     def _extract_player_id(self) -> int:

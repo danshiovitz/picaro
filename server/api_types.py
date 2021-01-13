@@ -1,33 +1,25 @@
 from typing import List, NamedTuple
 
 from picaro.common.hexmap.types import OffsetCoordinate
-
-Terrains = [
-    "Forest", "Jungle", "Hills", "Mountains", "Plains", "Desert", "Water", "City", "Swamp", "Coastal", "Arctic",
-]
+from picaro.common.engine.types import Countries, FullCard, Hex, Hexmap, Tableau, Terrains, Token, TokenTypes
 
 
-Countries = [
-    "Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Theta", "Iota",
-]
-
-
-class Hex(NamedTuple):
+class CardPreview(NamedTuple):
     name: str
-    coordinate: OffsetCoordinate
-    terrain: str
-    country: str
+    check: EncounterCheck
+    age: int
+    location: OffsetCoordinate
+
+    @classmethod
+    def from_FullCard(cls, full_card: FullCard) -> "CardPreview":
+        return CardPreview(full_card.name, full_card.checks[0], full_card.age, full_card.location)
 
 
-TokenTypes = ["Character", "Other"]
+class ExternalTableau(NamedTuple):
+    cards: List[CardPreview]
+    remaining_turns: int
+    luck: int
 
-
-class Token(NamedTuple):
-    name: str
-    type: str
-    location: str
-
-
-class Hexmap(NamedTuple):
-    hexes: List[Hex]
-    tokens: List[Token]
+    @classmethod
+    def from_Tableau(cls, tableau: Tableau) -> "ExternalTableau":
+        return tableau([CardPreview.from_FullCard(card) for card in tableau.cards], tableau.remaining_turns, tableau.luck)

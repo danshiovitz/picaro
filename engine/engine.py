@@ -1,7 +1,7 @@
 from typing import List
 
-from .engine_types import Character, Hexmap, Player, Token
 from .generate import generate_from_mini
+from .types import Character, Hexmap, Player, Token
 
 class Engine:
     def __init__(self):
@@ -13,11 +13,23 @@ class Engine:
         self._players.append(Player(id=103, name=new_player_name))
 
     def add_character(self, player_id: int, character_name: str) -> None:
-        self._characters.append(Character(name=character_name, player_id=player_id))
+        self._characters.append(Character(name=character_name, player_id=player_id, tableau=None))
         self._map.tokens.append(Token(name=character_name, type="Character", location="Nowhere"))
 
     def get_map(self, player_id: int) -> Hexmap:
         return self._map
+
+    def get_tableau(self, player_id: int, character_name: str) -> Optional[Tableau]:
+        for char in self._characters:
+            if char.name == character_name:
+                return char.tableau
+        raise Exception(f"No such character: {character_name}")
+
+    def start_season(self) -> None:
+        for i in range(len(self._characters)):
+            if self._characters[i].tableau:
+                raise Exception("Need to close out previous tableau if anything is active?")
+            self._characters[i] = self._characters._replace(tableau, self._init_tableau(self._characters[i]))
 
     def _init_map(self) -> Hexmap:
         minimap = [
@@ -31,3 +43,11 @@ class Engine:
             '&&"^n:::',
         ]
         return Hexmap(hexes=generate_from_mini(50, 50, minimap), tokens=[])
+
+    def _init_tableau(self, character: Character) -> Tableau:
+        cards = []
+        return Tableau(
+            cards=cards,
+            remaining_turns=20,
+            luck=5,
+        )

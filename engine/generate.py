@@ -4,7 +4,7 @@ from math import floor
 from string import ascii_uppercase
 from typing import Dict, List, NamedTuple, Set
 
-from .engine_types import Countries, Hex, Hexmap, Terrains
+from .types import Countries, Hex, Terrains
 from picaro.common.hexmap.utils import OffsetCoordinate, calc_offset_neighbor_map
 
 # generation code from https://welshpiper.com/hex-based-campaign-design-part-1/
