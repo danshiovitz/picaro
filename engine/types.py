@@ -29,38 +29,25 @@ class Token(NamedTuple):
     location: str
 
 
-class Hexmap(NamedTuple):
-    hexes: List[Hex]
-    tokens: List[Token]
-
-
 class EncounterCheck(NamedTuple):
     skill: str
-    difficuty: int
+    target_number: int
+
+
+class TemplateCard(NamedTuple):
+    name: str
+    desc: str
+    skills: List[str]
 
 
 class FullCard(NamedTuple):
-    name: str
-    desc: str
+    id: int
+    template: TemplateCard
     checks: List[EncounterCheck]
-    age: int
-    location: OffsetCoordinate
     signs: List[str]
 
 
-class Tableau(NamedTuple):
-    cards: List[FullCard]
-    remaining_turns: int
-    luck: int
-    deck: List[FullCard]
-
-
-class Character(NamedTuple):
-    name: str
-    player_id: Optional[int]
-    tableau: Optional[Tableau]
-
-
-class Player(NamedTuple):
-    id: int
-    name: str
+class DrawnCard(NamedTuple):
+    card: FullCard
+    age: int
+    location: OffsetCoordinate

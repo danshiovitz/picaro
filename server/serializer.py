@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict, NamedTuple, Sequence, Type, TypeVar
+from typing import Any, Dict, NamedTuple, Sequence, Type, TypeVar, Union
 
 def serialize(val: NamedTuple) -> str:
     if not hasattr(val, "_fields"):
@@ -16,11 +16,21 @@ def deserialize(data: str, cls: Type[T]) -> T:
     return recursive_from_dict(dt, cls)
 
 
-def recursive_to_dict(val: NamedTuple) -> str:
+def recursive_to_dict(val: Any) -> Any:
+    if not hasattr(val, "_fields"):
+        return val
     ret = {}
     for f in val._fields:
         subv = getattr(val, f)
         bt = getattr(val._field_types[f], "__origin__", val._field_types[f])
+        if bt == Union: # ie, it was an optional
+            if subv is None:
+                ret[f] = None
+                continue
+            # pull out the first type which is assumed to be the non-none type
+            inner = val._field_types[f].__args__[0]
+            bt = getattr(inner, "__origin__", inner)
+
         if hasattr(bt, "_fields"):
             ret[f] = recursive_to_dict(subv)
         elif bt != str and issubclass(bt, Sequence):
@@ -33,15 +43,27 @@ def recursive_to_dict(val: NamedTuple) -> str:
 
 
 def recursive_from_dict(val: Dict[str, Any], cls: Type[T]) -> T:
+    if not hasattr(cls, "_fields"):
+        return val
+
     dt = {}
     for f in cls._fields:
+        ut = cls._field_types[f]
         bt = getattr(cls._field_types[f], "__origin__", cls._field_types[f])
+        if bt == Union: # ie, it was an optional
+            if val[f] is None:
+                dt[f] = None
+                continue
+            # pull out the first type which is assumed to be the non-none type
+            ut = cls._field_types[f].__args__[0]
+            bt = getattr(ut, "__origin__", ut)
+
         if hasattr(bt, "_fields"):
             dt[f] = recursive_from_dict(val[f], bt)
         elif bt != str and issubclass(bt, Sequence):
-            dt[f] = [recursive_from_dict(sv, cls._field_types[f].__args__[0]) for sv in val[f]]
+            dt[f] = [recursive_from_dict(sv, ut.__args__[0]) for sv in val[f]]
         elif issubclass(bt, Dict):
-            dt[f] = {k: recursive_from_dict(v, cls._field_types[f].__args__[1]) for k, v in val[f].items()}
+            dt[f] = {k: recursive_from_dict(v, ut.__args__[1]) for k, v in val[f].items()}
         else:
             dt[f] = val[f]
     return cls(**dt)

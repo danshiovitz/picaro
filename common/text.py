@@ -1,10 +1,4 @@
-import random
-import re
-from enum import Enum
-from typing import List, Tuple
-
-from colors import colors
-
+from typing import List
 
 def conj_list(items: List[str], conj: str) -> str:
     if len(items) == 1:
@@ -13,7 +7,6 @@ def conj_list(items: List[str], conj: str) -> str:
         return f" {conj} ".join(items)
     else:
         return ", ".join(items[:-1]) + f", {conj} " + items[-1]
-
 
 def choose(*options: List[Tuple[str, str, int]]) -> str:
     while True:
@@ -28,29 +21,3 @@ def choose(*options: List[Tuple[str, str, int]]) -> str:
                     return (cmd_val, input_args)
 
         print(f"Unknown input {line}")
-
-
-def flatten(*thing_counts):
-   flat = []
-   for thing, count in thing_counts:
-       flat.extend([thing] * count)
-   return tuple(flat)
-
-class Card:
-    def __init__(self, name, skills):
-        self.name = name
-        self.skills = skills
-
-class Deck:
-    def __init__(self, cards):
-        self._all_cards = cards
-        self._current = []
-
-    def draw(self):
-        if not self._current:
-            cp = list(self._all_cards[:])
-            random.shuffle(cp)
-            for _ in range(2):
-                cp.pop()
-            self._current = cp
-        return self._current.pop(0)

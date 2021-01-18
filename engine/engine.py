@@ -1,53 +1,56 @@
-from typing import List
+from typing import Dict, List, Tuple
 
-from .generate import generate_from_mini
-from .types import Character, Hexmap, Player, Token
+from .board import Board
+from .character import Character, EncounterActions, EncounterOutcome
+from .job import Job
+from .types import Token
 
 class Engine:
     def __init__(self):
-        self._map = self._init_map()
-        self._players: List[Player] = []
-        self._characters: List[Character] = []
+        self._board = Board()
+        self._characters: Dict[str, Character] = {}
 
-    def add_player(self, player_id: int, new_player_name: str) -> None:
-        self._players.append(Player(id=103, name=new_player_name))
+    def get_board(self) -> Board:
+        return self._board
 
-    def add_character(self, player_id: int, character_name: str) -> None:
-        self._characters.append(Character(name=character_name, player_id=player_id, tableau=None))
-        self._map.tokens.append(Token(name=character_name, type="Character", location="Nowhere"))
+    def add_character(self, character_name: str, player_id: int, location: str, job: Job) -> None:
+        self._characters[character_name] = Character(name=character_name, player_id=player_id, job=job)
+        self._board.add_token(Token(name=character_name, type="Character", location=location))
 
-    def get_map(self, player_id: int) -> Hexmap:
-        return self._map
+    def get_character(self, character_name: str) -> Character:
+        ch = self._characters.get(character_name, None)
+        if ch is None:
+            raise Exception(f"No such character: {character_name}")
+        return ch
 
-    def get_tableau(self, player_id: int, character_name: str) -> Optional[Tableau]:
-        for char in self._characters:
-            if char.name == character_name:
-                return char.tableau
-        raise Exception(f"No such character: {character_name}")
+    def find_character(self, character_name: str) -> Tuple[str, str]:
+        return (self._board.get_token_location(character_name, False),
+                self._board.get_token_location(character_name, True))
 
     def start_season(self) -> None:
-        for i in range(len(self._characters)):
-            if self._characters[i].tableau:
-                raise Exception("Need to close out previous tableau if anything is active?")
-            self._characters[i] = self._characters._replace(tableau, self._init_tableau(self._characters[i]))
+        for ch in self._characters.values():
+            ch.start_season(self._board)
 
-    def _init_map(self) -> Hexmap:
-        minimap = [
-            '^n::n::~',
-            'n:n."..~',
-            '"."."".~',
-            '^n."".nn',
-            '^.~~~~~~',
-            '..""~..:',
-            '""""^::n',
-            '&&"^n:::',
-        ]
-        return Hexmap(hexes=generate_from_mini(50, 50, minimap), tokens=[])
+    def do_start_encounter(self, character_name: str, card_id: int) -> None:
+        ch = self._characters.get(character_name, None)
+        if ch is None:
+            raise Exception(f"No such character: {character_name}")
+        ch.do_start_encounter(card_id, self._board)
 
-    def _init_tableau(self, character: Character) -> Tableau:
-        cards = []
-        return Tableau(
-            cards=cards,
-            remaining_turns=20,
-            luck=5,
-        )
+    def do_resolve_encounter(self, character_name: str, actions: EncounterActions) -> EncounterOutcome:
+        ch = self._characters.get(character_name, None)
+        if ch is None:
+            raise Exception(f"No such character: {character_name}")
+        return ch.do_resolve_encounter(actions, self._board)
+
+    def do_travel(self, character_name: str, route: List[str]) -> None:
+        ch = self._characters.get(character_name, None)
+        if ch is None:
+            raise Exception(f"No such character: {character_name}")
+        ch.do_travel(route, self._board)
+
+    def do_camp(self, character_name: str) -> None:
+        ch = self._characters.get(character_name, None)
+        if ch is None:
+            raise Exception(f"No such character: {character_name}")
+        ch.do_camp(self._board)

@@ -1,13 +1,16 @@
+import re
 from argparse import ArgumentParser, Namespace
 from collections import defaultdict
-from typing import Type, TypeVar
+from string import ascii_lowercase
+from typing import List, Optional, Set, Type, TypeVar
 from urllib.request import Request, urlopen
 
 from picaro.client.colors import colors
-from picaro.common.hexmap.display import DisplayInfo, OffsetCoordinate, render_simple, render_large
-from picaro.server.serializer import deserialize
-from picaro.server.api_types import Hexmap
+from picaro.common.hexmap.display import CubeCoordinate, DisplayInfo, OffsetCoordinate, render_simple, render_large
+from picaro.server.serializer import deserialize, serialize
+from picaro.server.api_types import Board, CampRequest, CampResponse, CardPreview, Character, EncounterCheck, EncounterActions, StartEncounterRequest, StartEncounterResponse, ResolveEncounterRequest, ResolveEncounterResponse, TravelRequest, TravelResponse
 
+S = TypeVar("S")
 T = TypeVar("T")
 
 class Client:
@@ -23,11 +26,21 @@ class Client:
         parser.add_argument("--host", type=str, default="http://localhost:8080")
         parser.set_defaults(cmd=lambda cli: parser.print_help())
         subparsers = parser.add_subparsers()
-        get_map_parser = subparsers.add_parser("map")
-        get_map_parser.set_defaults(cmd=lambda cli: cli.get_map())
-        get_map_parser.add_argument('--country', '--countries', action='store_true')
-        get_map_parser.add_argument('--large', action='store_true')
-        get_map_parser.add_argument('--center', type=str, default=None)
+
+        get_board_parser = subparsers.add_parser("board")
+        get_board_parser.set_defaults(cmd=lambda cli: cli.get_board())
+        get_board_parser.add_argument('--country', '--countries', action='store_true')
+        get_board_parser.add_argument('--large', action='store_true')
+        get_board_parser.add_argument('--center', type=str, default=None)
+
+        get_character_parser = subparsers.add_parser("character")
+        get_character_parser.set_defaults(cmd=lambda cli: cli.get_character())
+        get_character_parser.add_argument('name', type=str)
+
+        play_parser = subparsers.add_parser("play")
+        play_parser.set_defaults(cmd=lambda cli: cli.play())
+        play_parser.add_argument('name', type=str)
+
         return parser.parse_args()
 
     def __init__(self, args: Namespace) -> None:
@@ -49,14 +62,14 @@ class Client:
             "Arctic": (colors.bold, "/"),
         }
 
-    def get_map(self) -> None:
-        hexmap = self._get("/map", Hexmap)
+    def get_board(self) -> None:
+        board = self._get("/board", Board)
         coords = {
-            hx.coordinate: hx for hx in hexmap.hexes
+            hx.coordinate: hx for hx in board.hexes
         }
 
         tokens = defaultdict(list)
-        for tok in hexmap.tokens:
+        for tok in board.tokens:
             tokens[tok.location].append(tok)
 
         if self.args.large:
@@ -75,39 +88,275 @@ class Client:
                     body2=body2,
                 )
 
-            center_hx = [hx for hx in hexmap.hexes if hx.name == hexmap.tokens[0].location][0]
+            center_hx = [hx for hx in board.hexes if hx.name == board.tokens[0].location][0]
             for line in render_large(set(coords), display, center=center_hx.coordinate, radius=2):
                 print(line)
 
         else:
-            def display(coord: OffsetCoordinate) -> str:
+            for line in self._make_small_map(board, self.args.country):
+                print(line)
+
+        if board.tokens:
+            print()
+            for tok in board.tokens:
+                print(tok)
+
+    def _make_small_map(self, board: Board, show_country: bool, center: Optional[OffsetCoordinate] = None, radius: int = 2, encounters: Optional[Set[str]] = None) -> List[str]:
+        coords = {
+            hx.coordinate: hx for hx in board.hexes
+        }
+
+        tokens = defaultdict(list)
+        for tok in board.tokens:
+            tokens[tok.location].append(tok)
+
+        if not encounters:
+            encounters = set()
+
+        def display(coord: OffsetCoordinate) -> str:
                 hx = coords[coord]
 
                 if hx.name in tokens:
                     return colors.bold + "@" + colors.reset
+                elif hx.name in encounters:
+                    return colors.bold + colors.bg.red + "!" + colors.reset
 
                 color, symbol = self.terrains[hx.terrain]
                 return (
                     color +
-                    (hx.country[0] if self.args.country else symbol) +
+                    (hx.country[0] if show_country else symbol) +
                     colors.reset
                 )
 
-            for line in render_simple(set(coords), 1, display):
-                print(line)
+        return render_simple(set(coords), 1, display, center=center, radius=radius)
 
-        if hexmap.tokens:
+    def get_character(self) -> None:
+        ch = self._get(f"/character/{self.args.name}", Character)
+        print(f"{ch.name} ({ch.player_id}) - a {ch.job}")
+        print(f"Health: {ch.health}   Coins: {ch.coins}  Reputation: {ch.reputation}")
+        print("Skills:")
+        for sk, v in sorted(ch.skills.items()):
+            print(f"  {sk}: {v}")
+        print()
+
+    def play(self) -> None:
+        board = self._get("/board", Board)
+        ch = self._get(f"/character/{self.args.name}", Character)
+        self._display_play(board, ch)
+        if not ch.tableau:
+            return
+        if ch.tableau.encounter:
+            self._do_encounter(None, board, ch)
+        else:
+            self._input_play_action(board, ch)
+
+    def _display_play(self, board: Board, ch: Character) -> None:
+        encounters = {card.location for card in ch.tableau.cards} if ch.tableau else None
+
+        ch_hex = [hx for hx in board.hexes if hx.name == ch.hex][0]
+        minimap = self._make_small_map(board, False, center=ch_hex.coordinate, radius=3, encounters=encounters)
+
+        display = ["" for _ in range(14)]
+        display[0] = f"{ch.name} ({ch.player_id}) - a {ch.job}"
+        display[1] = f"{ch.location}"
+        display[2] = ""
+        display[3] = f"Health: {ch.health:2}   Coins: {ch.coins:2}   Reputation: {ch.reputation:2}"
+        if ch.tableau:
+            display[4] = f" Turns: {ch.tableau.remaining_turns:2}    Luck: {ch.tableau.luck:2}"
+            display[5] = ""
+            for idx, card in enumerate(ch.tableau.cards):
+                pc_skill = f""
+                cs = (f"{ascii_lowercase[idx]}. ({card.age}) {card.name}:"
+                      f" {self._check_str(card.checks[0], ch)} [{card.location}]")
+                display[6+idx] = cs
+            display[9] = "t. Travel (uio.jkl)"
+            display[10] = "x. Camp"
+
+        pad = lambda val, width: val + " " * (width - len(val))
+        display = [pad(display[idx], 70) + (minimap[idx] if idx < len(minimap) else "")
+                  for idx in range(len(display))]
+        while display[-1].strip() == "":
+            display.pop()
+
+        for line in display:
+            print(line)
+        print()
+
+    def _check_str(self, check: EncounterCheck, ch: Character) -> str:
+        return f"{check.skill} (1d8{ch.skills[check.skill]:+}) vs {check.target_number}"
+
+    def _input_play_action(self, board: Board, ch: Character) -> None:
+        while True:
+            print("Action? ", end="")
+            line = input().lower()
+            if line[0] in "abcde":
+                c_idx = "abcde".index(line[0])
+                if c_idx < len(ch.tableau.cards):
+                    if self._do_encounter(ch.tableau.cards[c_idx], board, ch):
+                        return
+                else:
+                    print("No such encounter card!")
+                    print()
+                    continue
+            elif line[0] == "t":
+                ww = re.split(r"\s+", line, 2)
+                dirs = None if len(ww) == 1 else ww[1]
+                if not dirs or any(d not in "uio.jkl" for d in dirs):
+                    print("travel <dirs> - uio.jkl")
+                    print()
+                    continue
+                if len(dirs) > 3:
+                    print("max 3 steps")
+                    print()
+                    continue
+                if self._do_travel(dirs, board, ch):
+                    return
+            elif line[0] == "x":
+                if self._do_camp(board, ch):
+                    return
+            else:
+                print("Unknown action")
+                print()
+                continue
+
+    def _do_encounter(self, card_preview: Optional[CardPreview], board: Board, ch: Character) -> bool:
+        if not ch.tableau.encounter and card_preview is not None:
+            resp = self._post(f"/play/{ch.name}/encounter/start", StartEncounterRequest(card_id=card_preview.id), StartEncounterResponse)
+            if resp.error is not None:
+                print(resp.error)
+                return False
+            # ok, so encounter started - re-request the character to get
+            # the full details from the tableau:
+            ch = self._get(f"/character/{self.args.name}", Character)
+
+        signs = ", ".join(ch.tableau.encounter.card.signs)
+        print(f"{ch.tableau.encounter.card.template.name} [signs: {signs}]")
+        print(ch.tableau.encounter.card.template.desc)
+
+        self._input_encounter_action(board, ch)
+        return True
+
+    def _input_encounter_action(self, board: Board, ch: Character) -> None:
+        rolls = ch.tableau.encounter.rolls[:]
+        luck = ch.tableau.luck
+        transfers = []
+        adjusts = []
+        flee = False
+
+        while True:
             print()
-            for tok in hexmap.tokens:
-                print(tok)
+            for idx, check in enumerate(ch.tableau.encounter.card.checks):
+                status = "SUCCESS" if rolls[idx] >= check.target_number else "FAILURE"
+                print(f"Check #{idx+1}: {self._check_str(check, ch)}: {rolls[idx]} - {status}")
+            print("You can go, transfer, adjust, or flee: ", end="")
+            line = input().lower()
+            if line[0] == "f":
+                if luck <= 0:
+                    print(f"Insufficient luck ({luck}) to flee!")
+                    continue
+                flee = True
+                luck -= 1
+                break
+            elif line[0] == "t":
+                m = re.match(r"^t\w*\s+([0-9]+)\s+([0-9]+)$", line)
+                if not m:
+                    print("Expected: transfer <from check num> <to check num>")
+                    continue
+                from_c = int(m.group(1)) - 1
+                to_c = int(m.group(2)) - 1
+                if not (0 <= from_c < len(rolls)):
+                    print(f"Bad from check: {from_c + 1}")
+                    continue
+                if not (0 <= to_c < len(rolls)):
+                    print(f"Bad to check: {to_c + 1}")
+                    continue
+                if rolls[from_c] < 2:
+                    print(f"From roll has insufficient value ({rolls[from_c]})")
+                    continue
+                transfers.append((from_c, to_c))
+                rolls[from_c] -= 2
+                rolls[to_c] += 1
+            elif line[0] == "a":
+                m = re.match(r"^a\w*\s+([0-9]+)$", line)
+                if not m:
+                    print("Expected: adjust <check num>")
+                    continue
+                adj_c = int(m.group(1)) - 1
+                if not (0 <= adj_c < len(rolls)):
+                    print(f"Bad adjust check: {adj_c + 1}")
+                    continue
+                if luck <= 0:
+                    print(f"Luck has insufficient value ({luck})")
+                    continue
+                adjusts.append(adj_c)
+                rolls[adj_c] += 1
+                luck -= 1
+            elif line[0] == "g":
+                break
+            else:
+                print("Unknown command!")
+                continue
+
+        actions = EncounterActions(flee=flee, transfers=transfers, adjusts=adjusts, luck=luck, rolls=rolls)
+        resp = self._post(f"/play/{ch.name}/encounter/resolve", ResolveEncounterRequest(actions=actions), ResolveEncounterResponse)
+        if resp.error is not None:
+            print(resp.error)
+            return False
+        print(f"You have encountered: {resp.outcome}!")
+        return True
+
+
+    def _do_travel(self, dirs: str, board: Board, ch: Character) -> bool:
+        cubes = {CubeCoordinate.from_row_col(hx.coordinate.row, hx.coordinate.column): hx for hx in board.hexes}
+        ch_hex = [hx for hx in board.hexes if hx.name == ch.hex][0]
+        cur = CubeCoordinate.from_row_col(ch_hex.coordinate.row, ch_hex.coordinate.column)
+
+        dir_map = {
+            "u": (-1, +1, 0),
+            "i": (0, +1, -1),
+            "o": (+1, 0, -1),
+            ".": (0, 0, 0),
+            "j": (-1, 0, +1),
+            "k": (0, -1, +1),
+            "l": (+1, -1, 0),
+        }
+
+        route = []
+        for d in dirs:
+            xm, ym, zm = dir_map[d]
+            cur = cur.step(xm, ym, zm)
+            route.append(cubes[cur].name)
+
+        resp = self._post(f"/play/{ch.name}/travel", TravelRequest(route=route), TravelResponse)
+        if resp.error is not None:
+            print(resp.error)
+            return False
+        print("You arrive!")
+        return True
+
+    def _do_camp(self, board: Board, ch: Character) -> bool:
+        resp = self._post(f"/play/{ch.name}/camp", CampRequest(rest=True), CampResponse)
+        if resp.error is not None:
+            print(resp.error)
+            return False
+        print("You feel refreshed!")
+        return True
 
     def _get(self, path: str, cls: Type[T]) -> T:
         url = self.base_url
         url += path
-        with urlopen(url) as req:
-            data = req.read().decode("utf-8")
+        request = Request(url)
+        with urlopen(request) as response:
+            data = response.read().decode("utf-8")
             return deserialize(data, cls)
 
+    def _post(self, path: str, input_val: S, cls: Type[T]) -> T:
+        url = self.base_url
+        url += path
+        request = Request(url, data=serialize(input_val).encode("utf-8"))
+        with urlopen(request) as response:
+            data = response.read().decode("utf-8")
+            return deserialize(data, cls)
 
 if __name__ == "__main__":
     args = parse_args()

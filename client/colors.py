@@ -1,3 +1,5 @@
+import re
+
 # https://stackoverflow.com/a/26445590
 class colors:
     '''Colors class:
@@ -44,3 +46,8 @@ class colors:
         yellow='\033[103m'
         magenta='\033[105m'
         darkgrey='\033[100m'
+
+    STRIP_RE = re.compile(r'\033\[[0-9]+m')
+    @classmethod
+    def strip(cls, val: str) -> str:
+        return cls.STRIP_RE.sub('', val)

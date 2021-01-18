@@ -1,27 +1,21 @@
 import random
+from typing import List
 
-from common import Card, Deck, flatten
-from skills import *
+from .deck import EncounterDeck
+from .types import TemplateCard
+
 
 class Job:
-    def __init__(self):
-        self.name = "Raider"
-        self.learn_skills = { RIDE, BRUTAL_FIGHTING, ENDURANCE, DESERT_LORE, STEALTH, SHOOT }
-        self.card_skills = { RIDE, ENDURANCE, STEALTH }
-        self._move_distances = [0, 1, 1, 1, 2, 3]
-        self.card_difficulty = 2
-        self.cards = Deck(flatten(
-            (Card("Caravan Raid", {SHOOT, SPEED, COMMAND}), 3),
-            (Card("Scouting Mission", {OBSERVATION, CLIMB, APPRAISAL}), 2),
-            (Card("Another Band", {MIGHT, CAROUSING, DEBATE}), 2),
-            (Card("Guard Patrol", {STEALTH, FORMATION_FIGHTING, SPEED}), 2),
-            (Card("Hunting Expedition", {SPEED, SHOOT, OBSERVATION}), 1),
-            (Card("Victory Celebration", {CAROUSING, CHARM, ACROBATICS}), 1),
-            (Card("Test of Skill", {SHOOT, ANIMAL_TRAINING, RIDE}), 1),
-        ))
+    def __init__(self, name: str, base_skills: List[str], base_difficulty: int, cards: List[TemplateCard], encounter_distances: List[int]):
+        self.name = name
+        self.base_skills = base_skills
+        self.base_difficulty = base_difficulty
+        self.cards = cards
+        self.encounter_distances = encounter_distances
 
-    def get_move_distance(self):
-        return random.choice(self._move_distances)
-
-    def draw(self):
-        return self.cards.draw()
+    def make_deck(self) -> EncounterDeck:
+        probs = [4, 2, 1, 1, 1, 1]
+        while len(probs) < len(self.cards):
+            probs.append(1)
+        quantities = list(zip(self.cards, probs))
+        return EncounterDeck(quantities, self.base_skills, self.base_difficulty)
