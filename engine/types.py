@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import List, NamedTuple, Optional
 
 from picaro.common.hexmap.types import OffsetCoordinate
@@ -29,15 +30,39 @@ class Token(NamedTuple):
     location: str
 
 
+class EncounterReward(Enum):
+    COINS = 1
+    XP = 2
+    REPUTATION = 3
+    HEALING = 4
+    RESOURCES = 5
+    QUEST = 6
+    NOTHING = 7
+
+
+class EncounterPenalty(Enum):
+    COINS = 1
+    REPUTATION = 2
+    DAMAGE = 3
+    RESOURCES = 4
+    JOB = 5
+    TRANSPORT = 6
+    NOTHING = 7
+
+
 class EncounterCheck(NamedTuple):
     skill: str
     target_number: int
+    reward: EncounterReward
+    penalty: EncounterPenalty
 
 
 class TemplateCard(NamedTuple):
     name: str
     desc: str
     skills: List[str]
+    rewards: List[EncounterReward]
+    penalties: List[EncounterPenalty]
 
 
 class FullCard(NamedTuple):
@@ -50,4 +75,4 @@ class FullCard(NamedTuple):
 class DrawnCard(NamedTuple):
     card: FullCard
     age: int
-    location: OffsetCoordinate
+    location_name: str

@@ -25,12 +25,12 @@ class CardPreview(NamedTuple):
     name: str
     checks: List[EncounterCheck]
     age: int
-    location: str
+    location_name: str
 
     @classmethod
     def from_DrawnCard(cls, drawn_card: DrawnCard) -> "CardPreview":
         # in the future might be able to preview more checks
-        return CardPreview(id=drawn_card.card.id, name=drawn_card.card.template.name, checks=drawn_card.card.checks[0:1], age=drawn_card.age, location=drawn_card.location.name)
+        return CardPreview(id=drawn_card.card.id, name=drawn_card.card.template.name, checks=drawn_card.card.checks[0:1], age=drawn_card.age, location_name=drawn_card.location_name)
 
 
 class Tableau(NamedTuple):
@@ -51,7 +51,9 @@ class Character(NamedTuple):
     job: str
     health: int
     coins: int
+    resources: int
     reputation: int
+    quest: int
     location: str
     hex: str
     tableau: Optional[Tableau]
@@ -65,7 +67,9 @@ class Character(NamedTuple):
             job=character.job.name,
             health=character.health,
             coins=character.coins,
+            resources=character.resources,
             reputation=character.reputation,
+            quest=character.quest,
             location=locs[0],
             hex=locs[1],
             tableau=Tableau.from_engine_Tableau(character.tableau),

@@ -1,12 +1,13 @@
 import random
+from collections import defaultdict
 from dataclasses import dataclass
-from typing import List, NamedTuple, Optional, Tuple
+from typing import List, NamedTuple, Optional, Set, Tuple
 
 from .board import Board
 from .deck import Deck, EncounterDeck
 from .job import Job
 from .skills import SKILLS
-from .types import DrawnCard, FullCard
+from .types import DrawnCard, EncounterReward, EncounterPenalty, FullCard
 from .zodiacs import ZODIACS
 
 
@@ -33,10 +34,13 @@ class EncounterActions(NamedTuple):
 
 
 class EncounterOutcome(NamedTuple):
-    damage: int
     coins: int
-    reputation: int
     xp: int
+    reputation: int
+    health: int
+    resources: int
+    quest: int
+    transport_location: Optional[str]
 
 
 class Character:
@@ -48,7 +52,9 @@ class Character:
         self.skill_xp = {s: 0 for s in SKILLS}
         self.health = 20
         self.coins = 0
+        self.resources = 0
         self.reputation = 0
+        self.quest = 0
         self.tableau: Optional[Tableau] = None
         self.tableau_size = 3
 
@@ -69,7 +75,7 @@ class Character:
         card = self.tableau.deck.draw()
         dst = random.choice(self.job.encounter_distances)
         location = random.choice(board.find_hexes_near_location(self.name, dst, dst))
-        return DrawnCard(card=card, location=location, age=3)
+        return DrawnCard(card=card, location_name=location.name, age=3)
 
     def do_start_encounter(self, card_id: int, board: Board) -> None:
         if not self.tableau:
@@ -83,7 +89,7 @@ class Character:
                     bonus = self.skills[chk.skill]
                     rolls.append(random.randint(1, 8) + bonus)
                 self.tableau.encounter = Encounter(card=card.card, rolls=rolls)
-                board.move_token(self.name, card.location.name, adjacent=False)
+                board.move_token(self.name, card.location_name, adjacent=False)
                 return
         raise Exception(f"No such encounter card found ({card_id})")
 
@@ -117,28 +123,89 @@ class Character:
         if (luck, rolls) != (actions.luck, actions.rolls):
             raise Exception("Computed luck/rolls doesn't match?")
 
-        damage_count = 0
-        coin_count = 0
-        rep_count = 0
-        xp_count = 0
+        self.tableau.luck = luck
+
+        coins_mod = 0
+        xp_mod = 0
+        reputation_mod = 0
+        health_mod = 0
+        resources_mod = 0
+        quest_mod = 0
+        do_demotion = False
+        transport_distance = 0
+
+        ocs = defaultdict(int)
 
         for idx, check in enumerate(self.tableau.encounter.card.checks):
             if rolls[idx] >= check.target_number:
-                coin_count += 1
+                ocs[check.reward] += 1
             else:
-                damage_count += 1
-                xp_count += 1
+                ocs[check.penalty] += 1
+                xp_mod += 1
+
+        for oc, cnt in ocs.items():
+            if oc == EncounterReward.COINS:
+                coins_mod += (cnt * 2 - 1)
+            elif oc == EncounterReward.XP:
+                xp_mod += cnt * 2
+            elif oc == EncounterReward.REPUTATION:
+                reputation_mod += cnt
+            elif oc == EncounterReward.HEALING:
+                health_mod += cnt * 3
+            elif oc == EncounterReward.RESOURCES:
+                if cnt == 3:
+                    resources_mod += 2
+                elif cnt == 2:
+                    resources_mod += 1
+            elif oc == EncounterReward.QUEST:
+                quest_mod += cnt
+            elif oc == EncounterReward.NOTHING:
+                pass
+            elif oc == EncounterPenalty.COINS:
+                coins_mod -= cnt
+            elif oc == EncounterPenalty.REPUTATION:
+                reputation_mod -= 1
+            elif oc == EncounterPenalty.DAMAGE:
+                health_mod -= cnt
+            elif oc == EncounterPenalty.RESOURCES:
+                resources_mod -= 1
+            elif oc == EncounterPenalty.JOB:
+                do_demotion = True
+            elif oc == EncounterPenalty.TRANSPORT:
+                transport_distance += cnt * 5
+            elif oc == EncounterPenalty.NOTHING:
+                pass
+            else:
+                raise Exception(f"Unknown reward/penalty: {oc.name}")
+
+        transport_location: Optional[str] = None
+
+        if coins_mod != 0:
+            self.coins += coins_mod
+        if xp_mod != 0:
+            self._adjust_xp(self.tableau.encounter.card.checks[0].skill, xp_mod)
+        if reputation_mod != 0:
+            self.reputation += reputation_mod
+        if health_mod != 0:
+            self.health += health_mod
+        if resources_mod != 0:
+            self.resources += resources_mod
+        if quest_mod != 0:
+            self.quest += quest_mod
+        if transport_distance > 0:
+            location = random.choice(board.find_hexes_near_location(self.name, transport_distance - 5, transport_distance))
+            transport_location = location.name
+            board.move_token(self.name, transport_location)
 
         outcome = EncounterOutcome(
-            damage=damage_count if damage_count > 0 else 0,
-            coins=(coin_count * 2 - 1) if coin_count > 0 else 0,
-            reputation=(rep_count * 2 - 1) if rep_count > 0 else 0,
-            xp=(xp_count * 2 - 1) if xp_count > 0 else 0,
+            coins=coins_mod,
+            xp=xp_mod,
+            reputation=reputation_mod,
+            health=health_mod,
+            resources=resources_mod,
+            quest=quest_mod,
+            transport_location=transport_location,
         )
-        self.health -= outcome.damage
-        self.coins += outcome.coins
-        self.reputation += outcome.reputation
-        self.skill_xp[self.tableau.encounter.card.checks[0].skill] += outcome.xp
 
         # pop this off the card list, if it's from there
         self.tableau.cards = [c for c in self.tableau.cards if c.card.id != self.tableau.encounter.card.id]
@@ -161,6 +228,29 @@ class Character:
         if not self.tableau:
             raise Exception("Can't finish turn without tableau?")
         self.tableau.remaining_turns -= 1
-        self.tableau.cards = [c._replace(age=c.age - 1) for c in self.tableau.cards if c.age > 1]
+
+        # filter to encounters near the PC (since they may have been transported, or just moved)
+        near : Set[str] = {hx.name for hx in board.find_hexes_near_location(self.name, 0, 5)}
+
+        def _is_valid(card: DrawnCard) -> bool:
+            return card.age > 1 and card.location_name in near
+
+        self.tableau.cards = [c._replace(age=c.age - 1) for c in self.tableau.cards if _is_valid(c)]
         while len(self.tableau.cards) < self.tableau_size:
             self.tableau.cards.append(self.draw_job_card(board))
+
+    def _adjust_xp(self, skill: str, xp_mod: int) -> None:
+        self.skill_xp[skill] += xp_mod
+        # 20 xp for rank 1, 30 xp for rank 5, 25 xp for all others
+        if self.skill_xp[skill] < 20:
+            self.skills[skill] = 0
+        elif 20 <= self.skill_xp[skill] < 45:
+            self.skills[skill] = 1
+        elif 45 <= self.skill_xp[skill] < 70:
+            self.skills[skill] = 2
+        elif 70 <= self.skill_xp[skill] < 95:
+            self.skills[skill] = 3
+        elif 95 <= self.skill_xp[skill] < 125:
+            self.skills[skill] = 4
+        else:
+            self.skills[skill] = 5

@@ -40,6 +40,7 @@ class Client:
         play_parser = subparsers.add_parser("play")
         play_parser.set_defaults(cmd=lambda cli: cli.play())
         play_parser.add_argument('name', type=str)
+        play_parser.add_argument('--season', action='store_true')
 
         return parser.parse_args()
 
@@ -133,47 +134,55 @@ class Client:
     def get_character(self) -> None:
         ch = self._get(f"/character/{self.args.name}", Character)
         print(f"{ch.name} ({ch.player_id}) - a {ch.job}")
-        print(f"Health: {ch.health}   Coins: {ch.coins}  Reputation: {ch.reputation}")
+        print(f"Health: {ch.health}   Coins: {ch.coins}  Reputation: {ch.reputation} Resources: {ch.resources}")
         print("Skills:")
         for sk, v in sorted(ch.skills.items()):
             print(f"  {sk}: {v}")
         print()
 
     def play(self) -> None:
-        board = self._get("/board", Board)
-        ch = self._get(f"/character/{self.args.name}", Character)
-        self._display_play(board, ch)
-        if not ch.tableau:
-            return
-        if ch.tableau.encounter:
-            self._do_encounter(None, board, ch)
-        else:
-            self._input_play_action(board, ch)
+        while True:
+            board = self._get("/board", Board)
+            ch = self._get(f"/character/{self.args.name}", Character)
+            self._display_play(board, ch)
+            if not ch.tableau or ch.tableau.remaining_turns == 0:
+                return
+            if ch.tableau.encounter:
+                self._do_encounter(None, board, ch)
+            else:
+                self._input_play_action(board, ch)
+            if not self.args.season:
+                return
+            else:
+                print()
+                print("===========")
+                print()
 
     def _display_play(self, board: Board, ch: Character) -> None:
-        encounters = {card.location for card in ch.tableau.cards} if ch.tableau else None
+        encounters = {card.location_name for card in ch.tableau.cards} if ch.tableau else None
 
         ch_hex = [hx for hx in board.hexes if hx.name == ch.hex][0]
         minimap = self._make_small_map(board, False, center=ch_hex.coordinate, radius=3, encounters=encounters)
 
-        display = ["" for _ in range(14)]
-        display[0] = f"{ch.name} ({ch.player_id}) - a {ch.job}"
-        display[1] = f"{ch.location}"
-        display[2] = ""
-        display[3] = f"Health: {ch.health:2}   Coins: {ch.coins:2}   Reputation: {ch.reputation:2}"
+        display = []
+        display.append(f"{ch.name} ({ch.player_id}) - a {ch.job} [{ch.location}]")
+        display.append("")
+        display.append(f"Health: {ch.health:2}   Coins: {ch.coins:2}   Reputation: {ch.reputation:2}   Resources: {ch.resources:2}   Quest: {ch.quest:2}")
         if ch.tableau:
-            display[4] = f" Turns: {ch.tableau.remaining_turns:2}    Luck: {ch.tableau.luck:2}"
-            display[5] = ""
+            display.append(f" Turns: {ch.tableau.remaining_turns:2}    Luck: {ch.tableau.luck:2}")
+            display.append("")
             for idx, card in enumerate(ch.tableau.cards):
                 pc_skill = f""
                 cs = (f"{ascii_lowercase[idx]}. ({card.age}) {card.name}:"
-                      f" {self._check_str(card.checks[0], ch)} [{card.location}]")
-                display[6+idx] = cs
-            display[9] = "t. Travel (uio.jkl)"
-            display[10] = "x. Camp"
+                      f" {self._check_str(card.checks[0], ch)} [{card.location_name}]")
+                display.append(cs)
+            display.append("t. Travel (uio.jkl)")
+            display.append("x. Camp")
+        while len(display) < 14:
+            display.append("")
 
         pad = lambda val, width: val + " " * (width - len(val))
-        display = [pad(display[idx], 70) + (minimap[idx] if idx < len(minimap) else "")
+        display = [pad(display[idx], 80) + (minimap[idx] if idx < len(minimap) else "")
                   for idx in range(len(display))]
         while display[-1].strip() == "":
             display.pop()
@@ -183,7 +192,8 @@ class Client:
         print()
 
     def _check_str(self, check: EncounterCheck, ch: Character) -> str:
-        return f"{check.skill} (1d8{ch.skills[check.skill]:+}) vs {check.target_number}"
+        return (f"{check.skill} (1d8{ch.skills[check.skill]:+}) vs {check.target_number} "
+                f"(+{check.reward.lower()}, -{check.penalty.lower()})")
 
     def _input_play_action(self, board: Board, ch: Character) -> None:
         while True:
