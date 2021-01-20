@@ -342,7 +342,8 @@ class Client:
             print(resp.error)
             return False
         print("You arrive!")
-        return True
+        ch = self._get(f"/character/{self.args.name}", Character)
+        return self._do_encounter(None, board, ch)
 
     def _do_camp(self, board: Board, ch: Character) -> bool:
         resp = self._post(f"/play/{ch.name}/camp", CampRequest(rest=True), CampResponse)

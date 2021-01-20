@@ -41,19 +41,23 @@ class EncounterDeck(Deck[TemplateCard, FullCard]):
         self.base_difficulty = base_difficulty
 
     def _make_card(self, val: TemplateCard) -> FullCard:
-        skill_bag = []
-        skill_bag.extend(self.base_skills * 15)
-        skill_bag.extend(val.skills * 15)
+        if not val.skills:
+            checks = []
+        else:
+            skill_bag = []
+            skill_bag.extend(self.base_skills * 15)
+            skill_bag.extend(val.skills * 15)
 
-        reward_bag = self._make_reward_bag(val)
-        penalty_bag = self._make_penalty_bag(val)
-        checks = [
-            self._make_check(skill_bag, reward_bag, penalty_bag),
-            self._make_check(skill_bag, reward_bag, penalty_bag),
-            self._make_check(skill_bag + list(SKILLS), reward_bag, penalty_bag),
-        ]
+            reward_bag = self._make_reward_bag(val)
+            penalty_bag = self._make_penalty_bag(val)
+            checks = [
+                self._make_check(skill_bag, reward_bag, penalty_bag),
+                self._make_check(skill_bag, reward_bag, penalty_bag),
+                self._make_check(skill_bag + list(SKILLS), reward_bag, penalty_bag),
+            ]
 
         signs = random.sample(ZODIACS, 2)
+
         card_id = self.NEXT_ID
         self.NEXT_ID += 1
         return FullCard(id=card_id, template=val, checks=checks, signs=signs)

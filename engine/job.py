@@ -1,5 +1,5 @@
 import random
-from typing import List
+from typing import List, Tuple
 
 from .deck import EncounterDeck
 from .types import TemplateCard
@@ -13,9 +13,11 @@ class Job:
         self.cards = cards
         self.encounter_distances = encounter_distances
 
-    def make_deck(self) -> EncounterDeck:
+    def make_deck(self, additional: List[Tuple[TemplateCard, int]] = None) -> EncounterDeck:
         probs = [4, 2, 1, 1, 1, 1]
         while len(probs) < len(self.cards):
             probs.append(1)
         quantities = list(zip(self.cards, probs))
+        if additional:
+            quantities += additional
         return EncounterDeck(quantities, self.base_skills, self.base_difficulty)

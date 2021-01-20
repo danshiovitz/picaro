@@ -7,7 +7,7 @@ from .board import Board
 from .deck import Deck, EncounterDeck
 from .job import Job
 from .skills import SKILLS
-from .types import DrawnCard, EncounterReward, EncounterPenalty, FullCard
+from .types import DrawnCard, EncounterReward, EncounterPenalty, FullCard, TemplateCard
 from .zodiacs import ZODIACS
 
 
@@ -43,6 +43,9 @@ class EncounterOutcome(NamedTuple):
     transport_location: Optional[str]
 
 
+DRAW_HEX_CARD = TemplateCard(name="Draw from Hex Deck", desc="", skills=[], rewards=[], penalties=[])
+
+
 class Character:
     def __init__(self, name: str, player_id: int, job: Job) -> None:
         self.name = name
@@ -64,7 +67,9 @@ class Character:
             encounter=None,
             remaining_turns=20,
             luck=5,
-            deck=self.job.make_deck(),
+            deck=self.job.make_deck(additional=[
+                (DRAW_HEX_CARD, 2),
+            ]),
         )
         for _ in range(self.tableau_size):
             self.tableau.cards.append(self.draw_job_card(board))
@@ -75,6 +80,10 @@ class Character:
         card = self.tableau.deck.draw()
         dst = random.choice(self.job.encounter_distances)
         location = random.choice(board.find_hexes_near_location(self.name, dst, dst))
+
+        if card.template.name == DRAW_HEX_CARD.name:
+            card = board.draw_hex_card(location.name)
+
         return DrawnCard(card=card, location_name=location.name, age=3)
 
     def do_start_encounter(self, card_id: int, board: Board) -> None:
@@ -84,14 +93,17 @@ class Character:
             raise Exception("An encounter is already active")
         for card in self.tableau.cards:
             if card.card.id == card_id:
-                rolls = []
-                for chk in card.card.checks:
-                    bonus = self.skills[chk.skill]
-                    rolls.append(random.randint(1, 8) + bonus)
-                self.tableau.encounter = Encounter(card=card.card, rolls=rolls)
                 board.move_token(self.name, card.location_name, adjacent=False)
+                self._ready_encounter(card.card)
                 return
         raise Exception(f"No such encounter card found ({card_id})")
+
+    def _ready_encounter(self, card: FullCard):
+        rolls = []
+        for chk in card.checks:
+            bonus = self.skills[chk.skill]
+            rolls.append(random.randint(1, 8) + bonus)
+        self.tableau.encounter = Encounter(card=card, rolls=rolls)
 
     def do_resolve_encounter(self, actions: EncounterActions, board: Board) -> EncounterOutcome:
         if not self.tableau:
@@ -216,7 +228,9 @@ class Character:
     def do_travel(self, route: List[str], board: Board) -> None:
         for hx in route:
             board.move_token(self.name, hx, adjacent=True)
-        self._finish_turn()
+        card = board.draw_hex_card(route[-1])
+        self._ready_encounter(card)
+        # don't finish the turn here, we'll finish it with the encounter
 
     def do_camp(self, board: Board) -> None:
         if not self.tableau:
