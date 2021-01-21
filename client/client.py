@@ -165,7 +165,7 @@ class Client:
         minimap = self._make_small_map(board, False, center=ch_hex.coordinate, radius=3, encounters=encounters)
 
         display = []
-        display.append(f"{ch.name} ({ch.player_id}) - a {ch.job} [{ch.location}]")
+        display.append(f"{ch.name} ({ch.player_id}) - a {ch.job} [{ch.location}, in {ch_hex.country}]")
         display.append("")
         display.append(f"Health: {ch.health:2}   Coins: {ch.coins:2}   Reputation: {ch.reputation:2}   Resources: {ch.resources:2}   Quest: {ch.quest:2}")
         if ch.tableau:

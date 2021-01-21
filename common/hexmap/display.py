@@ -1,3 +1,4 @@
+from string import ascii_lowercase, ascii_uppercase
 from typing import Callable, Dict, List, NamedTuple, Optional, Set, Tuple
 
 from .types import OffsetCoordinate, CubeCoordinate
@@ -40,14 +41,20 @@ def render_simple(coords: Set[OffsetCoordinate], text_width: int, get_text: Call
         return val
 
     ret = []
+    hdr = " "
+    for column in range(window.min_column, window.max_column + 1):
+        hdr += f"{column+1:02}"[1]
+    ret.append(hdr)
     for row in range(window.min_row, window.max_row + 1):
         if row != window.min_row or window.half_top:
             line = ""
+            line += ascii_lowercase[row % 26]
             for column in range(window.min_column, window.max_column + 1):
                 line += render_one(row, column, 1)
             ret.append(line)
         if row != window.max_row or window.half_bottom:
             line = ""
+            line += ascii_uppercase[row % 26]
             for column in range(window.min_column, window.max_column + 1):
                 line += render_one(row, column, 0)
             ret.append(line)

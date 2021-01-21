@@ -268,3 +268,16 @@ class Character:
             self.skills[skill] = 4
         else:
             self.skills[skill] = 5
+
+    def _job_check(self, difficulty: int) -> None:
+        target_number = 5 + difficulty
+        bonus = self.reputation // 4
+        roll = random.randint(1, 8) + bonus
+        if roll < target_number - 4:
+            # drop two levels
+        elif roll < target_number:
+            # drop one level
+        elif roll < target_number + 4:
+            # same
+        else:
+            # promo one level
