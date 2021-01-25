@@ -1,0 +1,9 @@
+{
+  "jobs": [
+    {
+      "name": "Raider",
+      "deck_name": "Raider",
+      "encounter_distances": [0, 1, 1, 1, 2, 3]
+    }
+  ]
+}

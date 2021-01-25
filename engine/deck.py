@@ -1,44 +1,30 @@
 import random
-from typing import Generic, List, Tuple, TypeVar
+from typing import Generic, List, NamedTuple, Tuple, TypeVar
 
-from .skills import SKILLS
+from .load import load_json
+from .skills import load_skills
 from .types import EncounterCheck, EncounterPenalty, EncounterReward, FullCard, TemplateCard
-from .zodiacs import ZODIACS
+from .zodiacs import load_zodiacs
 
 
-S = TypeVar("S")
-T = TypeVar("T")
-
-class Deck(Generic[S, T]):
-    def __init__(self, deck_template: List[Tuple[S, int]]) -> None:
-        self.deck_template = deck_template
-        self.cards: List[T] = []
-
-    def draw(self) -> T:
-        if not self.cards:
-            self._refill_cards()
-        return self.cards.pop(0)
-
-    def _refill_cards(self) -> None:
-        self.cards = []
-        for val, cnt in self.deck_template:
-            for _ in range(cnt):
-                self.cards.append(self._make_card(val))
-        random.shuffle(self.cards)
-        for _ in range(3):
-            self.cards.pop()
-
-    def _make_card(self, val: S) -> T:
-        return val
-
-
-class EncounterDeck(Deck[TemplateCard, FullCard]):
+class EncounterDeck:
     NEXT_ID = 1
 
-    def __init__(self, deck_template: List[Tuple[TemplateCard, int]], base_skills: List[str], base_difficulty: int) -> None:
-        super().__init__(deck_template)
+    def __init__(self, name: str, templates: List[TemplateCard], base_skills: List[str], base_difficulty: int) -> None:
+        self.name = name
+        self.templates = templates
         self.base_skills = base_skills
         self.base_difficulty = base_difficulty
+
+    def actualize(self, additional: List[TemplateCard] = None) -> List[FullCard]:
+        ret = []
+        for tmpl in self.templates + (additional or []):
+            for _ in range(tmpl.copies):
+                ret.append(self._make_card(tmpl))
+        random.shuffle(ret)
+        for _ in range((len(ret) // 10) + 1):
+            ret.pop()
+        return ret
 
     def _make_card(self, val: TemplateCard) -> FullCard:
         if not val.skills:
@@ -48,15 +34,17 @@ class EncounterDeck(Deck[TemplateCard, FullCard]):
             skill_bag.extend(self.base_skills * 15)
             skill_bag.extend(val.skills * 15)
 
+            all_skills = load_skills()
             reward_bag = self._make_reward_bag(val)
             penalty_bag = self._make_penalty_bag(val)
             checks = [
                 self._make_check(skill_bag, reward_bag, penalty_bag),
                 self._make_check(skill_bag, reward_bag, penalty_bag),
-                self._make_check(skill_bag + list(SKILLS), reward_bag, penalty_bag),
+                self._make_check(skill_bag + all_skills, reward_bag, penalty_bag),
             ]
 
-        signs = random.sample(ZODIACS, 2)
+        all_zodiacs = load_zodiacs()
+        signs = random.sample(all_zodiacs, 2)
 
         card_id = self.NEXT_ID
         self.NEXT_ID += 1
@@ -89,3 +77,19 @@ class EncounterDeck(Deck[TemplateCard, FullCard]):
 
     def difficulty_to_target_number(self, difficulty: int) -> int:
         return difficulty * 2 + 1
+
+
+class DeckStruct(NamedTuple):
+    name: str
+    base_skills: List[str]
+    base_difficulty: int
+    templates: List[TemplateCard]
+
+class AllDecksStruct(NamedTuple):
+    decks: List[DeckStruct]
+
+def load_deck(deck_name: str) -> EncounterDeck:
+    loaded = load_json("template_decks", AllDecksStruct)
+    ds = [ld for ld in loaded.decks if ld.name == deck_name][0]
+    deck = EncounterDeck(ds.name, ds.templates, ds.base_skills, ds.base_difficulty)
+    return deck

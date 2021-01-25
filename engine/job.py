@@ -1,23 +1,34 @@
+#!/usr/bin/python3
 import random
-from typing import List, Tuple
+from typing import List, NamedTuple, Tuple
 
-from .deck import EncounterDeck
-from .types import TemplateCard
+from .deck import EncounterDeck, load_deck
+from .load import load_json
+from .types import FullCard, TemplateCard
 
 
 class Job:
-    def __init__(self, name: str, base_skills: List[str], base_difficulty: int, cards: List[TemplateCard], encounter_distances: List[int]):
+    def __init__(self, name: str, deck_name: str, encounter_distances: List[int]):
         self.name = name
-        self.base_skills = base_skills
-        self.base_difficulty = base_difficulty
-        self.cards = cards
+        self.deck_name = deck_name
         self.encounter_distances = encounter_distances
 
-    def make_deck(self, additional: List[Tuple[TemplateCard, int]] = None) -> EncounterDeck:
-        probs = [4, 2, 1, 1, 1, 1]
-        while len(probs) < len(self.cards):
-            probs.append(1)
-        quantities = list(zip(self.cards, probs))
-        if additional:
-            quantities += additional
-        return EncounterDeck(quantities, self.base_skills, self.base_difficulty)
+    def make_deck(self, additional: List[TemplateCard] = None) -> List[FullCard]:
+        template_deck = load_deck(self.deck_name)
+        return template_deck.actualize(additional)
+
+
+class JobStruct(NamedTuple):
+    name: str
+    deck_name: str
+    encounter_distances: List[int]
+
+
+class AllJobsStruct(NamedTuple):
+    jobs: List[JobStruct]
+
+
+def load_job(job_name: str) -> Job:
+    loaded = load_json("jobs", AllJobsStruct)
+    j = [ld for ld in loaded.jobs if ld.name == job_name][0]
+    return Job(j.name, j.deck_name, j.encounter_distances)

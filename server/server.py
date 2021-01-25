@@ -1,10 +1,10 @@
 from typing import Any, Dict, Type, TypeVar
 
+from picaro.common.serializer import deserialize, recursive_to_dict
 from picaro.engine import Engine
 
 from . import bottle
 from .api_types import Board, CampRequest, CampResponse, Character, ResolveEncounterRequest, ResolveEncounterResponse, StartEncounterRequest, StartEncounterResponse, TravelRequest, TravelResponse
-from .serializer import deserialize, recursive_to_dict
 
 T = TypeVar("T")
 

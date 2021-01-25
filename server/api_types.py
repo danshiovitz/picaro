@@ -64,7 +64,7 @@ class Character(NamedTuple):
             name=character.name,
             player_id=character.player_id,
             skills=character.skills,
-            job=character.job.name,
+            job=character.job_name,
             health=character.health,
             coins=character.coins,
             resources=character.resources,

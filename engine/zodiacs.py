@@ -1,43 +1,14 @@
 #!/usr/bin/python3
 
-THE_FOOL = "The Fool"
-THE_MAGICIAN = "The Magician"
-THE_HIGH_PRIESTESS = "The High Priestess"
-THE_EMPRESS = "The Empress"
-THE_EMPEROR = "The Emperor"
-THE_HIEROPHANT = "The Hierophant"
-THE_LOVERS = "The Lovers"
-THE_CHARIOT = "The Chariot"
-JUSTICE = "Justice"
-THE_HERMIT = "The Hermit"
-WHEEL_OF_FORTUNE = "Wheel of Fortune"
-STRENGTH = "Strength"
-THE_HANGED_MAN = "The Hanged Man"
-DEATH = "Death"
-TEMPERANCE = "Temperance"
-THE_DEVIL = "The Devil"
-THE_TOWER = "The Tower"
-THE_STAR = "The Star"
-THE_MOON = "The Moon"
-THE_SUN = "The Sun"
-JUDGEMENT = "Judgement"
-THE_WORLD = "The World"
+from typing import List, NamedTuple
 
-WAR = "War"
-FAMINE = "Famine"
-PESTILENCE = "Pestilence"
+from .load import load_json
 
-THE_SOLDIER = "The Soldier"
-THE_FARMER = "The Farmer"
-THE_ROGUE = "The Rogue"
-THE_ALCHEMIST = "The Alchemist"
-    
-HOUND = "Hound"
-SCORPION = "Scorpion"
-HORSE = "Horse"
-FISH = "Fish"
-TURTLE = "Turtle"
-EAGLE = "Eagle"
-TIGER = "Tiger"
 
-ZODIACS = set(v for k,v in globals().items() if not k.startswith("__"))
+class ZodiacsStruct(NamedTuple):
+    names: List[str]
+
+
+def load_zodiacs() -> List[str]:
+    loaded = load_json("zodiacs", ZodiacsStruct)
+    return loaded.names

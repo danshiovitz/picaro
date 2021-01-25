@@ -58,6 +58,7 @@ class EncounterCheck(NamedTuple):
 
 
 class TemplateCard(NamedTuple):
+    copies: int
     name: str
     desc: str
     skills: List[str]

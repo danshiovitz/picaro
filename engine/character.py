@@ -4,11 +4,10 @@ from dataclasses import dataclass
 from typing import List, NamedTuple, Optional, Set, Tuple
 
 from .board import Board
-from .deck import Deck, EncounterDeck
-from .job import Job
-from .skills import SKILLS
+from .deck import EncounterDeck
+from .job import load_job
+from .skills import load_skills
 from .types import DrawnCard, EncounterReward, EncounterPenalty, FullCard, TemplateCard
-from .zodiacs import ZODIACS
 
 
 class Encounter(NamedTuple):
@@ -43,16 +42,17 @@ class EncounterOutcome(NamedTuple):
     transport_location: Optional[str]
 
 
-DRAW_HEX_CARD = TemplateCard(name="Draw from Hex Deck", desc="", skills=[], rewards=[], penalties=[])
+DRAW_HEX_CARD = TemplateCard(1, name="Draw from Hex Deck", desc="", skills=[], rewards=[], penalties=[])
 
 
 class Character:
-    def __init__(self, name: str, player_id: int, job: Job) -> None:
+    def __init__(self, name: str, player_id: int, job_name: str) -> None:
         self.name = name
         self.player_id = player_id
-        self.job = job
-        self.skills = {s: 0 for s in SKILLS}
-        self.skill_xp = {s: 0 for s in SKILLS}
+        self.job_name = job_name
+        all_skills = load_skills()
+        self.skills = {s: 0 for s in all_skills}
+        self.skill_xp = {s: 0 for s in all_skills}
         self.health = 20
         self.coins = 0
         self.resources = 0
@@ -67,9 +67,7 @@ class Character:
             encounter=None,
             remaining_turns=20,
             luck=5,
-            deck=self.job.make_deck(additional=[
-                (DRAW_HEX_CARD, 2),
-            ]),
+            deck=[],
         )
         for _ in range(self.tableau_size):
             self.tableau.cards.append(self.draw_job_card(board))
@@ -77,8 +75,12 @@ class Character:
     def draw_job_card(self, board: Board) -> DrawnCard:
         if not self.tableau:
             raise Exception("Can't draw when tableau is empty")
-        card = self.tableau.deck.draw()
-        dst = random.choice(self.job.encounter_distances)
+
+        job = load_job(self.job_name)
+        if not self.tableau.deck:
+            self.tableau.deck = job.make_deck(additional=[DRAW_HEX_CARD._replace(copies=2)])
+        card = self.tableau.deck.pop(0)
+        dst = random.choice(job.encounter_distances)
         location = random.choice(board.find_hexes_near_location(self.name, dst, dst))
 
         if card.template.name == DRAW_HEX_CARD.name:
@@ -275,9 +277,13 @@ class Character:
         roll = random.randint(1, 8) + bonus
         if roll < target_number - 4:
             # drop two levels
+            pass
         elif roll < target_number:
             # drop one level
+            pass
         elif roll < target_number + 4:
             # same
+            pass
         else:
             # promo one level
+            pass

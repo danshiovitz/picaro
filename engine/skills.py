@@ -1,45 +1,14 @@
 #!/usr/bin/python3
 
-DUELING = "Dueling"
-FORMATION_FIGHTING = "Formation Fighting"
-BRUTAL_FIGHTING = "Brutal Fighting"
-SHOOT = "Shoot"
-THROW = "Throw"
-RIDE = "Ride"
-    
-RESEARCH = "Research"
-DEBATE = "Debate"
-CHARM = "Charm"
-CAROUSING = "Carousing"
-COMMAND = "Command"
-ENDURANCE = "Endurance"
+from typing import List, NamedTuple
 
-THAUMATURGY = "Thaumaturgy"
-SPIRIT_BINDING = "Spirit Binding"
-MESMERISM = "Mesmerism"
-STEALTH = "Stealth"
-ANIMAL_TRAINING = "Animal Training"
-CLIMB = "Climb"
+from .load import load_json
 
-DESERT_LORE = "Desert Lore"
-FOREST_LORE = "Forest Lore"
-SEA_LORE = "Sea Lore"
-MOUNTAIN_LORE = "Mountain Lore"
-JUNGLE_LORE = "Jungle Lore"
-PLAINS_LORE = "Plains Lore"
 
-MECHANISMS = "Mechanisms"
-MIGHT = "Might"
-OBSERVATION = "Observation"
-ACROBATICS = "Acrobatics"
-APPRAISAL = "Appraisal"
-SPEED = "Speed"
+class SkillsStruct(NamedTuple):
+    names: List[str]
 
-PICKPOCKET = "Pickpocket"
-DOCTOR = "Doctor"
-ARCHITECTURE = "Architecture"
-NAVIGATION = "Navigation"
-SKILL_X = "Skill X"
-SKILL_Y = "Skill Y"
-        
-SKILLS = set(v for k,v in globals().items() if not k.startswith("__"))
+
+def load_skills() -> List[str]:
+    loaded = load_json("skills", SkillsStruct)
+    return loaded.names

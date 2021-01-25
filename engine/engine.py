@@ -2,7 +2,6 @@ from typing import Dict, List, Tuple
 
 from .board import Board
 from .character import Character, EncounterActions, EncounterOutcome
-from .job import Job
 from .types import Token
 
 class Engine:
@@ -13,8 +12,8 @@ class Engine:
     def get_board(self) -> Board:
         return self._board
 
-    def add_character(self, character_name: str, player_id: int, location: str, job: Job) -> None:
-        self._characters[character_name] = Character(name=character_name, player_id=player_id, job=job)
+    def add_character(self, character_name: str, player_id: int, location: str, job_name: str) -> None:
+        self._characters[character_name] = Character(name=character_name, player_id=player_id, job_name=job_name)
         self._board.add_token(Token(name=character_name, type="Character", location=location))
 
     def get_character(self, character_name: str) -> Character:

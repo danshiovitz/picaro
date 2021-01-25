@@ -2,15 +2,15 @@ import random
 from typing import Dict, List, Optional
 
 from picaro.common.hexmap.types import CubeCoordinate
-from .deck import EncounterDeck
+from .deck import EncounterDeck, load_deck
 from .generate import generate_from_mini
-from .types import EncounterPenalty, EncounterReward, Hex, TemplateCard, Token
+from .types import FullCard, Hex, Token
 
 class Board:
     def __init__(self) -> None:
         self.hexes = self._generate_hexes()
         self.by_cube = {CubeCoordinate.from_row_col(row=hx.coordinate.row, col=hx.coordinate.column): hx for hx in self.hexes.values()}
-        self.hex_decks = {hx.name: self._make_deck_for_hex(hx) for hx in self.hexes.values()}
+        self.hex_decks = {hx.name: [] for hx in self.hexes.values()}
         self.tokens = {}
 
     def add_token(self, token: Token) -> None:
@@ -61,7 +61,10 @@ class Board:
     def draw_hex_card(self, hex_name: str) -> None:
         if hex_name not in self.hex_decks:
             raise Exception(f"Hex {hex_name} not recognized")
-        return self.hex_decks[hex_name].draw()
+        deck = self.hex_decks[hex_name]
+        if not deck:
+            deck.extend(self._make_deck_for_hex(self.hexes[hex_name]))
+        return deck.pop(0)
 
     def _generate_hexes(self) -> Dict[str, Hex]:
         minimap = [
@@ -77,20 +80,7 @@ class Board:
         hexes = generate_from_mini(50, 50, minimap)
         return {hx.name: hx for hx in hexes}
 
-    def _make_deck_for_hex(self, hx: Hex) -> EncounterDeck:
-        # based on hx.terrain:
-        base_skills = ["Desert Lore", "Desert Lore", "Endurance"]
-        base_difficulty = 2
-        cards = [
-            TemplateCard("Oasis", "...", ["Shoot", "Speed", "Command"], rewards=[EncounterReward.COINS, EncounterReward.RESOURCES], penalties=[EncounterPenalty.DAMAGE, EncounterPenalty.REPUTATION]),
-            TemplateCard("Sandstorm", "...", ["Shoot", "Speed", "Command"], rewards=[EncounterReward.COINS, EncounterReward.RESOURCES], penalties=[EncounterPenalty.DAMAGE, EncounterPenalty.REPUTATION]),
-            TemplateCard("Desert Beast", "...", ["Shoot", "Speed", "Command"], rewards=[EncounterReward.COINS, EncounterReward.RESOURCES], penalties=[EncounterPenalty.DAMAGE, EncounterPenalty.REPUTATION]),
-            TemplateCard("Extreme Heat", "...", ["Shoot", "Speed", "Command"], rewards=[EncounterReward.COINS, EncounterReward.RESOURCES], penalties=[EncounterPenalty.DAMAGE, EncounterPenalty.REPUTATION]),
-            TemplateCard("Strange Constellations", "...", ["Shoot", "Speed", "Command"], rewards=[EncounterReward.COINS, EncounterReward.RESOURCES], penalties=[EncounterPenalty.DAMAGE, EncounterPenalty.REPUTATION]),
-            TemplateCard("Mirage", "...", ["Shoot", "Speed", "Command"], rewards=[EncounterReward.COINS, EncounterReward.RESOURCES], penalties=[EncounterPenalty.DAMAGE, EncounterPenalty.REPUTATION]),
-        ]
-        probs = [2, 2, 2, 2, 2, 2]
-        while len(probs) < len(cards):
-            probs.append(1)
-        quantities = list(zip(cards, probs))
-        return EncounterDeck(quantities, base_skills, base_difficulty)
+    def _make_deck_for_hex(self, hx: Hex) -> List[FullCard]:
+        deck_name = "Desert"
+        template_deck = load_deck(deck_name)
+        return template_deck.actualize(additional=[])

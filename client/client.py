@@ -7,7 +7,7 @@ from urllib.request import Request, urlopen
 
 from picaro.client.colors import colors
 from picaro.common.hexmap.display import CubeCoordinate, DisplayInfo, OffsetCoordinate, render_simple, render_large
-from picaro.server.serializer import deserialize, serialize
+from picaro.common.serializer import deserialize, serialize
 from picaro.server.api_types import Board, CampRequest, CampResponse, CardPreview, Character, EncounterCheck, EncounterActions, StartEncounterRequest, StartEncounterResponse, ResolveEncounterRequest, ResolveEncounterResponse, TravelRequest, TravelResponse
 
 S = TypeVar("S")
@@ -193,7 +193,7 @@ class Client:
 
     def _check_str(self, check: EncounterCheck, ch: Character) -> str:
         return (f"{check.skill} (1d8{ch.skills[check.skill]:+}) vs {check.target_number} "
-                f"(+{check.reward.lower()}, -{check.penalty.lower()})")
+                f"(+{check.reward.name.lower()}, -{check.penalty.name.lower()})")
 
     def _input_play_action(self, board: Board, ch: Character) -> None:
         while True:
