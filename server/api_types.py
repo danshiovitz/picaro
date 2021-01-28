@@ -1,9 +1,10 @@
+from enum import Enum
 from typing import Dict, List, NamedTuple, Optional, Tuple
 
 from picaro.common.hexmap.types import OffsetCoordinate
 from picaro.engine.board import Board as engine_Board
 from picaro.engine.character import Character as engine_Character, Encounter, EncounterActions, EncounterOutcome, Tableau as engine_Tableau
-from picaro.engine.types import Countries, EncounterCheck, DrawnCard, Hex, Terrains, Token, TokenTypes
+from picaro.engine.types import Countries, DrawnCard, EncounterCheck, Hex, Terrains, Token, TokenTypes
 
 
 class Player(NamedTuple):
@@ -81,7 +82,7 @@ class StartEncounterRequest(NamedTuple):
 
 
 class StartEncounterResponse(NamedTuple):
-    error: Optional[str]
+    pass
 
 
 class ResolveEncounterRequest(NamedTuple):
@@ -89,7 +90,6 @@ class ResolveEncounterRequest(NamedTuple):
 
 
 class ResolveEncounterResponse(NamedTuple):
-    error: Optional[str]
     outcome: Optional[EncounterOutcome]
 
 
@@ -98,7 +98,7 @@ class CampRequest(NamedTuple):
 
 
 class CampResponse(NamedTuple):
-    error: Optional[str]
+    pass
 
 
 class TravelRequest(NamedTuple):
@@ -106,4 +106,15 @@ class TravelRequest(NamedTuple):
 
 
 class TravelResponse(NamedTuple):
-    error: Optional[str]
+    pass
+
+
+class ErrorType(Enum):
+    UNKNOWN = 0
+    ILLEGAL_MOVE = 1
+    BAD_STATE = 2
+
+
+class ErrorResponse(NamedTuple):
+    type: ErrorType
+    message: str

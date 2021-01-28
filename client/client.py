@@ -3,15 +3,30 @@ from argparse import ArgumentParser, Namespace
 from collections import defaultdict
 from string import ascii_lowercase
 from typing import List, Optional, Set, Type, TypeVar
-from urllib.request import Request, urlopen
+from urllib.request import HTTPErrorProcessor, Request, build_opener, urlopen
 
 from picaro.client.colors import colors
 from picaro.common.hexmap.display import CubeCoordinate, DisplayInfo, OffsetCoordinate, render_simple, render_large
 from picaro.common.serializer import deserialize, serialize
-from picaro.server.api_types import Board, CampRequest, CampResponse, CardPreview, Character, EncounterCheck, EncounterActions, StartEncounterRequest, StartEncounterResponse, ResolveEncounterRequest, ResolveEncounterResponse, TravelRequest, TravelResponse
+from picaro.server.api_types import Board, CampRequest, CampResponse, CardPreview, Character, EncounterCheck, EncounterActions, ErrorResponse, ErrorType, StartEncounterRequest, StartEncounterResponse, ResolveEncounterRequest, ResolveEncounterResponse, TravelRequest, TravelResponse
+
 
 S = TypeVar("S")
 T = TypeVar("T")
+
+
+class IllegalMoveException(Exception):
+    pass
+
+
+class BadStateException(Exception):
+    pass
+
+
+class NonThrowingHTTPErrorProcessor(HTTPErrorProcessor):
+    def http_response(self, request, response):
+        return response
+
 
 class Client:
     @classmethod
@@ -62,6 +77,7 @@ class Client:
             "Coastal": (colors.fg.cyan, ";"),
             "Arctic": (colors.bold, "/"),
         }
+        self.opener = build_opener(NonThrowingHTTPErrorProcessor)
 
     def get_board(self) -> None:
         board = self._get("/board", Board)
@@ -142,21 +158,26 @@ class Client:
 
     def play(self) -> None:
         while True:
-            board = self._get("/board", Board)
-            ch = self._get(f"/character/{self.args.name}", Character)
-            self._display_play(board, ch)
-            if not ch.tableau or ch.tableau.remaining_turns == 0:
-                return
-            if ch.tableau.encounter:
-                self._do_encounter(None, board, ch)
-            else:
-                self._input_play_action(board, ch)
-            if not self.args.season:
-                return
-            else:
-                print()
-                print("===========")
-                print()
+            try:
+                board = self._get("/board", Board)
+                ch = self._get(f"/character/{self.args.name}", Character)
+                self._display_play(board, ch)
+                if not ch.tableau or ch.tableau.remaining_turns == 0:
+                    return
+                if ch.tableau.encounter:
+                    self._do_encounter(None, board, ch)
+                else:
+                    self._input_play_action(board, ch)
+                if not self.args.season:
+                    return
+                else:
+                    print()
+                    print("===========")
+                    print()
+            except BadStateException as e:
+                print(e)
+                continue
+
 
     def _display_play(self, board: Board, ch: Character) -> None:
         encounters = {card.location_name for card in ch.tableau.cards} if ch.tableau else None
@@ -231,9 +252,10 @@ class Client:
 
     def _do_encounter(self, card_preview: Optional[CardPreview], board: Board, ch: Character) -> bool:
         if not ch.tableau.encounter and card_preview is not None:
-            resp = self._post(f"/play/{ch.name}/encounter/start", StartEncounterRequest(card_id=card_preview.id), StartEncounterResponse)
-            if resp.error is not None:
-                print(resp.error)
+            try:
+                resp = self._post(f"/play/{ch.name}/encounter/start", StartEncounterRequest(card_id=card_preview.id), StartEncounterResponse)
+            except IllegalMoveException as e:
+                print(e)
                 return False
             # ok, so encounter started - re-request the character to get
             # the full details from the tableau:
@@ -308,9 +330,10 @@ class Client:
                 continue
 
         actions = EncounterActions(flee=flee, transfers=transfers, adjusts=adjusts, luck=luck, rolls=rolls)
-        resp = self._post(f"/play/{ch.name}/encounter/resolve", ResolveEncounterRequest(actions=actions), ResolveEncounterResponse)
-        if resp.error is not None:
-            print(resp.error)
+        try:
+            resp = self._post(f"/play/{ch.name}/encounter/resolve", ResolveEncounterRequest(actions=actions), ResolveEncounterResponse)
+        except IllegalMoveException as e:
+            print(e)
             return False
         print(f"You have encountered: {resp.outcome}!")
         return True
@@ -337,18 +360,20 @@ class Client:
             cur = cur.step(xm, ym, zm)
             route.append(cubes[cur].name)
 
-        resp = self._post(f"/play/{ch.name}/travel", TravelRequest(route=route), TravelResponse)
-        if resp.error is not None:
-            print(resp.error)
+        try:
+            resp = self._post(f"/play/{ch.name}/travel", TravelRequest(route=route), TravelResponse)
+        except IllegalMoveException as e:
+            print(e)
             return False
         print("You arrive!")
         ch = self._get(f"/character/{self.args.name}", Character)
         return self._do_encounter(None, board, ch)
 
     def _do_camp(self, board: Board, ch: Character) -> bool:
-        resp = self._post(f"/play/{ch.name}/camp", CampRequest(rest=True), CampResponse)
-        if resp.error is not None:
-            print(resp.error)
+        try:
+            resp = self._post(f"/play/{ch.name}/camp", CampRequest(rest=True), CampResponse)
+        except IllegalMoveException as e:
+            print(e)
             return False
         print("You feel refreshed!")
         return True
@@ -357,17 +382,28 @@ class Client:
         url = self.base_url
         url += path
         request = Request(url)
-        with urlopen(request) as response:
-            data = response.read().decode("utf-8")
-            return deserialize(data, cls)
+        return self._http_common(request, cls)
 
     def _post(self, path: str, input_val: S, cls: Type[T]) -> T:
         url = self.base_url
         url += path
         request = Request(url, data=serialize(input_val).encode("utf-8"))
-        with urlopen(request) as response:
+        return self._http_common(request, cls)
+
+    def _http_common(self, request: Request, cls: Type[T]) -> T:
+        with self.opener.open(request) as response:
             data = response.read().decode("utf-8")
+        if response.status == 200:
             return deserialize(data, cls)
+        try:
+            err = deserialize(data, ErrorResponse)
+        except Exception:
+            raise Exception(f"Failed to decode data: {data}")
+        if err.type == ErrorType.ILLEGAL_MOVE:
+            raise IllegalMoveException(err.message)
+        else:
+            raise BadStateException(err.message)
+
 
 if __name__ == "__main__":
     args = parse_args()

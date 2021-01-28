@@ -5,6 +5,7 @@ from typing import List, NamedTuple, Optional, Set, Tuple
 
 from .board import Board
 from .deck import EncounterDeck
+from .exceptions import BadStateException, IllegalMoveException
 from .job import load_job, load_jobs
 from .skills import load_skills
 from .types import DrawnCard, EncounterReward, EncounterPenalty, FullCard, TemplateCard
@@ -75,7 +76,7 @@ class Character:
 
     def draw_job_card(self, board: Board) -> DrawnCard:
         if not self.tableau:
-            raise Exception("Can't draw when tableau is empty")
+            raise BadStateException("Can't draw when tableau is empty")
 
         job = load_job(self.job_name)
         if not self.tableau.deck:
@@ -91,15 +92,15 @@ class Character:
 
     def do_start_encounter(self, card_id: int, board: Board) -> None:
         if not self.tableau:
-            raise Exception("Can't start encounter when tableau is empty")
+            raise BadStateException("Can't start encounter when tableau is empty")
         if self.tableau.encounter:
-            raise Exception("An encounter is already active")
+            raise BadStateException("An encounter is already active")
         for card in self.tableau.cards:
             if card.card.id == card_id:
                 board.move_token(self.name, card.location_name, adjacent=False)
                 self._ready_encounter(card.card)
                 return
-        raise Exception(f"No such encounter card found ({card_id})")
+        raise BadStateException(f"No such encounter card found ({card_id})")
 
     def _ready_encounter(self, card: FullCard):
         rolls = []
@@ -110,9 +111,9 @@ class Character:
 
     def do_resolve_encounter(self, actions: EncounterActions, board: Board) -> EncounterOutcome:
         if not self.tableau:
-            raise Exception("Can't start encounter when tableau is empty")
+            raise BadStateException("Can't start encounter when tableau is empty")
         if not self.tableau.encounter:
-            raise Exception("There is no active encounter")
+            raise BadStateException("There is no active encounter")
 
         # validate by rerunning actions
         luck = self.tableau.luck
@@ -120,23 +121,23 @@ class Character:
 
         for adj in actions.adjusts or []:
             if luck <= 0:
-                raise Exception("Luck not high enough for adjust")
+                raise BadStateException("Luck not high enough for adjust")
             luck -= 1
             rolls[adj] += 1
 
         for from_c, to_c in actions.transfers or []:
             if rolls[from_c] < 2:
-                raise Exception("From not enough for transfer")
+                raise BadStateException("From not enough for transfer")
             rolls[from_c] -= 2
             rolls[to_c] += 1
 
         if actions.flee:
             if luck <= 0:
-                raise Exception("Luck not high enough for flee")
+                raise BadStateException("Luck not high enough for flee")
             luck -= 1
 
         if (luck, rolls) != (actions.luck, actions.rolls):
-            raise Exception("Computed luck/rolls doesn't match?")
+            raise BadStateException("Computed luck/rolls doesn't match?")
 
         self.tableau.luck = luck
 
@@ -244,13 +245,13 @@ class Character:
 
     def do_camp(self, board: Board) -> None:
         if not self.tableau:
-            raise Exception("Can't camp while tableau not present")
+            raise BadStateException("Can't camp while tableau not present")
         self.health = min(20, self.health + 3)
         self._finish_turn(board)
 
     def _finish_turn(self, board: Board) -> None:
         if not self.tableau:
-            raise Exception("Can't finish turn without tableau?")
+            raise BadStateException("Can't finish turn without tableau?")
         self.tableau.remaining_turns -= 1
 
         # filter to encounters near the PC (since they may have been transported, or just moved)
@@ -285,7 +286,6 @@ class Character:
         roll = random.randint(1, 8) + bonus
         jobs = load_jobs()
         next_job: Optional[str] = None
-        print(f"roll: {roll} tn: {target_number}")
         if roll < target_number - 4:
             bad_jobs = [j for j in jobs if j.rank == 0]
             next_job = (random.choice(bad_jobs)).name

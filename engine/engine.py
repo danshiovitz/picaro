@@ -2,6 +2,7 @@ from typing import Dict, List, Tuple
 
 from .board import Board
 from .character import Character, EncounterActions, EncounterOutcome
+from .exceptions import BadStateException, IllegalMoveException
 from .types import Token
 
 class Engine:
@@ -19,7 +20,7 @@ class Engine:
     def get_character(self, character_name: str) -> Character:
         ch = self._characters.get(character_name, None)
         if ch is None:
-            raise Exception(f"No such character: {character_name}")
+            raise BadStateException(f"No such character: {character_name}")
         return ch
 
     def find_character(self, character_name: str) -> Tuple[str, str]:
@@ -33,23 +34,23 @@ class Engine:
     def do_start_encounter(self, character_name: str, card_id: int) -> None:
         ch = self._characters.get(character_name, None)
         if ch is None:
-            raise Exception(f"No such character: {character_name}")
+            raise BadStateException(f"No such character: {character_name}")
         ch.do_start_encounter(card_id, self._board)
 
     def do_resolve_encounter(self, character_name: str, actions: EncounterActions) -> EncounterOutcome:
         ch = self._characters.get(character_name, None)
         if ch is None:
-            raise Exception(f"No such character: {character_name}")
+            raise BadStateException(f"No such character: {character_name}")
         return ch.do_resolve_encounter(actions, self._board)
 
     def do_travel(self, character_name: str, route: List[str]) -> None:
         ch = self._characters.get(character_name, None)
         if ch is None:
-            raise Exception(f"No such character: {character_name}")
+            raise BadStateException(f"No such character: {character_name}")
         ch.do_travel(route, self._board)
 
     def do_camp(self, character_name: str) -> None:
         ch = self._characters.get(character_name, None)
         if ch is None:
-            raise Exception(f"No such character: {character_name}")
+            raise BadStateException(f"No such character: {character_name}")
         ch.do_camp(self._board)
