@@ -5,7 +5,7 @@ from typing import List, NamedTuple, Optional, Set, Tuple
 
 from .board import Board
 from .deck import EncounterDeck
-from .job import load_job
+from .job import load_job, load_jobs
 from .skills import load_skills
 from .types import DrawnCard, EncounterReward, EncounterPenalty, FullCard, TemplateCard
 
@@ -40,6 +40,7 @@ class EncounterOutcome(NamedTuple):
     resources: int
     quest: int
     transport_location: Optional[str]
+    new_job: Optional[str]
 
 
 DRAW_HEX_CARD = TemplateCard(1, name="Draw from Hex Deck", desc="", skills=[], rewards=[], penalties=[])
@@ -145,7 +146,7 @@ class Character:
         health_mod = 0
         resources_mod = 0
         quest_mod = 0
-        do_demotion = False
+        demotion_mod = 0
         transport_distance = 0
 
         ocs = defaultdict(int)
@@ -184,15 +185,19 @@ class Character:
             elif oc == EncounterPenalty.RESOURCES:
                 resources_mod -= 1
             elif oc == EncounterPenalty.JOB:
-                do_demotion = True
+                demotion_mod += 1
             elif oc == EncounterPenalty.TRANSPORT:
-                transport_distance += cnt * 5
+                transport_distance += (cnt * 5) + 5
             elif oc == EncounterPenalty.NOTHING:
                 pass
             else:
                 raise Exception(f"Unknown reward/penalty: {oc.name}")
 
+        if demotion_mod > 0 and transport_distance == 0:
+            transport_distance = 5
+
         transport_location: Optional[str] = None
+        new_job: Optional[str] = None
 
         if coins_mod != 0:
             self.coins += coins_mod
@@ -210,6 +215,8 @@ class Character:
             location = random.choice(board.find_hexes_near_location(self.name, transport_distance - 5, transport_distance))
             transport_location = location.name
             board.move_token(self.name, transport_location)
+        if demotion_mod > 0:
+            new_job = self._job_check(demotion_mod, board)
 
         outcome = EncounterOutcome(
             coins=coins_mod,
@@ -219,6 +226,7 @@ class Character:
             resources=resources_mod,
             quest=quest_mod,
             transport_location=transport_location,
+            new_job=new_job,
         )
 
         # pop this off the card list, if it's from there
@@ -271,19 +279,46 @@ class Character:
         else:
             self.skills[skill] = 5
 
-    def _job_check(self, difficulty: int) -> None:
+    def _job_check(self, difficulty: int, board: Board) -> Optional[str]:
         target_number = 5 + difficulty
         bonus = self.reputation // 4
         roll = random.randint(1, 8) + bonus
+        jobs = load_jobs()
+        next_job: Optional[str] = None
+        print(f"roll: {roll} tn: {target_number}")
         if roll < target_number - 4:
-            # drop two levels
-            pass
+            bad_jobs = [j for j in jobs if j.rank == 0]
+            next_job = (random.choice(bad_jobs)).name
         elif roll < target_number:
-            # drop one level
-            pass
+            lower_jobs = [j for j in jobs if self.job_name in j.promotions]
+            if lower_jobs:
+                next_job = (random.choice(lower_jobs)).name
+            else:
+                bad_jobs = [j for j in jobs if j.rank == 0]
+                next_job = (random.choice(bad_jobs)).name
         elif roll < target_number + 4:
-            # same
-            pass
+            next_job = None
         else:
-            # promo one level
-            pass
+            cur_job = [j for j in jobs if j.name == self.job_name][0]
+            promo_jobs = [j for j in jobs if j.name in cur_job.promotions]
+            if promo_jobs:
+                next_job = (random.choice(promo_jobs)).name
+            else:
+                next_job = None
+        if next_job:
+            self._new_job(next_job, board)
+        return next_job
+
+    def _new_job(self, job_name: str, board: Board) -> None:
+        self.job_name = job_name
+        self.reputation = 3
+        if self.tableau:
+            self.tableau = Tableau(
+                cards=[],
+                encounter=self.tableau.encounter,
+                remaining_turns=self.tableau.remaining_turns,
+                luck=self.tableau.luck,
+                deck=[],
+            )
+            for _ in range(self.tableau_size):
+                self.tableau.cards.append(self.draw_job_card(board))

@@ -2,7 +2,6 @@
   "decks": [
     {
       "name": "Raider",
-      "base_difficulty": 2,
       "base_skills": ["Ride", "Endurance", "Stealth"],
       "templates": [
         {
@@ -65,7 +64,6 @@
     },
     {
       "name": "Desert",
-      "base_difficulty": 3,
       "base_skills": ["Desert Lore", "Desert Lore", "Endurance"],
       "templates": [
         {

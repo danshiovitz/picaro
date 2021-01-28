@@ -1,9 +1,76 @@
 {
   "jobs": [
     {
+      "name": "Scavenger",
+      "type": "LACKEY",
+      "rank": 0,
+      "promotions": [],
+      "deck_name": "Scavenger",
+      "encounter_distances": [1, 1, 1, 1, 1, 2]
+    },
+    {
       "name": "Raider",
+      "type": "SOLO",
+      "rank": 1,
+      "promotions": ["Senior Raider"],
       "deck_name": "Raider",
       "encounter_distances": [0, 1, 1, 1, 2, 3]
+    },
+    {
+      "name": "Senior Raider",
+      "type": "SOLO",
+      "rank": 2,
+      "promotions": ["Raider Captain"],
+      "deck_name": "Raider",
+      "encounter_distances": [0, 1, 1, 1, 2, 3]
+    },
+    {
+      "name": "Raider Captain",
+      "type": "CAPTAIN",
+      "rank": 3,
+      "promotions": [],
+      "deck_name": "Raider",
+      "encounter_distances": [0, 1, 1, 1, 2, 3]
+    },
+    {
+      "name": "Prisoner",
+      "type": "LACKEY",
+      "rank": 0,
+      "promotions": [],
+      "deck_name": "Prisoner",
+      "encounter_distances": [0, 0, 0, 0, 0, 1]
+    },
+    {
+      "name": "Guard",
+      "type": "SOLO",
+      "rank": 1,
+      "promotions": ["Senior Guard"],
+      "deck_name": "Guard",
+      "encounter_distances": [0, 1, 1, 1, 2, 2]
+    },
+    {
+      "name": "Senior Guard",
+      "type": "SOLO",
+      "rank": 2,
+      "promotions": ["Guard Captain"],
+      "deck_name": "Guard",
+      "encounter_distances": [0, 1, 1, 1, 2, 2]
+    },
+    {
+      "name": "Guard Captain",
+      "type": "CAPTAIN",
+      "rank": 3,
+      "promotions": [],
+      "deck_name": "Guard",
+      "encounter_distances": [0, 1, 1, 1, 2, 2]
+    },
+    {
+      "name": "Merchant",
+      "type": "SOLO",
+      "rank": 1,
+      "promotions": [],
+      "deck_name": "Merchant",
+      "encounter_distances": [1, 1, 2, 2, 3, 3]
     }
   ]
 }

@@ -10,23 +10,22 @@ from .zodiacs import load_zodiacs
 class EncounterDeck:
     NEXT_ID = 1
 
-    def __init__(self, name: str, templates: List[TemplateCard], base_skills: List[str], base_difficulty: int) -> None:
+    def __init__(self, name: str, templates: List[TemplateCard], base_skills: List[str]) -> None:
         self.name = name
         self.templates = templates
         self.base_skills = base_skills
-        self.base_difficulty = base_difficulty
 
-    def actualize(self, additional: List[TemplateCard] = None) -> List[FullCard]:
+    def actualize(self, difficulty: int, additional: List[TemplateCard] = None) -> List[FullCard]:
         ret = []
         for tmpl in self.templates + (additional or []):
             for _ in range(tmpl.copies):
-                ret.append(self._make_card(tmpl))
+                ret.append(self._make_card(tmpl, difficulty))
         random.shuffle(ret)
         for _ in range((len(ret) // 10) + 1):
             ret.pop()
         return ret
 
-    def _make_card(self, val: TemplateCard) -> FullCard:
+    def _make_card(self, val: TemplateCard, difficulty: int) -> FullCard:
         if not val.skills:
             checks = []
         else:
@@ -38,9 +37,9 @@ class EncounterDeck:
             reward_bag = self._make_reward_bag(val)
             penalty_bag = self._make_penalty_bag(val)
             checks = [
-                self._make_check(skill_bag, reward_bag, penalty_bag),
-                self._make_check(skill_bag, reward_bag, penalty_bag),
-                self._make_check(skill_bag + all_skills, reward_bag, penalty_bag),
+                self._make_check(difficulty, skill_bag, reward_bag, penalty_bag),
+                self._make_check(difficulty, skill_bag, reward_bag, penalty_bag),
+                self._make_check(difficulty, skill_bag + all_skills, reward_bag, penalty_bag),
             ]
 
         all_zodiacs = load_zodiacs()
@@ -50,8 +49,8 @@ class EncounterDeck:
         self.NEXT_ID += 1
         return FullCard(id=card_id, template=val, checks=checks, signs=signs)
 
-    def _make_check(self, skill_bag: List[str], reward_bag: List[EncounterReward], penalty_bag: List[EncounterPenalty]) -> EncounterCheck:
-        tn = self.difficulty_to_target_number(self.base_difficulty)
+    def _make_check(self, difficulty: int, skill_bag: List[str], reward_bag: List[EncounterReward], penalty_bag: List[EncounterPenalty]) -> EncounterCheck:
+        tn = self.difficulty_to_target_number(difficulty)
         # fuzz the tns a bit
         tn = random.choice([
             tn, tn, tn, tn,
@@ -82,7 +81,6 @@ class EncounterDeck:
 class DeckStruct(NamedTuple):
     name: str
     base_skills: List[str]
-    base_difficulty: int
     templates: List[TemplateCard]
 
 class AllDecksStruct(NamedTuple):
@@ -91,5 +89,5 @@ class AllDecksStruct(NamedTuple):
 def load_deck(deck_name: str) -> EncounterDeck:
     loaded = load_json("template_decks", AllDecksStruct)
     ds = [ld for ld in loaded.decks if ld.name == deck_name][0]
-    deck = EncounterDeck(ds.name, ds.templates, ds.base_skills, ds.base_difficulty)
+    deck = EncounterDeck(ds.name, ds.templates, ds.base_skills)
     return deck

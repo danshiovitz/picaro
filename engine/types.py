@@ -50,6 +50,13 @@ class EncounterPenalty(Enum):
     NOTHING = 7
 
 
+class JobType(Enum):
+    LACKEY = 1
+    SOLO = 2
+    CAPTAIN = 3
+    KING = 4
+
+
 class EncounterCheck(NamedTuple):
     skill: str
     target_number: int

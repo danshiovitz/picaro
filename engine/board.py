@@ -13,6 +13,9 @@ class Board:
         self.hex_decks = {hx.name: [] for hx in self.hexes.values()}
         self.tokens = {}
 
+    def load_hex(self, hex_name: str) -> Hex:
+        return self.hexes[hex_name]
+
     def add_token(self, token: Token) -> None:
         if token.name in self.tokens:
             raise Exception(f"Token name {token.name} already in use")
@@ -82,5 +85,6 @@ class Board:
 
     def _make_deck_for_hex(self, hx: Hex) -> List[FullCard]:
         deck_name = "Desert"
+        difficulty = 3
         template_deck = load_deck(deck_name)
-        return template_deck.actualize(additional=[])
+        return template_deck.actualize(difficulty, additional=[])
