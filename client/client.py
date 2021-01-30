@@ -105,7 +105,8 @@ class Client:
                     body2=body2,
                 )
 
-            center_hx = [hx for hx in board.hexes if hx.name == board.tokens[0].location][0]
+            center_name = self.args.center or board.tokens[0].location
+            center_hx = [hx for hx in board.hexes if hx.name == center_name][0]
             for line in render_large(set(coords), display, center=center_hx.coordinate, radius=2):
                 print(line)
 
@@ -117,6 +118,12 @@ class Client:
             print()
             for tok in board.tokens:
                 print(tok)
+
+        if self.args.country:
+            ccount = defaultdict(int)
+            for hx in board.hexes:
+                ccount[hx.country] += 1
+            print(ccount)
 
     def _make_small_map(self, board: Board, show_country: bool, center: Optional[OffsetCoordinate] = None, radius: int = 2, encounters: Optional[Set[str]] = None) -> List[str]:
         coords = {

@@ -17,6 +17,11 @@ class CubeCoordinate(NamedTuple):
         y = -x - z
         return CubeCoordinate(x=x, y=y, z=z)
 
+    def to_offset(self) -> OffsetCoordinate:
+        row = self.z + (self.x + (self.x&1)) / 2
+        column = self.x
+        return OffsetCoordinate(row, column)
+
     def distance(self, other: "CubeCoordinate") -> int:
         return (abs(self.x - other.x) + abs(self.y - other.y) + abs(self.z - other.z)) // 2
 
