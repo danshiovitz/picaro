@@ -247,20 +247,30 @@ def _pick_capitols(unassigned: Set[OffsetCoordinate], terrain_map: Dict[OffsetCo
     return [c.to_offset() for c in cities]
 
 def _assign_countries(coords: Set[OffsetCoordinate], capitols: Dict[OffsetCoordinate, str], neighbors_map: Dict[OffsetCoordinate, Set[OffsetCoordinate]]) -> Dict[OffsetCoordinate, str]:
-    ret = {coord: cty for coord, cty in capitols.items()}
-    countries = {cty: {coord} for coord, cty in capitols.items()}
+    ret = {coord: country for coord, country in capitols.items()}
+    countries = {country: set() for country in capitols.values()}
+    neighbors = {country: set() for country in capitols.values()}
+
+    def add_coord(country, coord) -> None:
+        ret[coord] = country
+        countries[country].add(coord)
+        for nghs in neighbors.values():
+            nghs.discard(coord)
+        for ngh in neighbors_map[coord]:
+            if ngh in coords and ngh not in ret:
+                neighbors[country].add(ngh)
+
+    for coord, country in capitols.items():
+        add_coord(country, coord)
 
     did_any = True
     while did_any:
         did_any = False
-        for name, cur_coords in countries.items():
-            nghs = []
-            for coord in cur_coords:
-                nghs.extend(ngh for ngh in neighbors_map[coord] if ngh in coords and ngh not in ret)
+        for country in countries:
+            nghs = list(neighbors[country])
             if nghs:
                 ngh = random.choice(nghs)
-                ret[ngh] = name
-                cur_coords.add(ngh)
+                add_coord(country, ngh)
                 did_any = True
     return ret
 
@@ -282,7 +292,10 @@ def _score_assignment(assignment: Dict[OffsetCoordinate, str]) -> int:
         max_column = max(c.column for c in cc)
         return abs(1.0 - ((max_row - min_row) / (max_column - min_column)))
 
-    avg_squareness = sum(squareness(coords) for coords in countries.values()) / len(countries)
-    squareness_score = -int(300 * avg_squareness)
-    print(f"squareness: {squareness_score}")
+    squarenesses = [squareness(coords) for coords in countries.values()]
+    # this 300 * is just heuristic to give the squareness roughly the
+    # same weight as the size, based on observed typical size and squareness
+    # values
+    squareness_score = -int(300 * sum(squarenesses) / len(squarenesses))
+    print(f"squarenesses: {list(f'{sq:.03f}' for sq in squarenesses)} score: {squareness_score}")
     return size_score + squareness_score
