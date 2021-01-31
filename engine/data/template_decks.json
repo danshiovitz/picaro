@@ -92,10 +92,10 @@
         },
         {
           "copies": 2,
-          "name": "Extreme Heat",
+          "name": "Ancient Structure",
           "desc": "...",
           "skills": ["Endurance", "Endurance", "Desert Lore"],
-          "rewards": ["HEALING", "NOTHING"],
+          "rewards": ["COINS", "RESOURCES"],
           "penalties": ["DAMAGE", "REPUTATION"]
         },
         {
@@ -113,6 +113,222 @@
           "skills": ["Observation", "Architecture", "Mesmerism"],
           "rewards": ["COINS", "NOTHING"],
           "penalties": ["TRANSPORT", "REPUTATION"]
+        }
+      ]
+    },
+    {
+      "name": "Mountains",
+      "base_skills": ["Mountain Lore", "Mountain Lore", "Climb"],
+      "templates": [
+        {
+          "copies": 2,
+          "name": "Chasm",
+          "desc": "...",
+          "skills": ["Acrobatics", "Throw", "Navigation"],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Avalance",
+          "desc": "...",
+          "skills": ["Might", "Speed", "Acrobatics"],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Mountain Shrine",
+          "desc": "...",
+          "skills": ["Spirit Binding", "Research", "Mechanisms"],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Creatures of the Mountain",
+          "desc": "...",
+          "skills": ["Debate", "Pickpocket", "Might"],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Dark Cave",
+          "desc": "...",
+          "skills": ["Architecture", "Navigation", "Thaumaturgy"],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Icy Wind",
+          "desc": "...",
+          "skills": ["Endurance", "Acrobatics", "Mesmerism"],
+          "rewards": [],
+          "penalties": []
+        }
+      ]
+    },
+    {
+      "name": "Water",
+      "base_skills": ["Sea Lore", "Sea Lore", "Navigation"],
+      "templates": [
+        {
+          "copies": 2,
+          "name": "Storm",
+          "desc": "...",
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Dangerous Rocks",
+          "desc": "...",
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Whirlpool",
+          "desc": "...",
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Aquatic Beast",
+          "desc": "...",
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Ghost Ship",
+          "desc": "...",
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Becalmed",
+          "desc": "...",
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
+      ]
+    },
+    {
+      "name": "Plains",
+      "base_skills": ["Plains Lore", "Plains Lore", "Ride"],
+      "templates": [
+        {
+          "copies": 2,
+          "name": "Circling Birds",
+          "desc": "...",
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Strange Vegetation",
+          "desc": "...",
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Distant Riders",
+          "desc": "...",
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Sudden Storm",
+          "desc": "...",
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Beasts of the Plains",
+          "desc": "...",
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Ley Lines",
+          "desc": "...",
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
+      ]
+    },
+    {
+      "name": "City",
+      "base_skills": ["Observation", "Architecture", "Carousing"],
+      "templates": [
+        {
+          "copies": 2,
+          "name": "Street Market",
+          "desc": "...",
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Wandering Prophet",
+          "desc": "...",
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Tavern Brawl",
+          "desc": "...",
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Statuary Garden",
+          "desc": "...",
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Tipped Wagon",
+          "desc": "...",
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        },
+        {
+          "copies": 2,
+          "name": "Maze of Alleys",
+          "desc": "...",
+          "skills": [],
+          "rewards": [],
+          "penalties": []
         }
       ]
     }
