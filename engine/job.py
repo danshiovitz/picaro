@@ -1,20 +1,19 @@
 #!/usr/bin/python3
-import random
-from typing import List, NamedTuple, Tuple
+import json
+from typing import Any, Dict, List, NamedTuple, Tuple
 
 from .deck import EncounterDeck, load_deck
-from .load import load_json
+from .storage import ObjectStorageBase
 from .types import Hex, FullCard, JobType, TemplateCard
 
 
-class Job:
-    def __init__(self, name: str, type: JobType, rank: int, promotions: List[str], deck_name: str, encounter_distances: List[int]):
-        self.name = name
-        self.type = type
-        self.rank = rank
-        self.promotions = promotions
-        self.deck_name = deck_name
-        self.encounter_distances = encounter_distances
+class Job(NamedTuple):
+    name: str
+    type: JobType
+    rank: int
+    promotions: List[str]
+    deck_name: str
+    encounter_distances: List[int]
 
     def make_deck(self, additional: List[TemplateCard] = None) -> List[FullCard]:
         # template_deck = load_deck(self.deck_name)
@@ -25,25 +24,27 @@ class Job:
         # later: some jobs filter by country and/or terrain type
         return True
 
-class JobStruct(NamedTuple):
-    name: str
-    type: JobType
-    rank: int
-    promotions: List[str]
-    deck_name: str
-    encounter_distances: List[int]
 
-
-class AllJobsStruct(NamedTuple):
-    jobs: List[JobStruct]
+def load_jobs() -> List[Job]:
+    return JobsStorage.load()
 
 
 def load_job(job_name: str) -> Job:
-    loaded = load_json("jobs", AllJobsStruct)
-    j = [ld for ld in loaded.jobs if ld.name == job_name][0]
-    return Job(j.name, j.type, j.rank, j.promotions, j.deck_name, j.encounter_distances)
+    return JobsStorage.load_by_name(job_name)
 
 
-def load_jobs() -> List[Job]:
-    loaded = load_json("jobs", AllJobsStruct)
-    return loaded.jobs
+class JobsStorage(ObjectStorageBase[Job]):
+    TABLE_NAME = "job"
+    TYPE = Job
+    PRIMARY_KEY = "name"
+
+    @classmethod
+    def load(cls) -> List[Job]:
+        return cls._select_helper([], {}, active_conn=None)
+
+    @classmethod
+    def load_by_name(cls, name) -> Job:
+        jobs = cls._select_helper(["name = :name"], {"name": name}, active_conn=None)
+        if not jobs:
+            raise Exception(f"No such job: {name}")
+        return jobs[0]

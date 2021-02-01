@@ -1,336 +1,334 @@
-{
-  "decks": [
-    {
-      "name": "Raider",
-      "base_skills": ["Ride", "Endurance", "Stealth"],
-      "templates": [
-        {
-          "copies": 4,
-          "name": "Caravan Raid",
-          "desc": "...",
-          "skills": ["Shoot", "Speed", "Command"],
-          "rewards": ["COINS", "RESOURCES"],
-          "penalties": ["DAMAGE", "REPUTATION"]
-        },
-        {
-          "copies": 2,
-          "name": "Scouting Mission",
-          "desc": "...",
-          "skills": ["Observation", "Climb", "Appraisal"],
-          "rewards": ["XP", "REPUTATION"],
-          "penalties": ["DAMAGE", "TRANSPORT"]
-        },
-        {
-          "copies": 2,
-          "name": "Guard Patrol",
-          "desc": "...",
-          "skills": ["Stealth", "Formation Fighting", "Speed"],
-          "rewards": ["COINS", "REPUTATION"],
-          "penalties": ["DAMAGE", "JOB"]
-        },
-        {
-          "copies": 1,
-          "name": "Another Band",
-          "desc": "...",
-          "skills": ["Might", "Carousing", "Debate"],
-          "rewards": ["RESOURCES", "QUEST"],
-          "penalties": ["RESOURCES", "REPUTATION"]
-        },
-        {
-          "copies": 1,
-          "name": "Hunting Expedition",
-          "desc": "...",
-          "skills": ["Speed", "Shoot", "Observation"],
-          "rewards": ["XP", "RESOURCES"],
-          "penalties": ["DAMAGE", "REPUTATION"]
-        },
-        {
-          "copies": 1,
-          "name": "Test of Skill",
-          "desc": "...",
-          "skills": ["Shoot", "Animal Training", "Ride"],
-          "rewards": ["HEALING", "REPUTATION"],
-          "penalties": ["DAMAGE", "COINS"]
-        },
-        {
-          "copies": 1,
-          "name": "Victory Celebration",
-          "desc": "...",
-          "skills": ["Carousing", "Charm", "Acrobatics"],
-          "rewards": ["COINS", "HEALING"],
-          "penalties": ["NOTHING", "COINS"]
-        }
-      ]
-    },
-    {
-      "name": "Desert",
-      "base_skills": ["Desert Lore", "Desert Lore", "Endurance"],
-      "templates": [
-        {
-          "copies": 2,
-          "name": "Oasis",
-          "desc": "...",
-          "skills": ["Carousing", "Observation", "Doctor"],
-          "rewards": ["COINS", "HEALING"],
-          "penalties": ["DAMAGE", "COINS"]
-        },
-        {
-          "copies": 2,
-          "name": "Sandstorm",
-          "desc": "...",
-          "skills": ["Navigation", "Endurance", "Might"],
-          "rewards": ["XP", "NOTHING"],
-          "penalties": ["DAMAGE", "REPUTATION"]
-        },
-        {
-          "copies": 2,
-          "name": "Desert Beast",
-          "desc": "...",
-          "skills": ["Charm", "Stealth", "Animal Training"],
-          "rewards": ["COINS", "RESOURCES"],
-          "penalties": ["DAMAGE", "RESOURCES"]
-        },
-        {
-          "copies": 2,
-          "name": "Ancient Structure",
-          "desc": "...",
-          "skills": ["Endurance", "Endurance", "Desert Lore"],
-          "rewards": ["COINS", "RESOURCES"],
-          "penalties": ["DAMAGE", "REPUTATION"]
-        },
-        {
-          "copies": 2,
-          "name": "Strange Constellations",
-          "desc": "...",
-          "skills": ["Spirit Binding", "Navigation", "Mesmerism"],
-          "rewards": ["QUEST", "XP"],
-          "penalties": ["DAMAGE", "JOB"]
-        },
-        {
-          "copies": 2,
-          "name": "Mirage",
-          "desc": "...",
-          "skills": ["Observation", "Architecture", "Mesmerism"],
-          "rewards": ["COINS", "NOTHING"],
-          "penalties": ["TRANSPORT", "REPUTATION"]
-        }
-      ]
-    },
-    {
-      "name": "Mountains",
-      "base_skills": ["Mountain Lore", "Mountain Lore", "Climb"],
-      "templates": [
-        {
-          "copies": 2,
-          "name": "Chasm",
-          "desc": "...",
-          "skills": ["Acrobatics", "Throw", "Navigation"],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Avalance",
-          "desc": "...",
-          "skills": ["Might", "Speed", "Acrobatics"],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Mountain Shrine",
-          "desc": "...",
-          "skills": ["Spirit Binding", "Research", "Mechanisms"],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Creatures of the Mountain",
-          "desc": "...",
-          "skills": ["Debate", "Pickpocket", "Might"],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Dark Cave",
-          "desc": "...",
-          "skills": ["Architecture", "Navigation", "Thaumaturgy"],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Icy Wind",
-          "desc": "...",
-          "skills": ["Endurance", "Acrobatics", "Mesmerism"],
-          "rewards": [],
-          "penalties": []
-        }
-      ]
-    },
-    {
-      "name": "Water",
-      "base_skills": ["Sea Lore", "Sea Lore", "Navigation"],
-      "templates": [
-        {
-          "copies": 2,
-          "name": "Storm",
-          "desc": "...",
-          "skills": [],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Dangerous Rocks",
-          "desc": "...",
-          "skills": [],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Whirlpool",
-          "desc": "...",
-          "skills": [],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Aquatic Beast",
-          "desc": "...",
-          "skills": [],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Ghost Ship",
-          "desc": "...",
-          "skills": [],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Becalmed",
-          "desc": "...",
-          "skills": [],
-          "rewards": [],
-          "penalties": []
-        }
-      ]
-    },
-    {
-      "name": "Plains",
-      "base_skills": ["Plains Lore", "Plains Lore", "Ride"],
-      "templates": [
-        {
-          "copies": 2,
-          "name": "Circling Birds",
-          "desc": "...",
-          "skills": [],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Strange Vegetation",
-          "desc": "...",
-          "skills": [],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Distant Riders",
-          "desc": "...",
-          "skills": [],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Sudden Storm",
-          "desc": "...",
-          "skills": [],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Beasts of the Plains",
-          "desc": "...",
-          "skills": [],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Ley Lines",
-          "desc": "...",
-          "skills": [],
-          "rewards": [],
-          "penalties": []
-        }
-      ]
-    },
-    {
-      "name": "City",
-      "base_skills": ["Observation", "Architecture", "Carousing"],
-      "templates": [
-        {
-          "copies": 2,
-          "name": "Street Market",
-          "desc": "...",
-          "skills": [],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Wandering Prophet",
-          "desc": "...",
-          "skills": [],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Tavern Brawl",
-          "desc": "...",
-          "skills": [],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Statuary Garden",
-          "desc": "...",
-          "skills": [],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Tipped Wagon",
-          "desc": "...",
-          "skills": [],
-          "rewards": [],
-          "penalties": []
-        },
-        {
-          "copies": 2,
-          "name": "Maze of Alleys",
-          "desc": "...",
-          "skills": [],
-          "rewards": [],
-          "penalties": []
-        }
-      ]
-    }
-  ]
-}
+[
+  {
+    "name": "Raider",
+    "base_skills": ["Ride", "Endurance", "Stealth"],
+    "templates": [
+      {
+        "copies": 4,
+        "name": "Caravan Raid",
+        "desc": "...",
+        "skills": ["Shoot", "Speed", "Command"],
+        "rewards": ["COINS", "RESOURCES"],
+        "penalties": ["DAMAGE", "REPUTATION"]
+      },
+      {
+        "copies": 2,
+        "name": "Scouting Mission",
+        "desc": "...",
+        "skills": ["Observation", "Climb", "Appraisal"],
+        "rewards": ["XP", "REPUTATION"],
+        "penalties": ["DAMAGE", "TRANSPORT"]
+      },
+      {
+        "copies": 2,
+        "name": "Guard Patrol",
+        "desc": "...",
+        "skills": ["Stealth", "Formation Fighting", "Speed"],
+        "rewards": ["COINS", "REPUTATION"],
+        "penalties": ["DAMAGE", "JOB"]
+      },
+      {
+        "copies": 1,
+        "name": "Another Band",
+        "desc": "...",
+        "skills": ["Might", "Carousing", "Debate"],
+        "rewards": ["RESOURCES", "QUEST"],
+        "penalties": ["RESOURCES", "REPUTATION"]
+      },
+      {
+        "copies": 1,
+        "name": "Hunting Expedition",
+        "desc": "...",
+        "skills": ["Speed", "Shoot", "Observation"],
+        "rewards": ["XP", "RESOURCES"],
+        "penalties": ["DAMAGE", "REPUTATION"]
+      },
+      {
+        "copies": 1,
+        "name": "Test of Skill",
+        "desc": "...",
+        "skills": ["Shoot", "Animal Training", "Ride"],
+        "rewards": ["HEALING", "REPUTATION"],
+        "penalties": ["DAMAGE", "COINS"]
+      },
+      {
+        "copies": 1,
+        "name": "Victory Celebration",
+        "desc": "...",
+        "skills": ["Carousing", "Charm", "Acrobatics"],
+        "rewards": ["COINS", "HEALING"],
+        "penalties": ["NOTHING", "COINS"]
+      }
+    ]
+  },
+  {
+    "name": "Desert",
+    "base_skills": ["Desert Lore", "Desert Lore", "Endurance"],
+    "templates": [
+      {
+        "copies": 2,
+        "name": "Oasis",
+        "desc": "...",
+        "skills": ["Carousing", "Observation", "Doctor"],
+        "rewards": ["COINS", "HEALING"],
+        "penalties": ["DAMAGE", "COINS"]
+      },
+      {
+        "copies": 2,
+        "name": "Sandstorm",
+        "desc": "...",
+        "skills": ["Navigation", "Endurance", "Might"],
+        "rewards": ["XP", "NOTHING"],
+        "penalties": ["DAMAGE", "REPUTATION"]
+      },
+      {
+        "copies": 2,
+        "name": "Desert Beast",
+        "desc": "...",
+        "skills": ["Charm", "Stealth", "Animal Training"],
+        "rewards": ["COINS", "RESOURCES"],
+        "penalties": ["DAMAGE", "RESOURCES"]
+      },
+      {
+        "copies": 2,
+        "name": "Ancient Structure",
+        "desc": "...",
+        "skills": ["Endurance", "Endurance", "Desert Lore"],
+        "rewards": ["COINS", "RESOURCES"],
+        "penalties": ["DAMAGE", "REPUTATION"]
+      },
+      {
+        "copies": 2,
+        "name": "Strange Constellations",
+        "desc": "...",
+        "skills": ["Spirit Binding", "Navigation", "Mesmerism"],
+        "rewards": ["QUEST", "XP"],
+        "penalties": ["DAMAGE", "JOB"]
+      },
+      {
+        "copies": 2,
+        "name": "Mirage",
+        "desc": "...",
+        "skills": ["Observation", "Architecture", "Mesmerism"],
+        "rewards": ["COINS", "NOTHING"],
+        "penalties": ["TRANSPORT", "REPUTATION"]
+      }
+    ]
+  },
+  {
+    "name": "Mountains",
+    "base_skills": ["Mountain Lore", "Mountain Lore", "Climb"],
+    "templates": [
+      {
+        "copies": 2,
+        "name": "Chasm",
+        "desc": "...",
+        "skills": ["Acrobatics", "Throw", "Navigation"],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Avalance",
+        "desc": "...",
+        "skills": ["Might", "Speed", "Acrobatics"],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Mountain Shrine",
+        "desc": "...",
+        "skills": ["Spirit Binding", "Research", "Mechanisms"],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Creatures of the Mountain",
+        "desc": "...",
+        "skills": ["Debate", "Pickpocket", "Might"],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Dark Cave",
+        "desc": "...",
+        "skills": ["Architecture", "Navigation", "Thaumaturgy"],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Icy Wind",
+        "desc": "...",
+        "skills": ["Endurance", "Acrobatics", "Mesmerism"],
+        "rewards": [],
+        "penalties": []
+      }
+    ]
+  },
+  {
+    "name": "Water",
+    "base_skills": ["Sea Lore", "Sea Lore", "Navigation"],
+    "templates": [
+      {
+        "copies": 2,
+        "name": "Storm",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Dangerous Rocks",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Whirlpool",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Aquatic Beast",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Ghost Ship",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Becalmed",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    ]
+  },
+  {
+    "name": "Plains",
+    "base_skills": ["Plains Lore", "Plains Lore", "Ride"],
+    "templates": [
+      {
+        "copies": 2,
+        "name": "Circling Birds",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Strange Vegetation",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Distant Riders",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Sudden Storm",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Beasts of the Plains",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Ley Lines",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    ]
+  },
+  {
+    "name": "City",
+    "base_skills": ["Observation", "Architecture", "Carousing"],
+    "templates": [
+      {
+        "copies": 2,
+        "name": "Street Market",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Wandering Prophet",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Tavern Brawl",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Statuary Garden",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Tipped Wagon",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      },
+      {
+        "copies": 2,
+        "name": "Maze of Alleys",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    ]
+  }
+]

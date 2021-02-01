@@ -3,16 +3,12 @@ from enum import Enum
 from typing import Any, Dict, Optional, NamedTuple, Sequence, Type, TypeVar, Union
 
 def serialize(val: NamedTuple, indent: Optional[int] = None) -> str:
-    if not hasattr(val, "_fields"):
-        raise Exception(f"{val} is not the right type: {val.__class__.__name__}")
     dt = recursive_to_dict(val)
     return json.dumps(dt, indent=indent)
 
 
 T = TypeVar("T")
 def deserialize(data: str, cls: Type[T]) -> T:
-    if not hasattr(cls, "_fields"):
-        raise Exception(f"{cls.__name__} is not a subclass of NamedTuple")
     dt = json.loads(data)
     return recursive_from_dict(dt, cls)
 
@@ -37,11 +33,14 @@ def recursive_to_dict(val: T, cls: Type[T] = type(None)) -> Any:
             ret[f] = recursive_to_dict(subv, ut)
         return ret
     elif issubclass(cls_base, tuple):
-        return [recursive_to_dict(sv, cls.__args__[idx]) for idx, sv in enumerate(val)]
+        exp_types = getattr(cls, "__args__", [type(None)] * len(val))
+        return [recursive_to_dict(sv, exp_types[idx]) for idx, sv in enumerate(val)]
     elif cls_base != str and issubclass(cls_base, Sequence):
-        return [recursive_to_dict(sv, cls.__args__[0]) for sv in val]
+        exp_types = getattr(cls, "__args__", [type(None)])
+        return [recursive_to_dict(sv, exp_types[0]) for sv in val]
     elif issubclass(cls_base, Dict):
-        return {recursive_to_dict(k, cls.__args__[0]): recursive_to_dict(v, cls.__args__[1]) for k, v in val.items()}
+        exp_types = getattr(cls, "__args__", [type(None), type(None)])
+        return {recursive_to_dict(k, exp_types[0]): recursive_to_dict(v, exp_types[1]) for k, v in val.items()}
     elif issubclass(cls_base, Enum):
         return val.name
     else:
@@ -51,7 +50,7 @@ def recursive_from_dict(val: Any, cls: Type[T]) -> T:
     cls_base = getattr(cls, "__origin__", cls)
     if hasattr(cls, "_fields"):
         dt = {}
-        for f in val:
+        for f in cls._field_types:
             ut = cls._field_types[f]
             bt = getattr(cls._field_types[f], "__origin__", cls._field_types[f])
             if bt == Union: # ie, it was an optional
@@ -64,10 +63,16 @@ def recursive_from_dict(val: Any, cls: Type[T]) -> T:
             dt[f] = recursive_from_dict(val[f], ut)
         return cls(**dt)
     elif issubclass(cls_base, tuple):
+        if type(val) == str:
+            val = json.loads(val)
         return tuple(recursive_from_dict(sv, cls.__args__[idx]) for idx, sv in enumerate(val))
     elif cls_base != str and issubclass(cls_base, Sequence):
+        if type(val) == str:
+            val = json.loads(val)
         return [recursive_from_dict(sv, cls.__args__[0]) for sv in val]
     elif issubclass(cls_base, Dict):
+        if type(val) == str:
+            val = json.loads(val)
         return {recursive_from_dict(k, cls.__args__[0]): recursive_from_dict(v, cls.__args__[1]) for k, v in val.items()}
     elif issubclass(cls_base, Enum):
         return cls[val]

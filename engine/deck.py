@@ -1,19 +1,18 @@
 import random
 from typing import Generic, List, NamedTuple, Tuple, TypeVar
 
-from .load import load_json
 from .skills import load_skills
+from .storage import ObjectStorageBase
 from .types import EncounterCheck, EncounterPenalty, EncounterReward, FullCard, TemplateCard
 from .zodiacs import load_zodiacs
 
 
-class EncounterDeck:
-    NEXT_ID = 1
+NEXT_ID = 1
 
-    def __init__(self, name: str, templates: List[TemplateCard], base_skills: List[str]) -> None:
-        self.name = name
-        self.templates = templates
-        self.base_skills = base_skills
+class EncounterDeck(NamedTuple):
+    name: str
+    templates: List[TemplateCard]
+    base_skills: List[str]
 
     def actualize(self, difficulty: int, additional: List[TemplateCard] = None) -> List[FullCard]:
         ret = []
@@ -45,8 +44,9 @@ class EncounterDeck:
         all_zodiacs = load_zodiacs()
         signs = random.sample(all_zodiacs, 2)
 
-        card_id = self.NEXT_ID
-        self.NEXT_ID += 1
+        global NEXT_ID
+        card_id = NEXT_ID
+        NEXT_ID += 1
         return FullCard(id=card_id, template=val, checks=checks, signs=signs)
 
     def _make_check(self, difficulty: int, skill_bag: List[str], reward_bag: List[EncounterReward], penalty_bag: List[EncounterPenalty]) -> EncounterCheck:
@@ -78,16 +78,40 @@ class EncounterDeck:
         return difficulty * 2 + 1
 
 
-class DeckStruct(NamedTuple):
-    name: str
-    base_skills: List[str]
-    templates: List[TemplateCard]
-
-class AllDecksStruct(NamedTuple):
-    decks: List[DeckStruct]
-
 def load_deck(deck_name: str) -> EncounterDeck:
-    loaded = load_json("template_decks", AllDecksStruct)
-    ds = [ld for ld in loaded.decks if ld.name == deck_name][0]
-    deck = EncounterDeck(ds.name, ds.templates, ds.base_skills)
-    return deck
+    return DeckStorage.load_by_name(deck_name)
+
+
+class TemplateCardStorage(ObjectStorageBase[TemplateCard]):
+    TABLE_NAME = "template_card"
+    TYPE = TemplateCard
+    PRIMARY_KEY = "name"
+
+    @classmethod
+    def load(cls) -> List[TemplateCard]:
+        return cls._select_helper([], {}, active_conn=None)
+
+    @classmethod
+    def load_by_name(cls, name) -> TemplateCard:
+        cards = cls._select_helper(["name = :name"], {"name": name}, active_conn=None)
+        if not cards:
+            raise Exception(f"No such card: {name}")
+        return cards[0]
+
+
+class DeckStorage(ObjectStorageBase[EncounterDeck]):
+    TABLE_NAME = "template_deck"
+    TYPE = EncounterDeck
+    PRIMARY_KEY = "name"
+    SUBCLASSES = {"template_cards": TemplateCardStorage}
+
+    @classmethod
+    def load(cls) -> List[EncounterDeck]:
+        return cls._select_helper([], {}, active_conn=None)
+
+    @classmethod
+    def load_by_name(cls, name) -> EncounterDeck:
+        decks = cls._select_helper(["name = :name"], {"name": name}, active_conn=None)
+        if not decks:
+            raise Exception(f"No such deck: {name}")
+        return decks[0]

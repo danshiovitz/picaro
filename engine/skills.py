@@ -1,14 +1,15 @@
 #!/usr/bin/python3
 
-from typing import List, NamedTuple
+from typing import Any, Dict, List, NamedTuple
 
-from .load import load_json
-
-
-class SkillsStruct(NamedTuple):
-    names: List[str]
-
+from .storage import ValueStorageBase
 
 def load_skills() -> List[str]:
-    loaded = load_json("skills", SkillsStruct)
-    return loaded.names
+    return SkillsStorage.load()
+
+class SkillsStorage(ValueStorageBase):
+    TABLE_NAME = "skill"
+
+    @classmethod
+    def load(cls) -> List[str]:
+        return cls._select_helper([], {}, active_conn=None)
