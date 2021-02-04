@@ -69,7 +69,7 @@ def recursive_from_dict(val: Any, cls: Type[T]) -> T:
     elif cls_base != str and issubclass(cls_base, Sequence):
         if type(val) == str:
             val = json.loads(val)
-        return [recursive_from_dict(sv, cls.__args__[0]) for sv in val]
+        return tuple(recursive_from_dict(sv, cls.__args__[0]) for sv in val)
     elif issubclass(cls_base, Dict):
         if type(val) == str:
             val = json.loads(val)

@@ -7,11 +7,12 @@
 - assign regions to hexes
 - regional, country, and arch villains, and their moves
 - proposals/adjustments/whatever
+- artifacts
 - oracles
 - rumor phase
 - camp deck
 - better travel deck
-- use sqlite storage
+- convert everything to sqlite storage
 - support multiple games, players have a character in a game
 - other things like tags (terrain features, powers, villains) + zodiacs
 - better engine unit testing

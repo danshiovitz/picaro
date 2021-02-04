@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 import json
-from typing import Any, Dict, List, NamedTuple, Tuple
+from typing import Any, Dict, List, NamedTuple, Sequence, Tuple
 
 from .deck import EncounterDeck, load_deck
 from .storage import ObjectStorageBase
@@ -11,9 +11,9 @@ class Job(NamedTuple):
     name: str
     type: JobType
     rank: int
-    promotions: List[str]
+    promotions: Sequence[str]
     deck_name: str
-    encounter_distances: List[int]
+    encounter_distances: Sequence[int]
 
     def make_deck(self, additional: List[TemplateCard] = None) -> List[FullCard]:
         # template_deck = load_deck(self.deck_name)

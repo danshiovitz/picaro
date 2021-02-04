@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, List, NamedTuple, Optional, Tuple
+from typing import Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 from picaro.common.hexmap.types import OffsetCoordinate
 from picaro.engine.board import Board as engine_Board
@@ -13,18 +13,18 @@ class Player(NamedTuple):
 
 
 class Board(NamedTuple):
-    hexes: List[Hex]
-    tokens: List[Token]
+    hexes: Sequence[Hex]
+    tokens: Sequence[Token]
 
     @classmethod
     def from_engine_Board(self, board: engine_Board) -> "Board":
-        return Board(hexes=list(board.hexes.values()), tokens=list(board.tokens.values()))
+        return Board(hexes=tuple(board.hexes.values()), tokens=tuple(board.tokens.values()))
 
 
 class CardPreview(NamedTuple):
     id: int
     name: str
-    checks: List[EncounterCheck]
+    checks: Sequence[EncounterCheck]
     age: int
     location_name: str
 
@@ -35,7 +35,7 @@ class CardPreview(NamedTuple):
 
 
 class Tableau(NamedTuple):
-    cards: List[CardPreview]
+    cards: Sequence[CardPreview]
     encounter: Optional[Encounter]
     remaining_turns: int
     luck: int
@@ -102,7 +102,7 @@ class CampResponse(NamedTuple):
 
 
 class TravelRequest(NamedTuple):
-    route: List[str]
+    route: Sequence[str]
 
 
 class TravelResponse(NamedTuple):

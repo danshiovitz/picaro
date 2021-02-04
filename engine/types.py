@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, NamedTuple, Optional
+from typing import NamedTuple, Optional, Sequence
 
 from picaro.common.hexmap.types import OffsetCoordinate
 
@@ -68,16 +68,16 @@ class TemplateCard(NamedTuple):
     copies: int
     name: str
     desc: str
-    skills: List[str]
-    rewards: List[EncounterReward]
-    penalties: List[EncounterPenalty]
+    skills: Sequence[str]
+    rewards: Sequence[EncounterReward]
+    penalties: Sequence[EncounterPenalty]
 
 
 class FullCard(NamedTuple):
     id: int
     template: TemplateCard
-    checks: List[EncounterCheck]
-    signs: List[str]
+    checks: Sequence[EncounterCheck]
+    signs: Sequence[str]
 
 
 class DrawnCard(NamedTuple):

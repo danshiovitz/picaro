@@ -1,5 +1,5 @@
 import random
-from typing import Generic, List, NamedTuple, Tuple, TypeVar
+from typing import Generic, List, NamedTuple, Sequence, Tuple, TypeVar
 
 from .skills import load_skills
 from .storage import ObjectStorageBase
@@ -11,12 +11,12 @@ NEXT_ID = 1
 
 class EncounterDeck(NamedTuple):
     name: str
-    templates: List[TemplateCard]
-    base_skills: List[str]
+    templates: Sequence[TemplateCard]
+    base_skills: Sequence[str]
 
     def actualize(self, difficulty: int, additional: List[TemplateCard] = None) -> List[FullCard]:
         ret = []
-        for tmpl in self.templates + (additional or []):
+        for tmpl in list(self.templates) + (additional or []):
             for _ in range(tmpl.copies):
                 ret.append(self._make_card(tmpl, difficulty))
         random.shuffle(ret)

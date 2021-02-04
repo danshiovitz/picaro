@@ -136,6 +136,7 @@ class Character:
                 raise BadStateException("Luck not high enough for flee")
             luck -= 1
 
+        rolls = tuple(rolls)
         if (luck, rolls) != (actions.luck, actions.rolls):
             raise BadStateException("Computed luck/rolls doesn't match?")
 
