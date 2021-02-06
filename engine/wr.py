@@ -3,17 +3,20 @@ import sys
 sys.path.append(str(pathlib.Path(__file__).absolute().parent.parent.parent))
 
 import re
-from typing import List, NamedTuple, Tuple
+from dataclasses import dataclass
+from typing import List, Tuple
 from picaro.common.serializer import serialize
 from picaro.engine.types import TemplateCard, FullCard, EncounterReward, EncounterPenalty
 
-class DeckStruct(NamedTuple):
+@dataclass(frozen=True)
+class DeckStruct:
     name: str
     base_difficulty: int
     base_skills: List[str]
     cards: List[TemplateCard]
 
-class AllDecksStruct(NamedTuple):
+@dataclass(frozen=True)
+class AllDecksStruct:
     decks: List[DeckStruct]
 
 sk = AllDecksStruct(decks=[

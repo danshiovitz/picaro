@@ -1,8 +1,9 @@
 import json
+from dataclasses import fields as dataclass_fields, is_dataclass
 from enum import Enum
-from typing import Any, Dict, Optional, NamedTuple, Sequence, Type, TypeVar, Union
+from typing import Any, Dict, Optional, Sequence, Type, TypeVar, Union
 
-def serialize(val: NamedTuple, indent: Optional[int] = None) -> str:
+def serialize(val: Any, indent: Optional[int] = None) -> str:
     dt = recursive_to_dict(val)
     return json.dumps(dt, indent=indent)
 
@@ -17,20 +18,20 @@ def recursive_to_dict(val: T, cls: Type[T] = type(None)) -> Any:
     if cls == type(None):
         cls = type(val)
     cls_base = getattr(cls, "__origin__", cls)
-    if hasattr(cls, "_fields"):
+    if is_dataclass(cls):
         ret = {}
-        for f in val._fields:
-            subv = getattr(val, f)
-            ut = val._field_types[f]
+        for field in dataclass_fields(cls):
+            subv = getattr(val, field.name)
+            ut = field.type
             bt = getattr(ut, "__origin__", ut)
             if bt == Union: # ie, it was an optional
                 if subv is None:
-                    ret[f] = None
+                    ret[field.name] = None
                     continue
                 # pull out the first type which is assumed to be the non-none type
-                ut = val._field_types[f].__args__[0]
+                ut = field.type.__args__[0]
                 bt = getattr(ut, "__origin__", ut)
-            ret[f] = recursive_to_dict(subv, ut)
+            ret[field.name] = recursive_to_dict(subv, ut)
         return ret
     elif issubclass(cls_base, tuple):
         exp_types = getattr(cls, "__args__", [type(None)] * len(val))
@@ -48,19 +49,19 @@ def recursive_to_dict(val: T, cls: Type[T] = type(None)) -> Any:
 
 def recursive_from_dict(val: Any, cls: Type[T]) -> T:
     cls_base = getattr(cls, "__origin__", cls)
-    if hasattr(cls, "_fields"):
+    if is_dataclass(cls):
         dt = {}
-        for f in cls._field_types:
-            ut = cls._field_types[f]
-            bt = getattr(cls._field_types[f], "__origin__", cls._field_types[f])
+        for field in dataclass_fields(cls):
+            ut = field.type
+            bt = getattr(ut, "__origin__", ut)
             if bt == Union: # ie, it was an optional
-                if val[f] is None:
-                    dt[f] = None
+                if val[field.name] is None:
+                    dt[field.name] = None
                     continue
                 # pull out the first type which is assumed to be the non-none type
-                ut = cls._field_types[f].__args__[0]
+                ut = ut.__args__[0]
                 bt = getattr(ut, "__origin__", ut)
-            dt[f] = recursive_from_dict(val[f], ut)
+            dt[field.name] = recursive_from_dict(val[field.name], ut)
         return cls(**dt)
     elif issubclass(cls_base, tuple):
         if type(val) == str:

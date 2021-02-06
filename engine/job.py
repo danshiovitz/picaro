@@ -1,13 +1,15 @@
 #!/usr/bin/python3
 import json
-from typing import Any, Dict, List, NamedTuple, Sequence, Tuple
+from dataclasses import dataclass
+from typing import Any, Dict, List, Sequence, Tuple
 
 from .deck import EncounterDeck, load_deck
 from .storage import ObjectStorageBase
 from .types import Hex, FullCard, JobType, TemplateCard
 
 
-class Job(NamedTuple):
+@dataclass(frozen=True)
+class Job:
     name: str
     type: JobType
     rank: int

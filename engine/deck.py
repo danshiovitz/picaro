@@ -1,5 +1,6 @@
 import random
-from typing import Generic, List, NamedTuple, Sequence, Tuple, TypeVar
+from dataclasses import dataclass
+from typing import Generic, List, Sequence, Tuple, TypeVar
 
 from .skills import load_skills
 from .storage import ObjectStorageBase
@@ -9,7 +10,8 @@ from .zodiacs import load_zodiacs
 
 NEXT_ID = 1
 
-class EncounterDeck(NamedTuple):
+@dataclass(frozen=True)
+class EncounterDeck:
     name: str
     templates: Sequence[TemplateCard]
     base_skills: Sequence[str]

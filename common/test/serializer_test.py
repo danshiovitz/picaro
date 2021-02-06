@@ -2,18 +2,21 @@ import pathlib
 import sys
 sys.path.append(str(pathlib.Path(__file__).absolute().parent.parent))
 
-from typing import Dict, List, NamedTuple
+from dataclasses import dataclass
+from typing import Dict, List
 from unittest import TestCase, main
 
 from serializer import serialize, deserialize
 
-class Foo(NamedTuple):
+@dataclass(frozen=True)
+class Foo:
     a: str
     b: int
     c: str
 
 
-class Complex(NamedTuple):
+@dataclass(frozen=True)
+class Complex:
     some: Foo
     more: List[Foo]
     most: Dict[str, Foo]

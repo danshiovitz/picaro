@@ -1,16 +1,18 @@
 import random
 from collections import defaultdict
+from dataclasses import dataclass
 from functools import reduce
 from math import floor
 from string import ascii_uppercase
-from typing import Dict, List, NamedTuple, Set
+from typing import Dict, List, Set
 
 from .types import Countries, Hex, Terrains
 from picaro.common.hexmap.types import CubeCoordinate, OffsetCoordinate
 from picaro.common.hexmap.utils import calc_offset_neighbor_map
 
 # generation code from https://welshpiper.com/hex-based-campaign-design-part-1/
-class TerrainData(NamedTuple):
+@dataclass(frozen=True)
+class TerrainData:
     primary: List[str]
     secondary: List[str]
     tertiary: List[str]
@@ -143,7 +145,7 @@ def _adjust_terrain(terrain: Dict[OffsetCoordinate, str], neighbor_map: Dict[Off
         elif cnt >= 2 and random.randint(1, 100) < 75:
             terrain[coord] = "Coastal"
 
-    num_rows = max(x[0] for x in terrain) + 1
+    num_rows = max(x.row for x in terrain) + 1
 
     hot_forests = [coord for coord, ttype in terrain.items() if ttype == "Forest" and coord.row >= num_rows // 2]
     jungle_chance = {k: p * 10 for k, p in _calc_axis_projection(10, num_rows).items()}
@@ -154,7 +156,7 @@ def _adjust_terrain(terrain: Dict[OffsetCoordinate, str], neighbor_map: Dict[Off
     cold_lands = [coord for coord, ttype in terrain.items() if ttype not in ("Mountains", "Water") and coord.row <= num_rows // 4]
     arctic_chance = {k: 80 - p * 15 for k, p in _calc_axis_projection(20, num_rows).items()}
     for coord in cold_lands:
-        if random.randint(1, 100) < arctic_chance[coord[0]]:
+        if random.randint(1, 100) < arctic_chance[coord.row]:
             terrain[coord] = "Arctic"
 
     num_cities = 25
@@ -236,13 +238,13 @@ def _pick_capitols(unassigned: Set[OffsetCoordinate], terrain_map: Dict[OffsetCo
     # pick relatively-separated cities to be the centers of the countries
     all_cities = sorted(
         [CubeCoordinate.from_row_col(c.row, c.column) for c, t in terrain_map.items() if t == "City" and c in unassigned],
-        key=lambda c: c.to_offset()
+        key=lambda c: (c.to_offset().row, c.to_offset().column)
     )
     cities = [random.choice(all_cities)]
     all_cities.remove(cities[0])
     while len(cities) < cnt:
         max_min = lambda c: min(c.distance(n) for n in cities)
-        all_cities.sort(key=lambda c: (-max_min(c), c))
+        all_cities.sort(key=lambda c: (-max_min(c), c.x, c.y, c.z))
         cities.append(all_cities.pop(0))
     return [c.to_offset() for c in cities]
 

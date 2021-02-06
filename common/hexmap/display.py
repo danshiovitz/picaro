@@ -1,16 +1,19 @@
+from dataclasses import dataclass
 from string import ascii_lowercase, ascii_uppercase
-from typing import Callable, Dict, List, NamedTuple, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 from .types import OffsetCoordinate, CubeCoordinate
 
 
-class DisplayInfo(NamedTuple):
+@dataclass(frozen=True)
+class DisplayInfo:
     fill: str
     body1: str
     body2: str
 
 
-class DrawWindow(NamedTuple):
+@dataclass(frozen=True)
+class DrawWindow:
     min_row: int
     max_row: int
     min_column: int
@@ -19,13 +22,15 @@ class DrawWindow(NamedTuple):
     half_bottom: bool
 
 
-class HexInfo(NamedTuple):
+@dataclass(frozen=True)
+class HexInfo:
     offset: OffsetCoordinate
     cube: CubeCoordinate
     info: DisplayInfo
 
 
-class HexLookups(NamedTuple):
+@dataclass(frozen=True)
+class HexLookups:
     by_offset: Dict[OffsetCoordinate, HexInfo]
     by_cube: Dict[CubeCoordinate, HexInfo]
 

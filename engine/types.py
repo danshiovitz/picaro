@@ -1,5 +1,6 @@
+from dataclasses import dataclass
 from enum import Enum
-from typing import NamedTuple, Optional, Sequence
+from typing import Optional, Sequence
 
 from picaro.common.hexmap.types import OffsetCoordinate
 
@@ -14,7 +15,8 @@ Countries = [
 ]
 
 
-class Hex(NamedTuple):
+@dataclass(frozen=True)
+class Hex:
     name: str
     coordinate: OffsetCoordinate
     terrain: str
@@ -24,7 +26,8 @@ class Hex(NamedTuple):
 TokenTypes = ["Character", "Other"]
 
 
-class Token(NamedTuple):
+@dataclass(frozen=True)
+class Token:
     name: str
     type: str
     location: str
@@ -57,14 +60,16 @@ class JobType(Enum):
     KING = 4
 
 
-class EncounterCheck(NamedTuple):
+@dataclass(frozen=True)
+class EncounterCheck:
     skill: str
     target_number: int
     reward: EncounterReward
     penalty: EncounterPenalty
 
 
-class TemplateCard(NamedTuple):
+@dataclass(frozen=True)
+class TemplateCard:
     copies: int
     name: str
     desc: str
@@ -73,14 +78,16 @@ class TemplateCard(NamedTuple):
     penalties: Sequence[EncounterPenalty]
 
 
-class FullCard(NamedTuple):
+@dataclass(frozen=True)
+class FullCard:
     id: int
     template: TemplateCard
     checks: Sequence[EncounterCheck]
     signs: Sequence[str]
 
 
-class DrawnCard(NamedTuple):
+@dataclass(frozen=True)
+class DrawnCard:
     card: FullCard
     age: int
     location_name: str

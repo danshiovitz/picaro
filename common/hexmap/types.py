@@ -1,11 +1,14 @@
-from typing import NamedTuple
+from dataclasses import dataclass
 
-class OffsetCoordinate(NamedTuple):
+
+@dataclass(frozen=True)
+class OffsetCoordinate:
     row: int
     column: int
 
 
-class CubeCoordinate(NamedTuple):
+@dataclass(frozen=True)
+class CubeCoordinate:
     x: int
     y: int
     z: int

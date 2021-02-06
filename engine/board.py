@@ -1,3 +1,4 @@
+import dataclasses
 import random
 from typing import Dict, List, Optional
 
@@ -37,7 +38,7 @@ class Board:
             if to not in neighbors:
                 raise IllegalMoveException("Location {to} isn't adjacent to {token_name}")
 
-        self.tokens[token_name] = self.tokens[token_name]._replace(location=to)
+        self.tokens[token_name] = dataclasses.replace(self.tokens[token_name], location=to)
 
     def find_hexes_near_location(self, location: str, min_distance: int, max_distance: int) -> List[Hex]:
         center = self.get_token_location(location, to_hex=True)

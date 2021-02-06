@@ -1,5 +1,6 @@
+from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, NamedTuple, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from picaro.common.hexmap.types import OffsetCoordinate
 from picaro.engine.board import Board as engine_Board
@@ -7,12 +8,14 @@ from picaro.engine.character import Character as engine_Character, Encounter, En
 from picaro.engine.types import Countries, DrawnCard, EncounterCheck, Hex, Terrains, Token, TokenTypes
 
 
-class Player(NamedTuple):
+@dataclass(frozen=True)
+class Player:
     id: int
     name: str
 
 
-class Board(NamedTuple):
+@dataclass(frozen=True)
+class Board:
     hexes: Sequence[Hex]
     tokens: Sequence[Token]
 
@@ -21,7 +24,8 @@ class Board(NamedTuple):
         return Board(hexes=tuple(board.hexes.values()), tokens=tuple(board.tokens.values()))
 
 
-class CardPreview(NamedTuple):
+@dataclass(frozen=True)
+class CardPreview:
     id: int
     name: str
     checks: Sequence[EncounterCheck]
@@ -34,7 +38,8 @@ class CardPreview(NamedTuple):
         return CardPreview(id=drawn_card.card.id, name=drawn_card.card.template.name, checks=drawn_card.card.checks[0:1], age=drawn_card.age, location_name=drawn_card.location_name)
 
 
-class Tableau(NamedTuple):
+@dataclass(frozen=True)
+class Tableau:
     cards: Sequence[CardPreview]
     encounter: Optional[Encounter]
     remaining_turns: int
@@ -45,7 +50,8 @@ class Tableau(NamedTuple):
         return Tableau(cards=[CardPreview.from_DrawnCard(card) for card in tableau.cards], encounter=tableau.encounter, remaining_turns=tableau.remaining_turns, luck=tableau.luck)
 
 
-class Character(NamedTuple):
+@dataclass(frozen=True)
+class Character:
     name: str
     player_id: str
     skills: Dict[str, int]
@@ -77,35 +83,43 @@ class Character(NamedTuple):
         )
 
 
-class StartEncounterRequest(NamedTuple):
+@dataclass(frozen=True)
+class StartEncounterRequest:
     card_id: int
 
 
-class StartEncounterResponse(NamedTuple):
+@dataclass(frozen=True)
+class StartEncounterResponse:
     pass
 
 
-class ResolveEncounterRequest(NamedTuple):
+@dataclass(frozen=True)
+class ResolveEncounterRequest:
     actions: EncounterActions
 
 
-class ResolveEncounterResponse(NamedTuple):
+@dataclass(frozen=True)
+class ResolveEncounterResponse:
     outcome: Optional[EncounterOutcome]
 
 
-class CampRequest(NamedTuple):
+@dataclass(frozen=True)
+class CampRequest:
     rest: bool
 
 
-class CampResponse(NamedTuple):
+@dataclass(frozen=True)
+class CampResponse:
     pass
 
 
-class TravelRequest(NamedTuple):
+@dataclass(frozen=True)
+class TravelRequest:
     route: Sequence[str]
 
 
-class TravelResponse(NamedTuple):
+@dataclass(frozen=True)
+class TravelResponse:
     pass
 
 
@@ -115,6 +129,7 @@ class ErrorType(Enum):
     BAD_STATE = 2
 
 
-class ErrorResponse(NamedTuple):
+@dataclass(frozen=True)
+class ErrorResponse:
     type: ErrorType
     message: str

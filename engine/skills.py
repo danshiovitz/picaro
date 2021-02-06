@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-from typing import Any, Dict, List, NamedTuple
+from typing import Any, Dict, List
 
 from .storage import ValueStorageBase
 

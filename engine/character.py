@@ -1,7 +1,8 @@
+import dataclasses
 import random
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import List, NamedTuple, Optional, Set, Tuple
+from typing import List, Optional, Set, Tuple
 
 from .board import Board
 from .deck import EncounterDeck
@@ -11,7 +12,8 @@ from .skills import load_skills
 from .types import DrawnCard, EncounterReward, EncounterPenalty, FullCard, TemplateCard
 
 
-class Encounter(NamedTuple):
+@dataclass(frozen=True)
+class Encounter:
     card: FullCard
     rolls: List[int]
 
@@ -25,7 +27,8 @@ class Tableau:
     deck: EncounterDeck
 
 
-class EncounterActions(NamedTuple):
+@dataclass(frozen=True)
+class EncounterActions:
     adjusts: List[int]
     transfers: List[Tuple[int, int]]
     flee: bool
@@ -33,7 +36,8 @@ class EncounterActions(NamedTuple):
     rolls: List[int]
 
 
-class EncounterOutcome(NamedTuple):
+@dataclass(frozen=True)
+class EncounterOutcome:
     coins: int
     xp: int
     reputation: int
@@ -80,7 +84,7 @@ class Character:
 
         job = load_job(self.job_name)
         if not self.tableau.deck:
-            self.tableau.deck = job.make_deck(additional=[DRAW_HEX_CARD._replace(copies=2)])
+            self.tableau.deck = job.make_deck(additional=[dataclasses.replace(DRAW_HEX_CARD, copies=2)])
         card = self.tableau.deck.pop(0)
         dst = random.choice(job.encounter_distances)
         location = random.choice(board.find_hexes_near_location(self.name, dst, dst))
@@ -261,7 +265,7 @@ class Character:
         def _is_valid(card: DrawnCard) -> bool:
             return card.age > 1 and card.location_name in near
 
-        self.tableau.cards = [c._replace(age=c.age - 1) for c in self.tableau.cards if _is_valid(c)]
+        self.tableau.cards = [dataclasses.replace(c, age=c.age - 1) for c in self.tableau.cards if _is_valid(c)]
         while len(self.tableau.cards) < self.tableau_size:
             self.tableau.cards.append(self.draw_job_card(board))
 

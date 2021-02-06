@@ -16,3 +16,62 @@
 - support multiple games, players have a character in a game
 - other things like tags (terrain features, powers, villains) + zodiacs
 - better engine unit testing
+- fix up transactions so entire update is in one (board + character changes, etc)
+
+ok so
+what we have conceptually is a thing where players do player actions and this results in some board-state changes
+sometimes the state change is in a character and sometimes it's on the board, but these are effectively the same kind of thing
+separately, sometimes there are rules variants that kick in at various places. like, consider:
+  "X switches to job Y" ->
+  "when a character loses their job, they're transported 5 hexes in a random dir" ->
+  "when character X is transported, they're transported 2 additional hexes"
+should the original event be the job switch or the job switch + transport 5 or the job switch + transport 7?
+what should we record for clarity on recapping, for undo purposes, for telling the player about their new state?
+
+Encounter Resolution: Scouting Mission
+- You received 100 coins
+- You switched to a new job: Guard
+- Your reputation is now 3
+- You are now in hex A2 (+2 hexes due to Wandering Feet)
+[We could also note that we're clearing the cards in the tableau and making a new deck, but we probably don't want to]
+
+This implies that we display and log the fully-resolved event, but how do we put that in? Like, the imperial villain does "Winds of Change: Everyone switches to a new job, one level down". Do we resolve that immediately? I guess one idea is to push it on the encounter stack if they're mid-turn. This has the nice effect of not like transporting somebody away in the middle of some other encounter. We could say, conceptually, encounters are always pre-resolution and events are post-resolution. If an encounter is received outside the play phase, it's presumably queued for the start of next season.
+
+When we start a season, we should first resolve all pending encounters, then we reset the tableau (or the other way around? you're likely to be out of luck by the end of the season, yeah? but if you're not it is straightforward to burn it on these)
+
+So:
+
+start season
+- resolve pending encounters  # can't actually do this, because start season is non-interactive!
+- reset season board
+- enter play phase
+
+play phase:
+- while turns remaining:
+  - while True:
+    - if the encounter queue is non-empty:
+      - pop the first encounter and resolve it
+    - elif the character hasn't taken an action:
+      - they can take one (start, travel, camp, etc); usually this queues an encounter
+      - start removes the card from the tableau immediately, and moves the player
+    - else:
+      - break
+  - finish the turn:
+    - decrement the turn count
+    - refill the tableau
+
+finish season:
+# how to figure out that something in the queue is from last season and should
+# be resolved-default vs being from the rumors phase and should be spilled over?
+# we could tag encounters with a source, I suppose, and we cancel everything
+# from the play phase
+# additional sources:
+# - resolved oracles or projects or interventions
+# - anything else?
+# actually, is it ok for one person to be doing rumors while another is still playing?
+# it kind of feels like we should wrap up play and let them enter the rumor phase but
+# not have those rumors take effect? or, like, you say 3 days for play, 1 day for rumors;
+# at the end of three days we finish play and cancel events (or sooner if everyone's done with play);
+# then after 1 day or when everyone's done with rumors, we publish rumors
+- while the encounter queue is non-empty:
+  - pop the first encounter and resolve it with default
