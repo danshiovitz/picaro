@@ -204,6 +204,25 @@ class StorageBase(ABC, Generic[T]):
         return all_projected
 
 
+    @classmethod
+    def _update_helper(cls, value: T, active_conn: Optional[Connection]) -> None:
+        all_projected = cls._project_all([value])
+        with ConnectionWrapper.connect(active_conn) as conn:
+            if not active_conn:
+                ConnectionWrapper.initialize_store(cls, conn)
+            for storage_base, rows in all_projected.items():
+                pk_names = {c[0] for c in storage_base._full_table_schema() if c[2]}
+                val_names = list(n for n in rows[0].keys() if n not in pk_names)
+                pk_names = list(pk_names)
+                if not val_names:
+                    continue
+                for row in rows:
+                    sql = f"UPDATE {storage_base.TABLE_NAME} SET "
+                    sql += ", ".join(f"{n} = :{n}" for n in val_names)
+                    sql += " WHERE "
+                    sql += " AND ".join(f"{n} = :{n}" for n in pk_names)
+                    conn.execute(sql, row)
+
 class ValueStorageBase(StorageBase[str]):
     TYPE: Type[T] = str
 
@@ -269,28 +288,16 @@ class ObjectStorageBase(StorageBase[T]):
     @classmethod
     def _serialize_val(cls, ftype: Type[T], fval: Any) -> Any:
         bt = getattr(ftype, "__origin__", ftype)
+        if bt == Union: # ie, it was an optional
+            if fval is None:
+                return None
+            # pull out the first type which is assumed to be the non-none type
+            ftype = ftype.__args__[0]
+            bt = getattr(ftype, "__origin__", ftype)
+
         if bt in (str, int, float, bool):
             return fval
         elif issubclass(bt, Enum):
             return fval.name
         else:
             return serialize(fval)
-
-    @classmethod
-    def _update_helper(cls, updates: Dict[str, Any], where_clauses: List[str], params: Dict[str, Any], active_conn: Optional[Connection]) -> None:
-        all_params = {k: v for k, v in params.items()}
-        sql = f"UPDATE {cls.TABLE_NAME} SET "
-        update_clauses = []
-        ftypes = {f.name: f.type for f in dataclass_fields(cls.TYPE)}
-        for uk, uv in updates.items():
-            if uk in cls.SUBTABLES:
-                raise Exception("Update doesn't handle subtables yet")
-            update_clauses.append(f"{uk} = :{uk}")
-            all_params[uk] = cls._serialize_val(uk, ftypes[uk], uv)
-        sql += ", ".join(update_clauses)
-        sql += " WHERE (" + ") AND (".join(where_clauses) + ")"
-
-        with ConnectionWrapper.connect(active_conn) as conn:
-            if not active_conn:
-                ConnectionWrapper.initialize_store(cls, conn)
-            conn.execute(sql, all_params)

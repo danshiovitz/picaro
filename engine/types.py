@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Sequence
+from typing import Any, Dict, Optional, Sequence
 
 from picaro.common.hexmap.types import OffsetCoordinate
 
@@ -33,24 +33,28 @@ class Token:
     location: str
 
 
-class EncounterReward(Enum):
-    COINS = 1
-    XP = 2
-    REPUTATION = 3
-    HEALING = 4
-    RESOURCES = 5
-    QUEST = 6
-    NOTHING = 7
+class EffectType(Enum):
+    NOTHING = 0
+    GAIN_COINS = 1
+    GAIN_XP = 2
+    GAIN_REPUTATION = 3
+    GAIN_HEALING = 4
+    GAIN_RESOURCES = 5
+    GAIN_QUEST = 6
+    CHECK_FAILURE = 7
+    LOSE_COINS = 20
+    LOSE_REPUTATION = 21
+    DAMAGE = 22
+    LOSE_RESOURCES = 23
+    DISRUPT_JOB = 24
+    TRANSPORT = 25
 
 
-class EncounterPenalty(Enum):
-    COINS = 1
-    REPUTATION = 2
-    DAMAGE = 3
-    RESOURCES = 4
-    JOB = 5
-    TRANSPORT = 6
-    NOTHING = 7
+@dataclass(frozen=True)
+class Effect:
+    type: EffectType
+    rank: int
+    param: Optional[Any]
 
 
 class JobType(Enum):
@@ -64,8 +68,15 @@ class JobType(Enum):
 class EncounterCheck:
     skill: str
     target_number: int
-    reward: EncounterReward
-    penalty: EncounterPenalty
+    reward: EffectType
+    penalty: EffectType
+
+
+class ChoiceType(Enum):
+    NONE = 0
+    REQUIRED = 1
+    OPTIONAL = 2
+    RANDOM = 3
 
 
 @dataclass(frozen=True)
@@ -74,15 +85,20 @@ class TemplateCard:
     name: str
     desc: str
     skills: Sequence[str]
-    rewards: Sequence[EncounterReward]
-    penalties: Sequence[EncounterPenalty]
+    rewards: Sequence[EffectType]
+    penalties: Sequence[EffectType]
+    choice_type: ChoiceType
+    choices: Sequence[Sequence[Effect]]
 
 
 @dataclass(frozen=True)
 class FullCard:
-    id: int
-    template: TemplateCard
+    id: str
+    name: str
+    desc: str
     checks: Sequence[EncounterCheck]
+    choice_type: ChoiceType
+    choices: Sequence[Sequence[Effect]]
     signs: Sequence[str]
 
 
@@ -91,3 +107,27 @@ class DrawnCard:
     card: FullCard
     age: int
     location_name: str
+
+
+@dataclass(frozen=True)
+class Encounter:
+    card: FullCard
+    rolls: Sequence[int]
+
+
+@dataclass(frozen=True)
+class Character:
+    name: str
+    player_id: str
+    skills: Dict[str, int]
+    job: str
+    health: int
+    coins: int
+    resources: int
+    reputation: int
+    quest: int
+    location: str
+    remaining_turns: int
+    luck: int
+    tableau: Sequence[DrawnCard]
+    encounters: Sequence[Encounter]

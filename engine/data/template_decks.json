@@ -8,56 +8,70 @@
         "name": "Caravan Raid",
         "desc": "...",
         "skills": ["Shoot", "Speed", "Command"],
-        "rewards": ["COINS", "RESOURCES"],
-        "penalties": ["DAMAGE", "REPUTATION"]
+        "rewards": ["GAIN_COINS", "GAIN_RESOURCES"],
+        "penalties": ["DAMAGE", "LOSE_REPUTATION"],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
         "name": "Scouting Mission",
         "desc": "...",
         "skills": ["Observation", "Climb", "Appraisal"],
-        "rewards": ["XP", "REPUTATION"],
-        "penalties": ["DAMAGE", "TRANSPORT"]
+        "rewards": ["GAIN_XP", "GAIN_REPUTATION"],
+        "penalties": ["DAMAGE", "TRANSPORT"],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
         "name": "Guard Patrol",
         "desc": "...",
         "skills": ["Stealth", "Formation Fighting", "Speed"],
-        "rewards": ["COINS", "REPUTATION"],
-        "penalties": ["DAMAGE", "JOB"]
+        "rewards": ["GAIN_COINS", "GAIN_REPUTATION"],
+        "penalties": ["DAMAGE", "DISRUPT_JOB"],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 1,
         "name": "Another Band",
         "desc": "...",
         "skills": ["Might", "Carousing", "Debate"],
-        "rewards": ["RESOURCES", "QUEST"],
-        "penalties": ["RESOURCES", "REPUTATION"]
+        "rewards": ["GAIN_RESOURCES", "GAIN_QUEST"],
+        "penalties": ["LOSE_RESOURCES", "LOSE_REPUTATION"],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 1,
         "name": "Hunting Expedition",
         "desc": "...",
         "skills": ["Speed", "Shoot", "Observation"],
-        "rewards": ["XP", "RESOURCES"],
-        "penalties": ["DAMAGE", "REPUTATION"]
+        "rewards": ["GAIN_XP", "GAIN_RESOURCES"],
+        "penalties": ["DAMAGE", "LOSE_REPUTATION"],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 1,
         "name": "Test of Skill",
         "desc": "...",
         "skills": ["Shoot", "Animal Training", "Ride"],
-        "rewards": ["HEALING", "REPUTATION"],
-        "penalties": ["DAMAGE", "COINS"]
+        "rewards": ["GAIN_HEALING", "GAIN_REPUTATION"],
+        "penalties": ["DAMAGE", "LOSE_COINS"],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 1,
         "name": "Victory Celebration",
         "desc": "...",
         "skills": ["Carousing", "Charm", "Acrobatics"],
-        "rewards": ["COINS", "HEALING"],
-        "penalties": ["NOTHING", "COINS"]
+        "rewards": ["GAIN_COINS", "GAIN_HEALING"],
+        "penalties": ["NOTHING", "LOSE_COINS"],
+        "choice_type": "NONE",
+        "choices": []
       }
     ]
   },
@@ -70,48 +84,60 @@
         "name": "Oasis",
         "desc": "...",
         "skills": ["Carousing", "Observation", "Doctor"],
-        "rewards": ["COINS", "HEALING"],
-        "penalties": ["DAMAGE", "COINS"]
+        "rewards": ["GAIN_COINS", "GAIN_HEALING"],
+        "penalties": ["DAMAGE", "LOSE_COINS"],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
         "name": "Sandstorm",
         "desc": "...",
         "skills": ["Navigation", "Endurance", "Might"],
-        "rewards": ["XP", "NOTHING"],
-        "penalties": ["DAMAGE", "REPUTATION"]
+        "rewards": ["GAIN_XP", "NOTHING"],
+        "penalties": ["DAMAGE", "LOSE_REPUTATION"],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
         "name": "Desert Beast",
         "desc": "...",
         "skills": ["Charm", "Stealth", "Animal Training"],
-        "rewards": ["COINS", "RESOURCES"],
-        "penalties": ["DAMAGE", "RESOURCES"]
+        "rewards": ["GAIN_COINS", "GAIN_RESOURCES"],
+        "penalties": ["DAMAGE", "LOSE_RESOURCES"],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
         "name": "Ancient Structure",
         "desc": "...",
         "skills": ["Endurance", "Endurance", "Desert Lore"],
-        "rewards": ["COINS", "RESOURCES"],
-        "penalties": ["DAMAGE", "REPUTATION"]
+        "rewards": ["GAIN_COINS", "GAIN_RESOURCES"],
+        "penalties": ["DAMAGE", "LOSE_REPUTATION"],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
         "name": "Strange Constellations",
         "desc": "...",
         "skills": ["Spirit Binding", "Navigation", "Mesmerism"],
-        "rewards": ["QUEST", "XP"],
-        "penalties": ["DAMAGE", "JOB"]
+        "rewards": ["GAIN_QUEST", "GAIN_XP"],
+        "penalties": ["DAMAGE", "DISRUPT_JOB"],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
         "name": "Mirage",
         "desc": "...",
         "skills": ["Observation", "Architecture", "Mesmerism"],
-        "rewards": ["COINS", "NOTHING"],
-        "penalties": ["TRANSPORT", "REPUTATION"]
+        "rewards": ["GAIN_COINS", "NOTHING"],
+        "penalties": ["TRANSPORT", "LOSE_REPUTATION"],
+        "choice_type": "NONE",
+        "choices": []
       }
     ]
   },
@@ -125,7 +151,9 @@
         "desc": "...",
         "skills": ["Acrobatics", "Throw", "Navigation"],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -133,7 +161,9 @@
         "desc": "...",
         "skills": ["Might", "Speed", "Acrobatics"],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -141,7 +171,9 @@
         "desc": "...",
         "skills": ["Spirit Binding", "Research", "Mechanisms"],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -149,7 +181,9 @@
         "desc": "...",
         "skills": ["Debate", "Pickpocket", "Might"],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -157,7 +191,9 @@
         "desc": "...",
         "skills": ["Architecture", "Navigation", "Thaumaturgy"],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -165,7 +201,9 @@
         "desc": "...",
         "skills": ["Endurance", "Acrobatics", "Mesmerism"],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       }
     ]
   },
@@ -179,7 +217,9 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -187,7 +227,9 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -195,7 +237,9 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -203,7 +247,9 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -211,7 +257,9 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -219,7 +267,9 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       }
     ]
   },
@@ -233,7 +283,9 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -241,7 +293,9 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -249,7 +303,9 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -257,7 +313,9 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -265,7 +323,9 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -273,7 +333,9 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       }
     ]
   },
@@ -287,7 +349,9 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -295,7 +359,9 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -303,7 +369,9 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -311,7 +379,9 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -319,7 +389,9 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
       },
       {
         "copies": 2,
@@ -327,7 +399,29 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": []
+        "penalties": [],
+        "choice_type": "NONE",
+        "choices": []
+      }
+    ]
+  },
+  {
+    "name": "Camp",
+    "base_skills": [],
+    "templates": [
+      {
+        "copies": 4,
+        "name": "Rest and Relaxation",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": [],
+        "choice_type": "REQUIRED",
+        "choices": [
+          [
+            {"type": "GAIN_HEALING", "rank": 1, "param": null}
+          ]
+        ]
       }
     ]
   }

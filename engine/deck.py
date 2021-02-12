@@ -1,14 +1,13 @@
 import random
 from dataclasses import dataclass
+from string import ascii_lowercase
 from typing import Generic, List, Sequence, Tuple, TypeVar
 
 from .skills import load_skills
 from .storage import ObjectStorageBase
-from .types import EncounterCheck, EncounterPenalty, EncounterReward, FullCard, TemplateCard
+from .types import ChoiceType, EncounterCheck, EffectType, FullCard, TemplateCard
 from .zodiacs import load_zodiacs
 
-
-NEXT_ID = 1
 
 @dataclass(frozen=True)
 class EncounterDeck:
@@ -29,7 +28,11 @@ class EncounterDeck:
     def _make_card(self, val: TemplateCard, difficulty: int) -> FullCard:
         if not val.skills:
             checks = []
+            choice_type = val.choice_type
+            choices = val.choices
         else:
+            choice_type = ChoiceType.NONE
+            choices = []
             skill_bag = []
             skill_bag.extend(self.base_skills * 15)
             skill_bag.extend(val.skills * 15)
@@ -46,34 +49,35 @@ class EncounterDeck:
         all_zodiacs = load_zodiacs()
         signs = random.sample(all_zodiacs, 2)
 
-        global NEXT_ID
-        card_id = NEXT_ID
-        NEXT_ID += 1
-        return FullCard(id=card_id, template=val, checks=checks, signs=signs)
+        card_id = "".join(random.choice(ascii_lowercase) for _ in range(12))
+        return FullCard(id=card_id, name=val.name, desc=val.desc, checks=checks, choice_type=choice_type, choices=choices, signs=signs)
 
-    def _make_check(self, difficulty: int, skill_bag: List[str], reward_bag: List[EncounterReward], penalty_bag: List[EncounterPenalty]) -> EncounterCheck:
+    def _make_check(self, difficulty: int, skill_bag: List[str], reward_bag: List[EffectType], penalty_bag: List[EffectType]) -> EncounterCheck:
         tn = self.difficulty_to_target_number(difficulty)
         # fuzz the tns a bit
-        tn = random.choice([
+        fuzzed = [
             tn, tn, tn, tn,
             tn + 1, tn + 1, tn - 1, tn - 1,
             tn + 2, tn - 2, tn + 3, tn - 3,
-        ])
+        ]
+        # was ending up with some TN 1 or TN 0, which seems pretty lame
+        fuzzed = [tn for tn in fuzzed if tn >= 2]
+        tn = random.choice(fuzzed)
         return EncounterCheck(skill=random.choice(skill_bag), target_number=tn, reward=random.choice(reward_bag), penalty=random.choice(penalty_bag))
 
     # originally had this as a deck, but I think it works better to have more hot/cold variance
-    def _make_reward_bag(self, template_card: TemplateCard) -> List[EncounterReward]:
+    def _make_reward_bag(self, template_card: TemplateCard) -> List[EffectType]:
         reward_bag = []
-        reward_bag.extend([EncounterReward.COINS, EncounterReward.REPUTATION] * 4)
+        reward_bag.extend([EffectType.GAIN_COINS, EffectType.GAIN_REPUTATION] * 4)
         reward_bag.extend(template_card.rewards * 4)
-        reward_bag.extend([EncounterReward.RESOURCES, EncounterReward.HEALING, EncounterReward.QUEST, EncounterReward.NOTHING] * 1)
+        reward_bag.extend([EffectType.GAIN_RESOURCES, EffectType.GAIN_HEALING, EffectType.GAIN_QUEST, EffectType.NOTHING] * 1)
         return reward_bag
 
-    def _make_penalty_bag(self, template_card: TemplateCard) -> List[EncounterPenalty]:
+    def _make_penalty_bag(self, template_card: TemplateCard) -> List[EffectType]:
         penalty_bag = []
-        penalty_bag.extend([EncounterPenalty.DAMAGE] * 12)
+        penalty_bag.extend([EffectType.DAMAGE] * 12)
         penalty_bag.extend(template_card.penalties * 6)
-        penalty_bag.extend([EncounterPenalty.NOTHING, EncounterPenalty.REPUTATION, EncounterPenalty.RESOURCES, EncounterPenalty.COINS, EncounterPenalty.TRANSPORT, EncounterPenalty.JOB] * 1)
+        penalty_bag.extend([EffectType.NOTHING, EffectType.LOSE_REPUTATION, EffectType.LOSE_RESOURCES, EffectType.LOSE_COINS, EffectType.TRANSPORT, EffectType.DISRUPT_JOB] * 1)
         return penalty_bag
 
     def difficulty_to_target_number(self, difficulty: int) -> int:

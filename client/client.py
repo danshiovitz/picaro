@@ -8,7 +8,7 @@ from urllib.request import HTTPErrorProcessor, Request, build_opener, urlopen
 from picaro.client.colors import colors
 from picaro.common.hexmap.display import CubeCoordinate, DisplayInfo, OffsetCoordinate, render_simple, render_large
 from picaro.common.serializer import deserialize, serialize
-from picaro.server.api_types import Board, CampRequest, CampResponse, CardPreview, Character, EncounterCheck, EncounterActions, ErrorResponse, ErrorType, StartEncounterRequest, StartEncounterResponse, ResolveEncounterRequest, ResolveEncounterResponse, TravelRequest, TravelResponse
+from picaro.server.api_types import Board, CampRequest, CampResponse, CardPreview, Character, ChoiceType, Effect, EffectType, EncounterCheck, EncounterActions, EncounterOutcome, EncounterSingleOutcome, ErrorResponse, ErrorType, JobRequest, JobResponse, ResolveEncounterRequest, ResolveEncounterResponse, TravelRequest, TravelResponse
 
 
 S = TypeVar("S")
@@ -157,7 +157,7 @@ class Client:
     def get_character(self) -> None:
         ch = self._get(f"/character/{self.args.name}", Character)
         print(f"{ch.name} ({ch.player_id}) - a {ch.job}")
-        print(f"Health: {ch.health}   Coins: {ch.coins}  Reputation: {ch.reputation} Resources: {ch.resources}")
+        print(f"Health: {ch.health}   Coins: {ch.coins}  Reputation: {ch.reputation} Resources: {ch.resources}   Quest: {ch.quest}")
         print("Skills:")
         for sk, v in sorted(ch.skills.items()):
             print(f"  {sk}: {v}")
@@ -169,9 +169,9 @@ class Client:
                 board = self._get("/board", Board)
                 ch = self._get(f"/character/{self.args.name}", Character)
                 self._display_play(board, ch)
-                if not ch.tableau or ch.tableau.remaining_turns == 0:
+                if ch.remaining_turns == 0:
                     return
-                if ch.tableau.encounter:
+                if ch.encounters:
                     self._do_encounter(None, board, ch)
                 else:
                     self._input_play_action(board, ch)
@@ -183,27 +183,26 @@ class Client:
                     print()
             except BadStateException as e:
                 print(e)
+                print()
                 continue
 
 
     def _display_play(self, board: Board, ch: Character) -> None:
-        encounters = {card.location_name for card in ch.tableau.cards} if ch.tableau else None
+        encounters = {card.location_name for card in ch.tableau}
 
-        ch_hex = [hx for hx in board.hexes if hx.name == ch.hex][0]
+        ch_hex = [hx for hx in board.hexes if hx.name == ch.location][0]
         minimap = self._make_small_map(board, False, center=ch_hex.coordinate, radius=3, encounters=encounters)
 
         display = []
         display.append(f"{ch.name} ({ch.player_id}) - a {ch.job} [{ch.location}, in {ch_hex.country}]")
         display.append("")
         display.append(f"Health: {ch.health:2}   Coins: {ch.coins:2}   Reputation: {ch.reputation:2}   Resources: {ch.resources:2}   Quest: {ch.quest:2}")
-        if ch.tableau:
-            display.append(f" Turns: {ch.tableau.remaining_turns:2}    Luck: {ch.tableau.luck:2}")
+        if ch.remaining_turns:
+            display.append(f" Turns: {ch.remaining_turns:2}    Luck: {ch.luck:2}")
             display.append("")
-            for idx, card in enumerate(ch.tableau.cards):
-                pc_skill = f""
-                cs = (f"{ascii_lowercase[idx]}. ({card.age}) {card.name}:"
-                      f" {self._check_str(card.checks[0], ch)} [{card.location_name}]")
-                display.append(cs)
+            for idx, card in enumerate(ch.tableau):
+                display.append(f"{ascii_lowercase[idx]}. ({card.age}) {card.name} [{card.location_name}]:")
+                display.append(f"       {self._check_str(card.checks[0], ch)}")
             display.append("t. Travel (uio.jkl)")
             display.append("x. Camp")
         while len(display) < 14:
@@ -220,17 +219,21 @@ class Client:
         print()
 
     def _check_str(self, check: EncounterCheck, ch: Character) -> str:
+        reward_name = self._render_effect_type(check.reward)
+        penalty_name = self._render_effect_type(check.penalty)
         return (f"{check.skill} (1d8{ch.skills[check.skill]:+}) vs {check.target_number} "
-                f"(+{check.reward.name.lower()}, -{check.penalty.name.lower()})")
+                f"({reward_name} / {penalty_name})")
 
     def _input_play_action(self, board: Board, ch: Character) -> None:
         while True:
             print("Action? ", end="")
-            line = input().lower()
+            line = input().lower().strip()
+            if not line:
+                continue
             if line[0] in "abcde":
                 c_idx = "abcde".index(line[0])
-                if c_idx < len(ch.tableau.cards):
-                    if self._do_encounter(ch.tableau.cards[c_idx], board, ch):
+                if c_idx < len(ch.tableau):
+                    if self._do_encounter(ch.tableau[c_idx], board, ch):
                         return
                 else:
                     print("No such encounter card!")
@@ -258,37 +261,39 @@ class Client:
                 continue
 
     def _do_encounter(self, card_preview: Optional[CardPreview], board: Board, ch: Character) -> bool:
-        if not ch.tableau.encounter and card_preview is not None:
+        if not ch.encounters and card_preview is not None:
             try:
-                resp = self._post(f"/play/{ch.name}/encounter/start", StartEncounterRequest(card_id=card_preview.id), StartEncounterResponse)
+                resp = self._post(f"/play/{ch.name}/job", JobRequest(card_id=card_preview.id), JobResponse)
             except IllegalMoveException as e:
                 print(e)
+                print()
                 return False
             # ok, so encounter started - re-request the character to get
-            # the full details from the tableau:
+            # the full details:
             ch = self._get(f"/character/{self.args.name}", Character)
 
-        signs = ", ".join(ch.tableau.encounter.card.signs)
-        print(f"{ch.tableau.encounter.card.template.name} [signs: {signs}]")
-        print(ch.tableau.encounter.card.template.desc)
+        signs = ", ".join(ch.encounters[0].signs)
+        print(f"{ch.encounters[0].name} [signs: {signs}]")
+        print(ch.encounters[0].desc)
 
         self._input_encounter_action(board, ch)
         return True
 
     def _input_encounter_action(self, board: Board, ch: Character) -> None:
-        rolls = ch.tableau.encounter.rolls[:]
-        luck = ch.tableau.luck
+        rolls = list(ch.encounters[0].rolls[:])
+        luck = ch.luck
         transfers = []
         adjusts = []
         flee = False
+        choice = None
 
-        while True:
+        while True and ch.encounters[0].checks:
             print()
-            for idx, check in enumerate(ch.tableau.encounter.card.checks):
+            for idx, check in enumerate(ch.encounters[0].checks):
                 status = "SUCCESS" if rolls[idx] >= check.target_number else "FAILURE"
                 print(f"Check #{idx+1}: {self._check_str(check, ch)}: {rolls[idx]} - {status}")
             print("You can go, transfer, adjust, or flee: ", end="")
-            line = input().lower()
+            line = input().lower().strip()
             if line[0] == "f":
                 if luck <= 0:
                     print(f"Insufficient luck ({luck}) to flee!")
@@ -336,19 +341,99 @@ class Client:
                 print("Unknown command!")
                 continue
 
-        actions = EncounterActions(flee=flee, transfers=transfers, adjusts=adjusts, luck=luck, rolls=rolls)
+        if not flee and ch.encounters[0].choice_type != ChoiceType.NONE:
+            all_choices = ch.encounters[0].choices
+            can_choose = len(all_choices) > 1 and ch.encounters[0].choice_type != ChoiceType.RANDOM
+            for idx, choices in enumerate(all_choices):
+                pfx = (" " + ascii_lowercase[idx] + ". ") if can_choose else " * "
+                line = pfx + ", ".join(self._render_effect(eff) for eff in choices)
+                if ch.encounters[0].choice_type == ChoiceType.RANDOM and ch.encounters[0].rolls[-1] == idx + 1:
+                     line = colors.bold + line + colors.reset
+                print(line)
+            if can_choose:
+                while True:
+                    print("Make your choice: ", end="")
+                    line = input().lower().strip()
+                    if not line:
+                        continue
+                    c_idx = ascii_lowercase.index(line[0])
+                    if c_idx >= len(all_choices):
+                        print("Not a valid choice?")
+                        continue
+                    choice = c_idx
+                    break
+            else:
+                print("Hit return: ", end="")
+                input()
+                if ch.encounters[0].choice_type == ChoiceType.RANDOM:
+                    choice = ch.encounters[0].rolls[-1] - 1
+                elif len(ch.encounters[0].choices) == 1:
+                    choice = 0
+
+        actions = EncounterActions(flee=flee, transfers=transfers, adjusts=adjusts, luck=luck, rolls=rolls, choice=choice)
         try:
-            resp = self._post(f"/play/{ch.name}/encounter/resolve", ResolveEncounterRequest(actions=actions), ResolveEncounterResponse)
+            resp = self._post(f"/play/{ch.name}/resolve_encounter", ResolveEncounterRequest(actions=actions), ResolveEncounterResponse)
         except IllegalMoveException as e:
             print(e)
+            print()
             return False
-        print(f"You have encountered: {resp.outcome}!")
+        print()
+        print(f"The outcome of your encounter:")
+
+        def render_single_int(pfx: str, single: Optional[EncounterSingleOutcome[int]]) -> None:
+            if single is None:
+                return
+            if single.new_val > single.old_val:
+                print(f"* {pfx} increased to {single.new_val} ({', '.join(single.comments)}).")
+            elif single.new_val < single.old_val:
+                print(f"* {pfx} decreased to {single.new_val} ({', '.join(single.comments)}).")
+            else:
+                print(f"* {pfx} remained at {single.new_val} ({', '.join(single.comments)}).")
+
+        render_single_int("Your health has", resp.outcome.health)
+        render_single_int("Your coins have", resp.outcome.coins)
+        render_single_int("Your reputation has", resp.outcome.reputation)
+        for sk, val in resp.outcome.xp.items():
+            render_single_int(f"Your {sk} xp has", val)
+        render_single_int("Your resources have", resp.outcome.resources)
+        render_single_int("Your quest points have", resp.outcome.quest)
+        if resp.outcome.transport_location is not None:
+            tl = resp.outcome.transport_location
+            print(f"* You are now in hex {tl.new_val} ({', '.join(tl.comments)}).")
+        if resp.outcome.new_job is not None:
+            nj = resp.outcome.new_job
+            print(f"* You have become a {nj.new_val} ({', '.join(nj.comments)})!")
+
         return True
 
+    def _render_effect_type(self, eff: EffectType) -> str:
+        names = {
+            EffectType.NOTHING: "nothing",
+            EffectType.GAIN_COINS: "+coins",
+            EffectType.GAIN_XP: "+xp",
+            EffectType.GAIN_REPUTATION: "+reputation",
+            EffectType.GAIN_HEALING: "+healing",
+            EffectType.GAIN_RESOURCES: "+resources",
+            EffectType.GAIN_QUEST: "+quest",
+            EffectType.CHECK_FAILURE: "+failure",  # this generally results in xp, so +
+            EffectType.LOSE_COINS: "-coins",
+            EffectType.LOSE_REPUTATION: "-reputation",
+            EffectType.DAMAGE: "-damage",
+            EffectType.LOSE_RESOURCES: "-resources",
+            EffectType.DISRUPT_JOB: "-job",
+            EffectType.TRANSPORT: "-transport"
+        }
+        return names.get(eff, eff.name)
+
+    def _render_effect(self, eff: Effect) -> str:
+        ret = self._render_effect_type(eff.type) + "-" + str(eff.rank)
+        if eff.param:
+            ret += " " + str(eff.param)
+        return ret
 
     def _do_travel(self, dirs: str, board: Board, ch: Character) -> bool:
         cubes = {CubeCoordinate.from_row_col(hx.coordinate.row, hx.coordinate.column): hx for hx in board.hexes}
-        ch_hex = [hx for hx in board.hexes if hx.name == ch.hex][0]
+        ch_hex = [hx for hx in board.hexes if hx.name == ch.location][0]
         cur = CubeCoordinate.from_row_col(ch_hex.coordinate.row, ch_hex.coordinate.column)
 
         dir_map = {
@@ -371,6 +456,7 @@ class Client:
             resp = self._post(f"/play/{ch.name}/travel", TravelRequest(route=route), TravelResponse)
         except IllegalMoveException as e:
             print(e)
+            print()
             return False
         print("You arrive!")
         ch = self._get(f"/character/{self.args.name}", Character)
@@ -381,9 +467,10 @@ class Client:
             resp = self._post(f"/play/{ch.name}/camp", CampRequest(rest=True), CampResponse)
         except IllegalMoveException as e:
             print(e)
+            print()
             return False
-        print("You feel refreshed!")
-        return True
+        ch = self._get(f"/character/{self.args.name}", Character)
+        return self._do_encounter(None, board, ch)
 
     def _get(self, path: str, cls: Type[T]) -> T:
         url = self.base_url
