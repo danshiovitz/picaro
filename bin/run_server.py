@@ -11,6 +11,7 @@ if __name__ == "__main__":
     ConnectionWrapper.initialize(db_path=None, json_path=json_dir)
     engine = Engine()
 
+    engine._board.generate_hexes()
     engine.add_character("Conan", 103, "random", "Raider")
     engine.start_season()
 

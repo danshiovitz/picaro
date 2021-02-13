@@ -21,7 +21,7 @@ class CubeCoordinate:
         return CubeCoordinate(x=x, y=y, z=z)
 
     def to_offset(self) -> OffsetCoordinate:
-        row = self.z + (self.x + (self.x&1)) / 2
+        row = self.z + (self.x + (self.x&1)) // 2
         column = self.x
         return OffsetCoordinate(row, column)
 

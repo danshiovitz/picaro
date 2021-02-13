@@ -73,11 +73,12 @@ class Party:
     def get_character(self, name: str, board: Board) -> CharacterSnapshot:
         ch = CharacterStorage.load_by_name(name)
         all_skills = load_skills()
-        location = board.get_token_location(ch.name, True)
+        location = board.get_token(ch.name).location
         return CharacterSnapshot(
             name=ch.name,
             player_id=ch.player_id,
             skills={sk: ch.get_skill_rank(sk) for sk in all_skills},
+            skill_xp={sk: ch.skill_xp.get(sk, 0) for sk in all_skills},
             job=ch.job_name,
             health=ch.health,
             coins=ch.coins,
@@ -204,12 +205,12 @@ class Character:
         while len(self.tableau) < self.get_max_tableau_size():
             card = self.job_deck.pop(0)
             dst = random.choice(job.encounter_distances)
-            location = random.choice(board.find_hexes_near_location(self.name, dst, dst))
+            location = random.choice(board.find_hexes_near_token(self.name, dst, dst))
 
             if card.name == DRAW_HEX_CARD.name:
-                card = board.draw_hex_card(location.name)
+                card = board.draw_hex_card(location)
 
-            self.tableau.append(DrawnCard(card=card, location_name=location.name, age=self.get_card_age()))
+            self.tableau.append(DrawnCard(card=card, location_name=location, age=self.get_card_age()))
 
     def remove_tableau_card(self, card_id) -> DrawnCard:
         idx = [i for i in range(len(self.tableau)) if self.tableau[i].card.id == card_id]
@@ -422,11 +423,10 @@ class Character:
                     msgs.append(msg)
             if tp <= 0:
                 return None
-            location = random.choice(board.find_hexes_near_location(self.name, tp - 2, tp + 2))
-            transport_location = location.name
-            old_loc = board.get_token_location(self.name, to_hex=True)
-            board.move_token(self.name, transport_location)
-            return EncounterSingleOutcome[str](old_val=old_loc, new_val=transport_location, comments=msgs)
+            location = random.choice(board.find_hexes_near_token(self.name, tp - 2, tp + 2))
+            old_loc = board.get_token(self.name).location
+            board.move_token(self.name, location)
+            return EncounterSingleOutcome[str](old_val=old_loc, new_val=location, comments=msgs)
 
         def make_job(mods):
             if not mods:
@@ -463,7 +463,7 @@ class Character:
         self.acted_this_turn = False
 
         # filter to encounters near the PC (since they may have been transported, or just moved)
-        near : Set[str] = {hx.name for hx in board.find_hexes_near_location(self.name, 0, 5)}
+        near : Set[str] = {hx for hx in board.find_hexes_near_token(self.name, 0, 5)}
 
         def _is_valid(card: DrawnCard) -> bool:
             return card.age > 1 and card.location_name in near

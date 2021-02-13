@@ -120,6 +120,7 @@ class Character:
     name: str
     player_id: str
     skills: Dict[str, int]
+    skill_xp: Dict[str, int]
     job: str
     health: int
     coins: int

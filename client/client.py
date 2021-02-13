@@ -160,7 +160,7 @@ class Client:
         print(f"Health: {ch.health}   Coins: {ch.coins}  Reputation: {ch.reputation} Resources: {ch.resources}   Quest: {ch.quest}")
         print("Skills:")
         for sk, v in sorted(ch.skills.items()):
-            print(f"  {sk}: {v}")
+            print(f"  {sk}: {v} ({ch.skill_xp[sk]} xp)")
         print()
 
     def play(self) -> None:

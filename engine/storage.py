@@ -174,18 +174,19 @@ class StorageBase(ABC, Generic[T]):
 
     @classmethod
     def _insert_helper(cls, values: List[T], active_conn: Optional[Connection]) -> None:
-        all_projected = cls._project_all(values)
         with ConnectionWrapper.connect(active_conn) as conn:
             if not active_conn:
                 ConnectionWrapper.initialize_store(cls, conn)
-            for storage_base, rows in all_projected.items():
-                names = list(rows[0].keys())
-                each_params = tuple(row[n] for row in rows for n in names)
-                values_clause = "(" + ", ".join("?" for _ in names) + ")"
-                sql = f"INSERT INTO {storage_base.TABLE_NAME} ("
-                sql += ", ".join(n for n in names)
-                sql += ") VALUES " + ", ".join(values_clause for _ in rows)
-                conn.execute(sql, each_params)
+            for idx in range(0, len(values), 20):
+                all_projected = cls._project_all(values[idx:idx + 20])
+                for storage_base, rows in all_projected.items():
+                    names = list(rows[0].keys())
+                    each_params = tuple(row[n] for row in rows for n in names)
+                    values_clause = "(" + ", ".join("?" for _ in names) + ")"
+                    sql = f"INSERT INTO {storage_base.TABLE_NAME} ("
+                    sql += ", ".join(n for n in names)
+                    sql += ") VALUES " + ", ".join(values_clause for _ in rows)
+                    conn.execute(sql, each_params)
 
     @classmethod
     def _project_all(cls, values: List[T]) -> Dict["StorageBase[Any]", List[Dict[str, Any]]]:

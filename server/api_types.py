@@ -21,7 +21,7 @@ class Board:
 
     @classmethod
     def from_engine_Board(self, board: engine_Board) -> "Board":
-        return Board(hexes=tuple(board.hexes.values()), tokens=tuple(board.tokens.values()))
+        return Board(hexes=tuple(board.get_all_hexes()), tokens=tuple(board.get_all_tokens()))
 
 
 @dataclass(frozen=True)
@@ -61,6 +61,7 @@ class Character:
     name: str
     player_id: str
     skills: Dict[str, int]
+    skill_xp: Dict[str, int]
     job: str
     health: int
     coins: int
@@ -79,6 +80,7 @@ class Character:
             name=ch.name,
             player_id=ch.player_id,
             skills=ch.skills,
+            skill_xp=ch.skill_xp,
             job=ch.job,
             health=ch.health,
             coins=ch.coins,
