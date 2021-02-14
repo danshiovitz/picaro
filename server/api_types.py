@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from picaro.common.hexmap.types import OffsetCoordinate
 from picaro.engine.character import Character as engine_Character, Encounter as engine_Encounter, EncounterActions, EncounterOutcome, EncounterSingleOutcome
-from picaro.engine.types import Board, ChoiceType, Countries, DrawnCard, Effect, EffectType, EncounterCheck, Hex, Terrains, Token, TokenTypes
+from picaro.engine.types import Board, ChoiceType, Countries, TableauCard, Effect, EffectType, EncounterCheck, Hex, Terrains, Token, TokenTypes
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,7 @@ class CardPreview:
     location_name: str
 
     @classmethod
-    def from_DrawnCard(cls, drawn_card: DrawnCard) -> "CardPreview":
+    def from_TableauCard(cls, drawn_card: TableauCard) -> "CardPreview":
         # in the future might be able to preview more checks so leaving them as lists
         return CardPreview(id=drawn_card.card.id, name=drawn_card.card.name, checks=drawn_card.card.checks[0
 :1], choice_type=drawn_card.card.choice_type, choices=drawn_card.card.choices[0:1], age=drawn_card.age, location_name=drawn_card.location_name)
@@ -79,7 +79,7 @@ class Character:
             location=ch.location,
             remaining_turns=ch.remaining_turns,
             luck=ch.luck,
-            tableau=tuple(CardPreview.from_DrawnCard(card) for card in ch.tableau),
+            tableau=tuple(CardPreview.from_TableauCard(card) for card in ch.tableau),
             encounters=tuple(Encounter.from_engine_Encounter(enc) for enc in ch.encounters),
         )
 

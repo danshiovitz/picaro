@@ -55,7 +55,6 @@ class ActiveBoard:
 
         if adjacent and token.location != self.NOWHERE:
             nearby = self.find_hexes_near_token(token_name, 0, 1)
-            print(f"nearby: {nearby}")
             if new_hex.name not in nearby:
                 raise IllegalMoveException(f"Location {new_hex.name} isn't adjacent to {token_name}")
 

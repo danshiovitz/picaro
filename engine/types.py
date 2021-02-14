@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from enum import Enum
+from enum import Enum, auto as enum_auto
 from typing import Any, Dict, Optional, Sequence
 
 from picaro.common.hexmap.types import OffsetCoordinate
@@ -41,20 +41,22 @@ class Board:
 
 
 class EffectType(Enum):
-    NOTHING = 0
-    GAIN_COINS = 1
-    GAIN_XP = 2
-    GAIN_REPUTATION = 3
-    GAIN_HEALING = 4
-    GAIN_RESOURCES = 5
-    GAIN_QUEST = 6
-    CHECK_FAILURE = 7
-    LOSE_COINS = 20
-    LOSE_REPUTATION = 21
-    DAMAGE = 22
-    LOSE_RESOURCES = 23
-    DISRUPT_JOB = 24
-    TRANSPORT = 25
+    NOTHING = enum_auto()
+    GAIN_COINS = enum_auto()
+    GAIN_XP = enum_auto()
+    GAIN_REPUTATION = enum_auto()
+    GAIN_HEALING = enum_auto()
+    GAIN_RESOURCES = enum_auto()
+    GAIN_QUEST = enum_auto()
+    GAIN_TURNS = enum_auto()
+    CHECK_FAILURE = enum_auto()
+    LOSE_COINS = enum_auto()
+    LOSE_REPUTATION = enum_auto()
+    DAMAGE = enum_auto()
+    LOSE_RESOURCES = enum_auto()
+    DISRUPT_JOB = enum_auto()
+    TRANSPORT = enum_auto()
+    LOSE_TURNS = enum_auto()
 
 
 @dataclass(frozen=True)
@@ -65,10 +67,10 @@ class Effect:
 
 
 class JobType(Enum):
-    LACKEY = 1
-    SOLO = 2
-    CAPTAIN = 3
-    KING = 4
+    LACKEY = enum_auto()
+    SOLO = enum_auto()
+    CAPTAIN = enum_auto()
+    KING = enum_auto()
 
 
 @dataclass(frozen=True)
@@ -80,10 +82,10 @@ class EncounterCheck:
 
 
 class ChoiceType(Enum):
-    NONE = 0
-    REQUIRED = 1
-    OPTIONAL = 2
-    RANDOM = 3
+    NONE = enum_auto()
+    REQUIRED = enum_auto()
+    OPTIONAL = enum_auto()
+    RANDOM = enum_auto()
 
 
 @dataclass(frozen=True)
@@ -110,7 +112,7 @@ class FullCard:
 
 
 @dataclass(frozen=True)
-class DrawnCard:
+class TableauCard:
     card: FullCard
     age: int
     location_name: str
@@ -137,5 +139,5 @@ class Character:
     location: str
     remaining_turns: int
     luck: int
-    tableau: Sequence[DrawnCard]
+    tableau: Sequence[TableauCard]
     encounters: Sequence[Encounter]

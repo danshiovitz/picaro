@@ -412,6 +412,7 @@ class Client:
             render_single_int(f"Your {sk} xp has", val)
         render_single_int("Your resources have", resp.outcome.resources)
         render_single_int("Your quest points have", resp.outcome.quest)
+        render_single_int("Your remaining turns have", resp.outcome.turns)
         if resp.outcome.transport_location is not None:
             tl = resp.outcome.transport_location
             print(f"* You are now in hex {tl.new_val} ({', '.join(tl.comments)}).")
@@ -430,11 +431,13 @@ class Client:
             EffectType.GAIN_HEALING: "+healing",
             EffectType.GAIN_RESOURCES: "+resources",
             EffectType.GAIN_QUEST: "+quest",
+            EffectType.GAIN_TURNS: "+turns",
             EffectType.CHECK_FAILURE: "+failure",  # this generally results in xp, so +
             EffectType.LOSE_COINS: "-coins",
             EffectType.LOSE_REPUTATION: "-reputation",
             EffectType.DAMAGE: "-damage",
             EffectType.LOSE_RESOURCES: "-resources",
+            EffectType.LOSE_TURNS: "-turns",
             EffectType.DISRUPT_JOB: "-job",
             EffectType.TRANSPORT: "-transport"
         }
@@ -473,7 +476,6 @@ class Client:
             print(e)
             print()
             return False
-        print("You arrive!")
         ch = self._get(f"/character/{self.args.name}", Character)
         return self._do_encounter(None, board, ch)
 

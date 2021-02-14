@@ -424,5 +424,49 @@
         ]
       }
     ]
+  },
+  {
+    "name": "Travel",
+    "base_skills": [],
+    "templates": [
+      {
+        "copies": 9,
+        "name": "Straightforward Trip",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": [],
+        "choice_type": "REQUIRED",
+        "choices": []
+      },
+      {
+        "copies": 2,
+        "name": "Faster Than Expected",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": [],
+        "choice_type": "REQUIRED",
+        "choices": [
+          [
+            {"type": "GAIN_TURNS", "rank": 1, "param": null}
+          ]
+        ]
+      },
+      {
+        "copies": 1,
+        "name": "Difficult Journey",
+        "desc": "...",
+        "skills": [],
+        "rewards": [],
+        "penalties": [],
+        "choice_type": "REQUIRED",
+        "choices": [
+          [
+            {"type": "LOSE_TURNS", "rank": 1, "param": null}
+          ]
+        ]
+      }
+    ]
   }
 ]

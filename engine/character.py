@@ -2,7 +2,6 @@ import dataclasses
 import random
 from collections import defaultdict
 from dataclasses import dataclass
-from enum import Enum
 from itertools import groupby
 from typing import Any, Dict, Generic, List, Optional, Sequence, Set, Tuple, TypeVar
 
@@ -12,7 +11,7 @@ from .exceptions import BadStateException, IllegalMoveException
 from .job import load_job, load_jobs
 from .skills import load_skills
 from .storage import ObjectStorageBase
-from .types import Character as CharacterSnapshot, ChoiceType, DrawnCard, Encounter, Effect, EffectType, FullCard, TemplateCard, Token
+from .types import Character as CharacterSnapshot, ChoiceType, TableauCard, Encounter, Effect, EffectType, FullCard, TemplateCard, Token
 
 
 @dataclass(frozen=True)
@@ -42,6 +41,7 @@ class EncounterOutcome:
     health: Optional[EncounterSingleOutcome[int]]
     resources: Optional[EncounterSingleOutcome[int]]
     quest: Optional[EncounterSingleOutcome[int]]
+    turns: Optional[EncounterSingleOutcome[int]]
     transport_location: Optional[EncounterSingleOutcome[str]]
     new_job: Optional[EncounterSingleOutcome[str]]
 
@@ -63,6 +63,7 @@ class Party:
             tableau=[],
             encounters=[],
             job_deck=[],
+            travel_deck=[],
             camp_deck=[],
             acted_this_turn=False,
         )
@@ -115,7 +116,7 @@ class Party:
         ch.acted_this_turn = True
         for hx in route:
             board.move_token(ch.name, hx, adjacent=True)
-        card = board.draw_hex_card(route[-1])
+        card = ch.draw_travel_card(board.get_token(ch.name).location, board)
         ch.queue_encounter(card)
         CharacterStorage.update(ch)
 
@@ -152,9 +153,10 @@ class Character:
     quest: int
     remaining_turns: int
     luck: int
-    tableau: List[DrawnCard]
+    tableau: List[TableauCard]
     encounters: List[Encounter]
     job_deck: List[FullCard]
+    travel_deck: List[FullCard]
     camp_deck: List[FullCard]
     acted_this_turn: bool
 
@@ -199,10 +201,10 @@ class Character:
 
     def refill_tableau(self, board: Board) -> None:
         job = load_job(self.job_name)
-        if not self.job_deck:
-            self.job_deck = job.make_deck(additional=[dataclasses.replace(DRAW_HEX_CARD, copies=2)])
-
         while len(self.tableau) < self.get_max_tableau_size():
+            if not self.job_deck:
+                additional = [dataclasses.replace(DRAW_HEX_CARD, copies=2)]
+                self.job_deck = job.make_deck(additional=additional)
             card = self.job_deck.pop(0)
             dst = random.choice(job.encounter_distances)
             location = random.choice(board.find_hexes_near_token(self.name, dst, dst))
@@ -210,9 +212,9 @@ class Character:
             if card.name == DRAW_HEX_CARD.name:
                 card = board.draw_hex_card(location)
 
-            self.tableau.append(DrawnCard(card=card, location_name=location, age=self.get_card_age()))
+            self.tableau.append(TableauCard(card=card, location_name=location, age=self.get_card_age()))
 
-    def remove_tableau_card(self, card_id) -> DrawnCard:
+    def remove_tableau_card(self, card_id) -> TableauCard:
         idx = [i for i in range(len(self.tableau)) if self.tableau[i].card.id == card_id]
         if not idx:
             raise BadStateException(f"No such encounter card found ({card_id})")
@@ -278,7 +280,8 @@ class Character:
 
         if encounter.card.choice_type != ChoiceType.NONE:
             if actions.choice is None and encounter.card.choice_type == ChoiceType.REQUIRED:
-                raise BadStateException("Choice must be supplied")
+                if encounter.card.choices:
+                    raise BadStateException("Choice must be supplied")
             if encounter.card.choice_type == ChoiceType.RANDOM:
                 if actions.choice != encounter.rolls[-1] - 1:
                     raise BadStateException("Choice should match roll for random")
@@ -338,6 +341,7 @@ class Character:
         rep_mods = []
         health_mods = []
         quest_mods = []
+        turn_mods = []
         xp_mods = defaultdict(list)
         resrc_mods = []
         transport_mods = []
@@ -354,6 +358,8 @@ class Character:
         simple_eff(EffectType.CHECK_FAILURE, xp_mods, lambda rank: rank)
         simple_eff(EffectType.GAIN_RESOURCES, resrc_mods, lambda rank: rank - 1)
         simple_eff(EffectType.LOSE_RESOURCES, resrc_mods, lambda rank: -rank)
+        simple_eff(EffectType.GAIN_TURNS, turn_mods, lambda rank: rank)
+        simple_eff(EffectType.LOSE_TURNS, turn_mods, lambda rank: -rank)
         simple_eff(EffectType.TRANSPORT, transport_mods, lambda rank: rank * 5)
         for eff in (eff for eff in effects if eff.type == EffectType.DISRUPT_JOB):
             msg, new_job = self._job_check(eff.rank)
@@ -454,6 +460,7 @@ class Character:
             health=make_single(health_mods, "health", max_val=self.get_max_health()),
             resources=make_single(resrc_mods, "resources"),
             quest=make_single(quest_mods, "quest"),
+            turns=make_single(turn_mods, "remaining_turns"),
             transport_location=make_transport(transport_mods),
             new_job=make_job(job_mods),
         )
@@ -465,11 +472,24 @@ class Character:
         # filter to encounters near the PC (since they may have been transported, or just moved)
         near : Set[str] = {hx for hx in board.find_hexes_near_token(self.name, 0, 5)}
 
-        def _is_valid(card: DrawnCard) -> bool:
+        def _is_valid(card: TableauCard) -> bool:
             return card.age > 1 and card.location_name in near
 
         self.tableau = [dataclasses.replace(c, age=c.age - 1) for c in self.tableau if _is_valid(c)]
         self.refill_tableau(board)
+
+    def draw_travel_card(self, location: str, board: Board) -> FullCard:
+        if not self.travel_deck:
+            template_deck = load_deck("Travel")
+            # assume a 12-card travel deck, we want hex cards about a third of the time
+            additional = [dataclasses.replace(DRAW_HEX_CARD, copies=6)]
+            job = load_job(self.job_name)
+            self.travel_deck = template_deck.actualize(job.rank + 1, additional)
+
+        card = self.travel_deck.pop(0)
+        if card.name == DRAW_HEX_CARD.name:
+            card = board.draw_hex_card(location)
+        return card
 
     def draw_camp_card(self, board: Board) -> FullCard:
         if not self.camp_deck:
