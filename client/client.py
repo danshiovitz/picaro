@@ -51,6 +51,7 @@ class Client:
         get_character_parser = subparsers.add_parser("character")
         get_character_parser.set_defaults(cmd=lambda cli: cli.get_character())
         get_character_parser.add_argument('name', type=str)
+        get_character_parser.add_argument('--all', action='store_true')
 
         play_parser = subparsers.add_parser("play")
         play_parser.set_defaults(cmd=lambda cli: cli.play())
@@ -156,11 +157,14 @@ class Client:
 
     def get_character(self) -> None:
         ch = self._get(f"/character/{self.args.name}", Character)
-        print(f"{ch.name} ({ch.player_id}) - a {ch.job}")
+        print(f"{ch.name} ({ch.player_id}) - a {ch.job} [{ch.location}]")
         print(f"Health: {ch.health}   Coins: {ch.coins}  Reputation: {ch.reputation} Resources: {ch.resources}   Quest: {ch.quest}")
         print("Skills:")
         for sk, v in sorted(ch.skills.items()):
-            print(f"  {sk}: {v} ({ch.skill_xp[sk]} xp)")
+            if self.args.all or v > 0 or ch.skill_xp[sk] > 0:
+                print(f"  {sk}: {v} ({ch.skill_xp[sk]} xp)")
+        if not self.args.all:
+            print("(Use --all to see all skills)")
         print()
 
     def play(self) -> None:
@@ -294,6 +298,8 @@ class Client:
                 print(f"Check #{idx+1}: {self._check_str(check, ch)}: {rolls[idx]} - {status}")
             print("You can go, transfer, adjust, or flee: ", end="")
             line = input().lower().strip()
+            if not line:
+                continue
             if line[0] == "f":
                 if luck <= 0:
                     print(f"Insufficient luck ({luck}) to flee!")

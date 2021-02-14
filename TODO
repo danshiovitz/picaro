@@ -13,11 +13,9 @@
 - rumor phase
 - camp deck
 - better travel deck
-- convert everything to sqlite storage
 - support multiple games, players have a character in a game
 - other things like tags (terrain features, powers, villains) + zodiacs
 - better engine unit testing
-- fix up transactions so entire update is in one (board + character changes, etc)
 
 ok so
 what we have conceptually is a thing where players do player actions and this results in some board-state changes

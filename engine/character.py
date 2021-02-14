@@ -6,7 +6,7 @@ from enum import Enum
 from itertools import groupby
 from typing import Any, Dict, Generic, List, Optional, Sequence, Set, Tuple, TypeVar
 
-from .board import Board
+from .board import ActiveBoard as Board
 from .deck import load_deck
 from .exceptions import BadStateException, IllegalMoveException
 from .job import load_job, load_jobs
@@ -515,21 +515,21 @@ class CharacterStorage(ObjectStorageBase[Character]):
 
     @classmethod
     def load(cls) -> List[Character]:
-        return cls._select_helper([], {}, active_conn=None)
+        return cls._select_helper([], {})
 
     @classmethod
     def load_by_name(cls, name: str) -> Character:
-        chars = cls._select_helper(["name = :name"], {"name": name}, active_conn=None)
+        chars = cls._select_helper(["name = :name"], {"name": name})
         if not chars:
             raise Exception(f"No such character: {name}")
         return chars[0]
 
     @classmethod
     def create(cls, character: Character) -> Character:
-        cls._insert_helper([character], active_conn=None)
+        cls._insert_helper([character])
         return character
 
     @classmethod
     def update(cls, character: Character) -> Character:
-        cls._update_helper(character, active_conn=None)
+        cls._update_helper(character)
         return character

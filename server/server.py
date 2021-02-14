@@ -7,7 +7,7 @@ from picaro.engine import Engine
 from picaro.engine.exceptions import IllegalMoveException, BadStateException
 
 from . import bottle
-from .api_types import Board, CampRequest, CampResponse, Character, ErrorResponse, ErrorType, ResolveEncounterRequest, ResolveEncounterResponse, JobRequest, JobResponse, TravelRequest, TravelResponse
+from .api_types import CampRequest, CampResponse, Character, ErrorResponse, ErrorType, ResolveEncounterRequest, ResolveEncounterResponse, JobRequest, JobResponse, TravelRequest, TravelResponse
 
 
 def wrap_errors():
@@ -44,7 +44,7 @@ class Server:
     @wrap_errors()
     def get_board(self) -> Dict[str, Any]:
         player_id = self._extract_player_id()
-        return recursive_to_dict(Board.from_engine_Board(self._engine.get_board()))
+        return recursive_to_dict(self._engine.get_board())
 
     @wrap_errors()
     def get_character(self, character_name: str) -> Dict[str, Any]:

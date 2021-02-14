@@ -8,7 +8,7 @@ from .deck import EncounterDeck, load_deck
 from .exceptions import BadStateException, IllegalMoveException
 from .generate import generate_from_mini
 from .storage import ObjectStorageBase
-from .types import FullCard, Hex as HexSnapshot, Token
+from .types import Board as BoardSnapshot, FullCard, Hex as HexSnapshot, Token
 
 # this one is not frozen and not exposed externally
 @dataclass
@@ -23,8 +23,13 @@ class Hex:
 
 
 # This one isn't serialized at all, it owns no data directly
-class Board:
+class ActiveBoard:
     NOWHERE = "Nowhere"
+
+    def get_snapshot(self) -> BoardSnapshot:
+        hexes = tuple(self._translate_hex(hx) for hx in HexStorage.load())
+        tokens = tuple(TokenStorage.load())
+        return BoardSnapshot(hexes=hexes, tokens=tokens)
 
     def add_token(self, token: Token) -> None:
         names = {t.name for t in TokenStorage.load()}
@@ -59,9 +64,6 @@ class Board:
     def get_token(self, token_name: str) -> Token:
         return TokenStorage.load_by_name(token_name)
 
-    def get_all_tokens(self) -> List[Token]:
-        return TokenStorage.load()
-
     def find_hexes_near_token(self, token_name: str, min_distance: int, max_distance: int) -> List[str]:
         token = TokenStorage.load_by_name(token_name)
         if token.location == self.NOWHERE:
@@ -72,9 +74,6 @@ class Board:
 
     def get_hex(self, location: str) -> HexSnapshot:
         return self._translate_hex(HexStorage.load_by_name(location))
-
-    def get_all_hexes(self) -> List[HexSnapshot]:
-        return [self._translate_hex(hx) for hx in HexStorage.load()]
 
     def _translate_hex(self, hx: Hex) -> HexSnapshot:
         return HexSnapshot(
@@ -138,11 +137,11 @@ class HexStorage(ObjectStorageBase[Hex]):
 
     @classmethod
     def load(cls) -> List[Hex]:
-        return cls._select_helper([], {}, active_conn=None)
+        return cls._select_helper([], {})
 
     @classmethod
     def load_by_name(cls, name: str) -> Hex:
-        hexes = cls._select_helper(["name = :name"], {"name": name}, active_conn=None)
+        hexes = cls._select_helper(["name = :name"], {"name": name})
         if not hexes:
             raise Exception(f"No such hex: {name}")
         return hexes[0]
@@ -150,16 +149,16 @@ class HexStorage(ObjectStorageBase[Hex]):
     @classmethod
     def load_by_distance(cls, c_x: int, c_y: int, c_z: int, min_distance: int, max_distance: int) -> List[Hex]:
         dist_clause = "((abs(:c_x - x) + abs(:c_y - y) + abs(:c_z - z)) / 2) BETWEEN :min_distance AND :max_distance"
-        return cls._select_helper([dist_clause], {"c_x": c_x, "c_y": c_y, "c_z": c_z, "min_distance": min_distance, "max_distance": max_distance}, active_conn=None)
+        return cls._select_helper([dist_clause], {"c_x": c_x, "c_y": c_y, "c_z": c_z, "min_distance": min_distance, "max_distance": max_distance})
 
     @classmethod
     def insert(cls, hexes: List[Hex]) -> None:
-        cls._insert_helper(hexes, active_conn=None)
+        cls._insert_helper(hexes)
 
     @classmethod
-    def update(cls, hex: Hex) -> Hex:
-        cls._update_helper(hex, active_conn=None)
-        return hex
+    def update(cls, hx: Hex) -> Hex:
+        cls._update_helper(hx)
+        return hx
 
 
 class TokenStorage(ObjectStorageBase[Token]):
@@ -169,25 +168,25 @@ class TokenStorage(ObjectStorageBase[Token]):
 
     @classmethod
     def load(cls) -> List[Token]:
-        return cls._select_helper([], {}, active_conn=None)
+        return cls._select_helper([], {})
 
     @classmethod
     def load_by_name(cls, name: str) -> Token:
-        tokens = cls._select_helper(["name = :name"], {"name": name}, active_conn=None)
+        tokens = cls._select_helper(["name = :name"], {"name": name})
         if not tokens:
             raise Exception(f"No such token: {name}")
         return tokens[0]
 
     @classmethod
     def load_by_location(cls, location: str) -> List[Token]:
-        return cls._select_helper(["location = :location"], {"location": location}, active_conn=None)
+        return cls._select_helper(["location = :location"], {"location": location})
 
     @classmethod
     def create(cls, token: Token) -> Token:
-        cls._insert_helper([token], active_conn=None)
+        cls._insert_helper([token])
         return token
 
     @classmethod
     def update(cls, token: Token) -> Token:
-        cls._update_helper(token, active_conn=None)
+        cls._update_helper(token)
         return token

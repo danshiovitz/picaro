@@ -42,11 +42,11 @@ class JobsStorage(ObjectStorageBase[Job]):
 
     @classmethod
     def load(cls) -> List[Job]:
-        return cls._select_helper([], {}, active_conn=None)
+        return cls._select_helper([], {})
 
     @classmethod
     def load_by_name(cls, name) -> Job:
-        jobs = cls._select_helper(["name = :name"], {"name": name}, active_conn=None)
+        jobs = cls._select_helper(["name = :name"], {"name": name})
         if not jobs:
             raise Exception(f"No such job: {name}")
         return jobs[0]

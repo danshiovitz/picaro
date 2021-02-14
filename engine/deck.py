@@ -95,11 +95,11 @@ class TemplateCardStorage(ObjectStorageBase[TemplateCard]):
 
     @classmethod
     def load(cls) -> List[TemplateCard]:
-        return cls._select_helper([], {}, active_conn=None)
+        return cls._select_helper([], {})
 
     @classmethod
     def load_by_name(cls, name) -> TemplateCard:
-        cards = cls._select_helper(["name = :name"], {"name": name}, active_conn=None)
+        cards = cls._select_helper(["name = :name"], {"name": name})
         if not cards:
             raise Exception(f"No such card: {name}")
         return cards[0]
@@ -113,11 +113,11 @@ class DeckStorage(ObjectStorageBase[EncounterDeck]):
 
     @classmethod
     def load(cls) -> List[EncounterDeck]:
-        return cls._select_helper([], {}, active_conn=None)
+        return cls._select_helper([], {})
 
     @classmethod
     def load_by_name(cls, name) -> EncounterDeck:
-        decks = cls._select_helper(["name = :name"], {"name": name}, active_conn=None)
+        decks = cls._select_helper(["name = :name"], {"name": name})
         if not decks:
             raise Exception(f"No such deck: {name}")
         return decks[0]

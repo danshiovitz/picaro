@@ -12,4 +12,4 @@ class SkillsStorage(ValueStorageBase):
 
     @classmethod
     def load(cls) -> List[str]:
-        return cls._select_helper([], {}, active_conn=None)
+        return cls._select_helper([], {})

@@ -2,6 +2,7 @@ import json
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from contextlib import nullcontext
+from contextvars import ContextVar
 from dataclasses import fields as dataclass_fields
 from enum import Enum
 from pathlib import Path
@@ -15,7 +16,7 @@ class ConnectionWrapper:
     DB_STR: str = "UNSET"
     JSON_PATH: str = "UNSET"
     FIRST: bool = False
-    INITIALIZED_STORES = set()
+    ALL_STORES = set()
     MEMORY_CONNECTION_HANDLE: Optional[Connection] = None
 
     @classmethod
@@ -28,30 +29,34 @@ class ConnectionWrapper:
             cls.FIRST = True
             # actually go ahead and open a connection to this shared memory
             # so it'll stick around for the program
-            cls.MEMORY_CONNECTION_HANDLE = cls.connect(None)
+            cls.MEMORY_CONNECTION_HANDLE = cls.connect()
         cls.JSON_PATH = json_path
 
-    @classmethod
-    def connect(cls, active_conn: Optional[Connection]) -> ContextManager[Connection]:
-        if active_conn:
-            return nullcontext(enter_result=active_conn)
-        else:
-            connection = connect(cls.DB_STR, uri=True)
-            connection.row_factory = Row
-            return connection
+        with ConnectionManager():
+            for store_cls in cls.ALL_STORES:
+                store_cls.initialize()
 
     @classmethod
-    def initialize_store(cls, store_cls: Type[Any], active_conn: Optional[Connection]) -> None:
-        if store_cls in cls.INITIALIZED_STORES:
-            return
+    def connect(cls) -> Connection:
+        connection = connect(cls.DB_STR, uri=True)
+        connection.row_factory = Row
+        return connection
 
-        for sub_cls in store_cls.SUBTABLES.values():
-            sub_cls.PARENT_STORE = store_cls
 
-        if cls.FIRST:
-            store_cls.initialize(active_conn)
+current_connection: ContextVar[Connection] = ContextVar("current_connection")
 
-        cls.INITIALIZED_STORES.add(store_cls)
+
+class ConnectionManager:
+    def __enter__(self) -> "ConnectionManager":
+        connection = ConnectionWrapper.connect()
+        connection.__enter__()
+        self.ctx_token = current_connection.set(connection)
+        return self
+
+    def __exit__(self, *exc) -> None:
+        connection = current_connection.get()
+        current_connection.reset(self.ctx_token)
+        connection.__exit__(*exc)
 
 
 T = TypeVar("T")
@@ -62,6 +67,11 @@ class StorageBase(ABC, Generic[T]):
     TYPE: Type[T]
     PARENT_STORE: Optional["StorageBase[Any]"] = None
     SUBTABLES = {}
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if cls.TABLE_NAME != "unset":
+            ConnectionWrapper.ALL_STORES.add(cls)
 
     @classmethod
     @abstractmethod
@@ -92,25 +102,27 @@ class StorageBase(ABC, Generic[T]):
             return deserialize(f.read(), List[cls.TYPE])
 
     @classmethod
-    def initialize(cls, active_conn: Optional[Connection]) -> None:
-        with ConnectionWrapper.connect(active_conn) as conn:
-            cls._create_table_helper(active_conn=conn)
-            for sub_base in cls.SUBTABLES.values():
-                sub_base._create_table_helper(conn)
-            initial_vals = cls._initial_data()
-            if initial_vals:
-                cls._insert_helper(initial_vals, conn)
+    def initialize(cls) -> None:
+        for sub_cls in cls.SUBTABLES.values():
+            sub_cls.PARENT_STORE = cls
+
+        cls._create_table_helper()
+        for sub_base in cls.SUBTABLES.values():
+            sub_base._create_table_helper()
+
+        initial_vals = cls._initial_data()
+        if initial_vals:
+            cls._insert_helper(initial_vals)
 
     @classmethod
-    def _create_table_helper(cls, active_conn: Optional[Connection]) -> None:
+    def _create_table_helper(cls) -> None:
         cols = cls._full_table_schema()
-        pks = ", ".join(c[0] for c in cols if c[2])
-        cols.append(f"primary key ({pks})")
         sql = f"CREATE TABLE {cls.TABLE_NAME} (\n  "
         sql += ",\n  ".join(f"{c[0]} {c[1]}" for c in cols)
+        pks = ", ".join(c[0] for c in cols if c[2])
+        sql += f",\n  primary key ({pks})"
         sql += "\n)"
-        with ConnectionWrapper.connect(active_conn) as conn:
-            conn.execute(sql, {})
+        current_connection.get().execute(sql, {})
 
     @classmethod
     def _full_table_schema(cls) -> List[Tuple[str, str, bool]]:
@@ -123,28 +135,25 @@ class StorageBase(ABC, Generic[T]):
         return cols
 
     @classmethod
-    def _select_helper(cls, where_clauses: List[str], params: Dict[str, Any], active_conn: Optional[Connection]) -> List[T]:
-        return cls._select_helper_grouped(where_clauses, params, active_conn)[()]
+    def _select_helper(cls, where_clauses: List[str], params: Dict[str, Any]) -> List[T]:
+        return cls._select_helper_grouped(where_clauses, params)[()]
 
     @classmethod
-    def _select_helper_grouped(cls, where_clauses: List[str], params: Dict[str, Any], active_conn: Optional[Connection]) -> Dict[Sequence[Any], List[T]]:
+    def _select_helper_grouped(cls, where_clauses: List[str], params: Dict[str, Any]) -> Dict[Sequence[Any], List[T]]:
         sql = f"SELECT * FROM {cls.TABLE_NAME}"
         if where_clauses:
             sql += " WHERE (" + ") AND (".join(where_clauses) + ")"
 
         ret = defaultdict(list)
-        with ConnectionWrapper.connect(active_conn) as conn:
-            if not active_conn:
-                ConnectionWrapper.initialize_store(cls, conn)
-            rows = list(conn.execute(sql, params))
-            all_secondaries = cls._select_secondaries(rows, conn)
-            for row, snds in zip(rows, all_secondaries):
-                for sf, sv in snds.items():
-                    row[sf] = sv
-                val = cls._construct_val(row)
-                parent_key = cls._select_parent_key(row)
-                ret[parent_key].append(val)
-            return ret
+        rows = list(current_connection.get().execute(sql, params))
+        all_secondaries = cls._select_secondaries(rows)
+        for row, snds in zip(rows, all_secondaries):
+            for sf, sv in snds.items():
+                row[sf] = sv
+            val = cls._construct_val(row)
+            parent_key = cls._select_parent_key(row)
+            ret[parent_key].append(val)
+        return ret
 
     @classmethod
     def _select_parent_key(cls, row: Dict[str, Any]) -> Sequence[Any]:
@@ -154,7 +163,7 @@ class StorageBase(ABC, Generic[T]):
         return tuple(row[par.TABLE_NAME + "_" + c[0]] for c in par._table_schema() if c[2])
 
     @classmethod
-    def _select_secondaries(cls, rows: List[Dict[str, Any]], conn: Connection) -> List[Dict[str, List[Any]]]:
+    def _select_secondaries(cls, rows: List[Dict[str, Any]]) -> List[Dict[str, List[Any]]]:
         ret = [defaultdict(list) for _ in rows]
         if not cls.SUBTABLES:
             return ret
@@ -167,26 +176,23 @@ class StorageBase(ABC, Generic[T]):
 
         ret = [defaultdict(list) for _ in rows]
         for sub_field, sub_base in cls.SUBTABLES.items():
-            grps = sub_base._select_helper(select_wheres, select_params, conn)
+            grps = sub_base._select_helper(select_wheres, select_params)
             for key, sub_vals in grps.items():
                 ret[row_idxs[key]][sub_field].extend(sub_vals)
         return ret
 
     @classmethod
-    def _insert_helper(cls, values: List[T], active_conn: Optional[Connection]) -> None:
-        with ConnectionWrapper.connect(active_conn) as conn:
-            if not active_conn:
-                ConnectionWrapper.initialize_store(cls, conn)
-            for idx in range(0, len(values), 20):
-                all_projected = cls._project_all(values[idx:idx + 20])
-                for storage_base, rows in all_projected.items():
-                    names = list(rows[0].keys())
-                    each_params = tuple(row[n] for row in rows for n in names)
-                    values_clause = "(" + ", ".join("?" for _ in names) + ")"
-                    sql = f"INSERT INTO {storage_base.TABLE_NAME} ("
-                    sql += ", ".join(n for n in names)
-                    sql += ") VALUES " + ", ".join(values_clause for _ in rows)
-                    conn.execute(sql, each_params)
+    def _insert_helper(cls, values: List[T]) -> None:
+        for idx in range(0, len(values), 20):
+            all_projected = cls._project_all(values[idx:idx + 20])
+            for storage_base, rows in all_projected.items():
+                names = list(rows[0].keys())
+                each_params = tuple(row[n] for row in rows for n in names)
+                values_clause = "(" + ", ".join("?" for _ in names) + ")"
+                sql = f"INSERT INTO {storage_base.TABLE_NAME} ("
+                sql += ", ".join(n for n in names)
+                sql += ") VALUES " + ", ".join(values_clause for _ in rows)
+                current_connection.get().execute(sql, each_params)
 
     @classmethod
     def _project_all(cls, values: List[T]) -> Dict["StorageBase[Any]", List[Dict[str, Any]]]:
@@ -206,23 +212,20 @@ class StorageBase(ABC, Generic[T]):
 
 
     @classmethod
-    def _update_helper(cls, value: T, active_conn: Optional[Connection]) -> None:
+    def _update_helper(cls, value: T) -> None:
         all_projected = cls._project_all([value])
-        with ConnectionWrapper.connect(active_conn) as conn:
-            if not active_conn:
-                ConnectionWrapper.initialize_store(cls, conn)
-            for storage_base, rows in all_projected.items():
-                pk_names = {c[0] for c in storage_base._full_table_schema() if c[2]}
-                val_names = list(n for n in rows[0].keys() if n not in pk_names)
-                pk_names = list(pk_names)
-                if not val_names:
-                    continue
-                for row in rows:
-                    sql = f"UPDATE {storage_base.TABLE_NAME} SET "
-                    sql += ", ".join(f"{n} = :{n}" for n in val_names)
-                    sql += " WHERE "
-                    sql += " AND ".join(f"{n} = :{n}" for n in pk_names)
-                    conn.execute(sql, row)
+        for storage_base, rows in all_projected.items():
+            pk_names = {c[0] for c in storage_base._full_table_schema() if c[2]}
+            val_names = list(n for n in rows[0].keys() if n not in pk_names)
+            pk_names = list(pk_names)
+            if not val_names:
+                continue
+            for row in rows:
+                sql = f"UPDATE {storage_base.TABLE_NAME} SET "
+                sql += ", ".join(f"{n} = :{n}" for n in val_names)
+                sql += " WHERE "
+                sql += " AND ".join(f"{n} = :{n}" for n in pk_names)
+                current_connection.get().execute(sql, row)
 
 class ValueStorageBase(StorageBase[str]):
     TYPE: Type[T] = str

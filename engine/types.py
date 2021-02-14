@@ -33,6 +33,12 @@ class Token:
     location: str
 
 
+@dataclass(frozen=True)
+class Board:
+    hexes: Sequence[Hex]
+    tokens: Sequence[Token]
+
+
 class EffectType(Enum):
     NOTHING = 0
     GAIN_COINS = 1

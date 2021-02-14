@@ -3,25 +3,14 @@ from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from picaro.common.hexmap.types import OffsetCoordinate
-from picaro.engine.board import Board as engine_Board
 from picaro.engine.character import Character as engine_Character, Encounter as engine_Encounter, EncounterActions, EncounterOutcome, EncounterSingleOutcome
-from picaro.engine.types import ChoiceType, Countries, DrawnCard, Effect, EffectType, EncounterCheck, Hex, Terrains, Token, TokenTypes
+from picaro.engine.types import Board, ChoiceType, Countries, DrawnCard, Effect, EffectType, EncounterCheck, Hex, Terrains, Token, TokenTypes
 
 
 @dataclass(frozen=True)
 class Player:
     id: int
     name: str
-
-
-@dataclass(frozen=True)
-class Board:
-    hexes: Sequence[Hex]
-    tokens: Sequence[Token]
-
-    @classmethod
-    def from_engine_Board(self, board: engine_Board) -> "Board":
-        return Board(hexes=tuple(board.get_all_hexes()), tokens=tuple(board.get_all_tokens()))
 
 
 @dataclass(frozen=True)
