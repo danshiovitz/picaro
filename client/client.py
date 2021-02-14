@@ -45,6 +45,7 @@ class Client:
         get_board_parser = subparsers.add_parser("board")
         get_board_parser.set_defaults(cmd=lambda cli: cli.get_board())
         get_board_parser.add_argument('--country', '--countries', action='store_true')
+        get_board_parser.add_argument('--region', '--regions', action='store_true')
         get_board_parser.add_argument('--large', action='store_true')
         get_board_parser.add_argument('--center', type=str, default=None)
 
@@ -93,10 +94,11 @@ class Client:
         if self.args.large:
             def display(coord: OffsetCoordinate) -> DisplayInfo:
                 hx = coords[coord]
-                # return self.terrains[hx.terrain][0] + hx.country[0] + colors.reset
+
                 color, symbol = self.terrains[hx.terrain]
                 body1 = hx.name + " "
                 body2 = (hx.country + "     ")[0:5]
+                body2 = body2[0:4] + hx.region[0]
 
                 if hx.name in tokens:
                     body2 = colors.bold + (tokens[hx.name][0].name + "     ")[0:5] + colors.reset
@@ -112,7 +114,7 @@ class Client:
                 print(line)
 
         else:
-            for line in self._make_small_map(board, self.args.country):
+            for line in self._make_small_map(board, show_country=self.args.country, show_region=self.args.region):
                 print(line)
 
         if board.tokens:
@@ -124,9 +126,16 @@ class Client:
             ccount = defaultdict(int)
             for hx in board.hexes:
                 ccount[hx.country] += 1
-            print(ccount)
+            print(sorted(ccount.items()))
 
-    def _make_small_map(self, board: Board, show_country: bool, center: Optional[OffsetCoordinate] = None, radius: int = 2, encounters: Optional[Set[str]] = None) -> List[str]:
+        if self.args.region:
+            ccount = defaultdict(lambda: defaultdict(int))
+            for hx in board.hexes:
+                ccount[hx.country][hx.region] += 1
+            for ct, rs in ccount.items():
+                print(f"{ct}: {sorted(rs.items())}")
+
+    def _make_small_map(self, board: Board, show_country: bool = False, show_region: bool = False, center: Optional[OffsetCoordinate] = None, radius: int = 2, encounters: Optional[Set[str]] = None) -> List[str]:
         coords = {
             hx.coordinate: hx for hx in board.hexes
         }
@@ -147,11 +156,11 @@ class Client:
                     return colors.bold + colors.bg.red + "!" + colors.reset
 
                 color, symbol = self.terrains[hx.terrain]
-                return (
-                    color +
-                    (hx.country[0] if show_country else symbol) +
-                    colors.reset
-                )
+                if show_country:
+                    symbol = hx.country[0]
+                elif show_region:
+                    symbol = hx.region[0]
+                return color + symbol + colors.reset
 
         return render_simple(set(coords), 1, display, center=center, radius=radius)
 
@@ -195,7 +204,7 @@ class Client:
         encounters = {card.location_name for card in ch.tableau}
 
         ch_hex = [hx for hx in board.hexes if hx.name == ch.location][0]
-        minimap = self._make_small_map(board, False, center=ch_hex.coordinate, radius=3, encounters=encounters)
+        minimap = self._make_small_map(board, center=ch_hex.coordinate, radius=3, encounters=encounters)
 
         display = []
         display.append(f"{ch.name} ({ch.player_id}) - a {ch.job} [{ch.location}, in {ch_hex.country}]")

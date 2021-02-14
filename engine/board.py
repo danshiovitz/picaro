@@ -16,6 +16,7 @@ class Hex:
     name: str
     terrain: str
     country: str
+    region: str
     x: int
     y: int
     z: int
@@ -80,6 +81,7 @@ class ActiveBoard:
             name=hx.name,
             terrain=hx.terrain,
             country=hx.country,
+            region=hx.region,
             coordinate=CubeCoordinate(x=hx.x, y=hx.y, z=hx.z).to_offset()
         )
 
@@ -121,6 +123,7 @@ class ActiveBoard:
                 name=hx.name,
                 terrain=hx.terrain,
                 country=hx.country,
+                region=hx.region,
                 x=cube.x,
                 y=cube.y,
                 z=cube.z,

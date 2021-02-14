@@ -21,6 +21,7 @@ class Hex:
     coordinate: OffsetCoordinate
     terrain: str
     country: str
+    region: str
 
 
 TokenTypes = ["Character", "Other"]

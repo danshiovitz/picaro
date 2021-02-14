@@ -3,12 +3,12 @@ from typing import Dict, List, Tuple
 from .board import ActiveBoard
 from .character import EncounterActions, EncounterOutcome, Party
 from .exceptions import BadStateException, IllegalMoveException
-from .storage import ConnectionManager
-from .types import Board, Character, Token
+from .storage import ConnectionManager, ConnectionWrapper
+from .types import Board, Character, Optional, Token
 
 class Engine:
     def __init__(self, db_path: Optional[str], json_path: str) -> None:
-        ConnectionWrapper.initialize(db_path=None, json_path=json_dir)
+        ConnectionWrapper.initialize(db_path=db_path, json_path=json_path)
         self._board = ActiveBoard()
         self._characters = Party()
 
