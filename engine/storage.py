@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from contextlib import nullcontext
 from contextvars import ContextVar
-from dataclasses import fields as dataclass_fields
+from dataclasses import dataclass, fields as dataclass_fields
 from enum import Enum
 from pathlib import Path
 from sqlite3 import Connection, Row, connect
@@ -12,15 +12,24 @@ from typing import Any, ContextManager, Dict, Generic, List, Optional, Sequence,
 from picaro.common.serializer import deserialize, recursive_from_dict, serialize
 
 
-class ConnectionWrapper:
+@dataclass
+class Session:
+    player_id: Optional[int]
+    game_id: Optional[int]
+    connection: Connection
+
+
+current_session: ContextVar[Session] = ContextVar("current_session")
+
+
+class ConnectionManager:
     DB_STR: str = "UNSET"
-    JSON_PATH: str = "UNSET"
     FIRST: bool = False
     ALL_STORES = set()
     MEMORY_CONNECTION_HANDLE: Optional[Connection] = None
 
     @classmethod
-    def initialize(cls, db_path: Optional[str], json_path: str) -> None:
+    def initialize(cls, db_path: Optional[str]) -> None:
         if db_path:
             cls.DB_STR = f"file:{db_path}"
             cls.FIRST = Path.exists(db_path)
@@ -29,34 +38,36 @@ class ConnectionWrapper:
             cls.FIRST = True
             # actually go ahead and open a connection to this shared memory
             # so it'll stick around for the program
-            cls.MEMORY_CONNECTION_HANDLE = cls.connect()
-        cls.JSON_PATH = json_path
+            cls.MEMORY_CONNECTION_HANDLE = connect(cls.DB_STR, uri=True)
 
-        with ConnectionManager():
+        with ConnectionManager(player_id=None, game_id=None):
             for store_cls in cls.ALL_STORES:
                 store_cls.initialize()
 
-    @classmethod
-    def connect(cls) -> Connection:
-        connection = connect(cls.DB_STR, uri=True)
-        connection.row_factory = Row
-        return connection
+    def __init__(self, player_id: Optional[int], game_id: Optional[int]) -> None:
+        if self.DB_STR == "UNSET":
+            raise Exception("ConnectionManager not initialized")
 
+        self.player_id = player_id
+        self.game_id = game_id
 
-current_connection: ContextVar[Connection] = ContextVar("current_connection")
-
-
-class ConnectionManager:
     def __enter__(self) -> "ConnectionManager":
-        connection = ConnectionWrapper.connect()
+        connection = connect(self.DB_STR, uri=True)
+        connection.row_factory = Row
         connection.__enter__()
-        self.ctx_token = current_connection.set(connection)
+        session = Session(player_id=self.player_id, game_id=self.game_id, connection=connection)
+        self.ctx_token = current_session.set(session)
         return self
 
     def __exit__(self, *exc) -> None:
-        connection = current_connection.get()
-        current_connection.reset(self.ctx_token)
-        connection.__exit__(*exc)
+        session = current_session.get()
+        current_session.reset(self.ctx_token)
+        session.connection.__exit__(*exc)
+
+    @classmethod
+    def fix_game_id(cls, game_id: int) -> None:
+        session = current_session.get()
+        session.game_id = game_id
 
 
 T = TypeVar("T")
@@ -71,7 +82,7 @@ class StorageBase(ABC, Generic[T]):
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         if cls.TABLE_NAME != "unset":
-            ConnectionWrapper.ALL_STORES.add(cls)
+            ConnectionManager.ALL_STORES.add(cls)
 
     @classmethod
     @abstractmethod
@@ -94,14 +105,6 @@ class StorageBase(ABC, Generic[T]):
         ...
 
     @classmethod
-    def _initial_data(cls) -> List[T]:
-        json_path = ConnectionWrapper.JSON_PATH / f"{cls.TABLE_NAME}s.json"
-        if not json_path.exists():
-            return []
-        with open(json_path) as f:
-            return deserialize(f.read(), List[cls.TYPE])
-
-    @classmethod
     def initialize(cls) -> None:
         for sub_cls in cls.SUBTABLES.values():
             sub_cls.PARENT_STORE = cls
@@ -110,9 +113,15 @@ class StorageBase(ABC, Generic[T]):
         for sub_base in cls.SUBTABLES.values():
             sub_base._create_table_helper()
 
-        initial_vals = cls._initial_data()
-        if initial_vals:
-            cls._insert_helper(initial_vals)
+    @classmethod
+    def insert_initial_data(cls, json_dir: str) -> List[T]:
+        json_path = Path(json_dir) / f"{cls.TABLE_NAME}s.json"
+        if not json_path.exists():
+            return []
+        with open(json_path) as f:
+            vals = deserialize(f.read(), List[cls.TYPE])
+        if vals:
+            cls._insert_helper(vals)
 
     @classmethod
     def _create_table_helper(cls) -> None:
@@ -122,7 +131,7 @@ class StorageBase(ABC, Generic[T]):
         pks = ", ".join(c[0] for c in cols if c[2])
         sql += f",\n  primary key ({pks})"
         sql += "\n)"
-        current_connection.get().execute(sql, {})
+        current_session.get().connection.execute(sql, {})
 
     @classmethod
     def _full_table_schema(cls) -> List[Tuple[str, str, bool]]:
@@ -132,6 +141,8 @@ class StorageBase(ABC, Generic[T]):
             for c in par_cols:
                 c[0] = cls.PARENT_STORE.TABLE_NAME + "_" + c[0]
             cols = par_cols + cols
+        elif cls.TABLE_NAME != "game":
+            cols = [("game_id", "int not null", True)] + cols
         return cols
 
     @classmethod
@@ -140,12 +151,16 @@ class StorageBase(ABC, Generic[T]):
 
     @classmethod
     def _select_helper_grouped(cls, where_clauses: List[str], params: Dict[str, Any]) -> Dict[Sequence[Any], List[T]]:
+        session = current_session.get()
+        if session.game_id is not None and cls.TABLE_NAME != "game":
+            where_clauses.append("game_id = :game_id")
+            params["game_id"] = session.game_id
         sql = f"SELECT * FROM {cls.TABLE_NAME}"
         if where_clauses:
             sql += " WHERE (" + ") AND (".join(where_clauses) + ")"
 
         ret = defaultdict(list)
-        rows = list(current_connection.get().execute(sql, params))
+        rows = list(session.connection.execute(sql, params))
         all_secondaries = cls._select_secondaries(rows)
         for row, snds in zip(rows, all_secondaries):
             for sf, sv in snds.items():
@@ -182,23 +197,35 @@ class StorageBase(ABC, Generic[T]):
         return ret
 
     @classmethod
-    def _insert_helper(cls, values: List[T]) -> None:
+    def _insert_helper(cls, values: List[T]) -> int:
+        # can get issues with max param count in sqlite when inserting
+        # too many fields at once, so chunk it:
+        last_id = -1
         for idx in range(0, len(values), 20):
             all_projected = cls._project_all(values[idx:idx + 20])
             for storage_base, rows in all_projected.items():
-                names = list(rows[0].keys())
+                names = list(n for n in rows[0].keys() if n != "id")
                 each_params = tuple(row[n] for row in rows for n in names)
                 values_clause = "(" + ", ".join("?" for _ in names) + ")"
                 sql = f"INSERT INTO {storage_base.TABLE_NAME} ("
                 sql += ", ".join(n for n in names)
                 sql += ") VALUES " + ", ".join(values_clause for _ in rows)
-                current_connection.get().execute(sql, each_params)
+                current_session.get().connection.execute(sql, each_params)
+                if storage_base == cls:
+                    sql = "SELECT last_insert_rowid() AS last_id"
+                    row = current_session.get().connection.execute(sql, ()).fetchone()
+                    last_id = row["last_id"]
+        return last_id
 
     @classmethod
     def _project_all(cls, values: List[T]) -> Dict["StorageBase[Any]", List[Dict[str, Any]]]:
+        session = current_session.get()
+
         all_projected = defaultdict(list)
         for val in values:
             proj = cls._project_val(val)
+            if session.game_id is not None and cls.PARENT_STORE is None and cls.TABLE_NAME != "game":
+                proj["game_id"] = session.game_id
             all_projected[cls].append(proj)
             pk_vals = {cls.TABLE_NAME + "_" + c[0]: proj[c[0]] for c in cls._table_schema() if c[2]}
             for sub_f, sub_cls in cls.SUBTABLES.items():
@@ -225,7 +252,7 @@ class StorageBase(ABC, Generic[T]):
                 sql += ", ".join(f"{n} = :{n}" for n in val_names)
                 sql += " WHERE "
                 sql += " AND ".join(f"{n} = :{n}" for n in pk_names)
-                current_connection.get().execute(sql, row)
+                current_session.get().connection.execute(sql, row)
 
 class ValueStorageBase(StorageBase[str]):
     TYPE: Type[T] = str

@@ -141,3 +141,9 @@ class Character:
     luck: int
     tableau: Sequence[TableauCard]
     encounters: Sequence[Encounter]
+
+
+@dataclass(frozen=True)
+class Game:
+    id: int
+    name: str

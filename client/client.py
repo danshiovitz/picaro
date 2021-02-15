@@ -39,6 +39,7 @@ class Client:
     def parse_args(cls) -> None:
         parser = ArgumentParser()
         parser.add_argument("--host", type=str, default="http://localhost:8080")
+        parser.add_argument("--game_id", type=int, default=1)
         parser.set_defaults(cmd=lambda cli: parser.print_help())
         subparsers = parser.add_subparsers()
 
@@ -468,6 +469,10 @@ class Client:
         for d in dirs:
             xm, ym, zm = dir_map[d]
             cur = cur.step(xm, ym, zm)
+            if cur not in cubes:
+                print("That route leaves the board!")
+                print()
+                return False
             route.append(cubes[cur].name)
 
         try:
@@ -491,12 +496,14 @@ class Client:
 
     def _get(self, path: str, cls: Type[T]) -> T:
         url = self.base_url
+        url += f"/game/{self.args.game_id}"
         url += path
         request = Request(url)
         return self._http_common(request, cls)
 
     def _post(self, path: str, input_val: S, cls: Type[T]) -> T:
         url = self.base_url
+        url += f"/game/{self.args.game_id}"
         url += path
         request = Request(url, data=serialize(input_val).encode("utf-8"))
         return self._http_common(request, cls)
