@@ -3,8 +3,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from picaro.common.hexmap.types import OffsetCoordinate
-from picaro.engine.character import Character as engine_Character, Encounter as engine_Encounter, EncounterActions, EncounterOutcome, EncounterSingleOutcome
-from picaro.engine.types import Board, ChoiceType, Countries, TableauCard, Effect, EffectType, EncounterCheck, Hex, Terrains, Token, TokenTypes
+from picaro.engine.types import Board, Character as engine_Character, ChoiceType, Countries, TableauCard, Effect, EffectType, EncounterCheck, Encounter as engine_Encounter, EncounterActions, EncounterOutcome, EncounterSingleOutcome, Hex, Terrains, Token, TokenTypes
 
 
 @dataclass(frozen=True)
@@ -60,6 +59,7 @@ class Character:
     location: str
     remaining_turns: int
     luck: int
+    speed: int
     tableau: Sequence[CardPreview]
     encounters: Sequence[Encounter]
 
@@ -79,6 +79,7 @@ class Character:
             location=ch.location,
             remaining_turns=ch.remaining_turns,
             luck=ch.luck,
+            speed=ch.speed,
             tableau=tuple(CardPreview.from_TableauCard(card) for card in ch.tableau),
             encounters=tuple(Encounter.from_engine_Encounter(enc) for enc in ch.encounters),
         )

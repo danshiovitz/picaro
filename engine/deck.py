@@ -5,7 +5,7 @@ from typing import Generic, List, Sequence, Tuple, TypeVar
 
 from .skills import load_skills
 from .storage import ObjectStorageBase
-from .types import ChoiceType, EncounterCheck, EffectType, FullCard, TemplateCard
+from .types import ChoiceType, EncounterCheck, EncounterContextType, EffectType, FullCard, TemplateCard
 from .zodiacs import load_zodiacs
 
 
@@ -15,17 +15,23 @@ class EncounterDeck:
     templates: Sequence[TemplateCard]
     base_skills: Sequence[str]
 
-    def actualize(self, difficulty: int, additional: List[TemplateCard] = None) -> List[FullCard]:
+    def actualize(self, difficulty: int, context: EncounterContextType, additional: List[TemplateCard] = None) -> List[FullCard]:
+        ret = []
+        for tmpl in self.semi_actualize(additional):
+            ret.append(self.make_card(tmpl, difficulty, context))
+        return ret
+
+    def semi_actualize(self, additional: List[TemplateCard] = None) -> List[TemplateCard]:
         ret = []
         for tmpl in list(self.templates) + (additional or []):
             for _ in range(tmpl.copies):
-                ret.append(self._make_card(tmpl, difficulty))
+                ret.append(tmpl)
         random.shuffle(ret)
         for _ in range((len(ret) // 10) + 1):
             ret.pop()
         return ret
 
-    def _make_card(self, val: TemplateCard, difficulty: int) -> FullCard:
+    def make_card(self, val: TemplateCard, difficulty: int, context: EncounterContextType) -> FullCard:
         if not val.skills:
             checks = []
             choice_type = val.choice_type
@@ -34,12 +40,16 @@ class EncounterDeck:
             choice_type = ChoiceType.NONE
             choices = []
             skill_bag = []
-            skill_bag.extend(self.base_skills * 15)
-            skill_bag.extend(val.skills * 15)
+            # the number of copies of the core skills only matters on the third check,
+            # where we add in all the skills (let's assume there are 36) and want to
+            # have the copy number such that we pick a core skill (let's assume there
+            # are 6) say 50% of the time and an unusual skill 50% of the time
+            skill_bag.extend(self.base_skills * 6)
+            skill_bag.extend(val.skills * 6)
 
             all_skills = load_skills()
-            reward_bag = self._make_reward_bag(val)
-            penalty_bag = self._make_penalty_bag(val)
+            reward_bag = self._make_reward_bag(val, context)
+            penalty_bag = self._make_penalty_bag(val, context)
             checks = [
                 self._make_check(difficulty, skill_bag, reward_bag, penalty_bag),
                 self._make_check(difficulty, skill_bag, reward_bag, penalty_bag),
@@ -66,16 +76,20 @@ class EncounterDeck:
         return EncounterCheck(skill=random.choice(skill_bag), target_number=tn, reward=random.choice(reward_bag), penalty=random.choice(penalty_bag))
 
     # originally had this as a deck, but I think it works better to have more hot/cold variance
-    def _make_reward_bag(self, template_card: TemplateCard) -> List[EffectType]:
+    def _make_reward_bag(self, template_card: TemplateCard, context: EncounterContextType) -> List[EffectType]:
         reward_bag = []
         reward_bag.extend([EffectType.GAIN_COINS, EffectType.GAIN_REPUTATION] * 4)
         reward_bag.extend(template_card.rewards * 4)
         reward_bag.extend([EffectType.GAIN_RESOURCES, EffectType.GAIN_HEALING, EffectType.GAIN_QUEST, EffectType.NOTHING] * 1)
         return reward_bag
 
-    def _make_penalty_bag(self, template_card: TemplateCard) -> List[EffectType]:
+    def _make_penalty_bag(self, template_card: TemplateCard, context: EncounterContextType) -> List[EffectType]:
         penalty_bag = []
-        penalty_bag.extend([EffectType.DAMAGE] * 12)
+        if context == EncounterContextType.TRAVEL:
+            penalty_bag.extend([EffectType.LOSE_SPEED] * 8)
+            penalty_bag.extend([EffectType.DAMAGE] * 4)
+        else:
+            penalty_bag.extend([EffectType.DAMAGE] * 12)
         penalty_bag.extend(template_card.penalties * 6)
         penalty_bag.extend([EffectType.NOTHING, EffectType.LOSE_REPUTATION, EffectType.LOSE_RESOURCES, EffectType.LOSE_COINS, EffectType.TRANSPORT, EffectType.DISRUPT_JOB] * 1)
         return penalty_bag

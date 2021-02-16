@@ -255,15 +255,7 @@ class Client:
                     continue
             elif line[0] == "t":
                 ww = re.split(r"\s+", line, 2)
-                dirs = None if len(ww) == 1 else ww[1]
-                if not dirs or any(d not in "uio.jkl" for d in dirs):
-                    print("travel <dirs> - uio.jkl")
-                    print()
-                    continue
-                if len(dirs) > 3:
-                    print("max 3 steps")
-                    print()
-                    continue
+                dirs = "" if len(ww) == 1 else ww[1]
                 if self._do_travel(dirs, board, ch):
                     return
             elif line[0] == "x":
@@ -439,6 +431,7 @@ class Client:
             EffectType.DAMAGE: "-damage",
             EffectType.LOSE_RESOURCES: "-resources",
             EffectType.LOSE_TURNS: "-turns",
+            EffectType.LOSE_SPEED: "-speed",
             EffectType.DISRUPT_JOB: "-job",
             EffectType.TRANSPORT: "-transport"
         }
@@ -451,6 +444,11 @@ class Client:
         return ret
 
     def _do_travel(self, dirs: str, board: Board, ch: Character) -> bool:
+        if not dirs:
+            print(f"No directions supplied!")
+            print()
+            return False
+
         cubes = {CubeCoordinate.from_row_col(hx.coordinate.row, hx.coordinate.column): hx for hx in board.hexes}
         ch_hex = [hx for hx in board.hexes if hx.name == ch.location][0]
         cur = CubeCoordinate.from_row_col(ch_hex.coordinate.row, ch_hex.coordinate.column)
@@ -467,6 +465,10 @@ class Client:
 
         route = []
         for d in dirs:
+            if d not in dir_map:
+                print(f"Bad direction {d}; should be in uio.jkl")
+                print()
+                return False
             xm, ym, zm = dir_map[d]
             cur = cur.step(xm, ym, zm)
             if cur not in cubes:
@@ -474,6 +476,11 @@ class Client:
                 print()
                 return False
             route.append(cubes[cur].name)
+
+        if len(route) > ch.speed:
+            print(f"Your maximum speed is {ch.speed}")
+            print()
+            return False
 
         try:
             resp = self._post(f"/play/{ch.name}/travel", TravelRequest(route=route), TravelResponse)

@@ -8,19 +8,7 @@ from .deck import EncounterDeck, load_deck
 from .exceptions import BadStateException, IllegalMoveException
 from .generate import generate_from_mini
 from .storage import ObjectStorageBase
-from .types import Board as BoardSnapshot, FullCard, Hex as HexSnapshot, Token
-
-# this one is not frozen and not exposed externally
-@dataclass
-class Hex:
-    name: str
-    terrain: str
-    country: str
-    region: str
-    x: int
-    y: int
-    z: int
-    deck: List[FullCard]
+from .types import Board as BoardSnapshot, EncounterContextType, FullCard, Hex as HexSnapshot, TemplateCard, Terrains, Token
 
 
 # This one isn't serialized at all, it owns no data directly
@@ -75,7 +63,7 @@ class ActiveBoard:
     def get_hex(self, location: str) -> HexSnapshot:
         return self._translate_hex(HexStorage.load_by_name(location))
 
-    def _translate_hex(self, hx: Hex) -> HexSnapshot:
+    def _translate_hex(self, hx: "Hex") -> HexSnapshot:
         return HexSnapshot(
             name=hx.name,
             terrain=hx.terrain,
@@ -84,19 +72,18 @@ class ActiveBoard:
             coordinate=CubeCoordinate(x=hx.x, y=hx.y, z=hx.z).to_offset()
         )
 
-    def draw_hex_card(self, hex_name: str) -> FullCard:
+    def draw_hex_card(self, hex_name: str, context: EncounterContextType) -> FullCard:
         hx = HexStorage.load_by_name(hex_name)
-        if not hx.deck:
-            hx.deck = self._make_deck_for_hex(hx)
-        card = hx.deck.pop(0)
-        HexStorage.update(hx)
-        return card
-
-    def _make_deck_for_hex(self, hx: Hex) -> List[FullCard]:
         deck_name = "Desert"
         difficulty = 3
+        board_deck = BoardDeckStorage.load_by_name(deck_name)
         template_deck = load_deck(deck_name)
-        return template_deck.actualize(difficulty, additional=[])
+        if not board_deck.deck:
+            board_deck.deck = template_deck.semi_actualize(additional=[])
+        template_card = board_deck.deck.pop(0)
+        card = template_deck.make_card(template_card, difficulty, context)
+        BoardDeckStorage.update(board_deck)
+        return card
 
     def generate_hexes(self) -> None:
         all_hexes = HexStorage.load()
@@ -126,10 +113,32 @@ class ActiveBoard:
                 x=cube.x,
                 y=cube.y,
                 z=cube.z,
-                deck=[],
             )
 
         HexStorage.insert([trans(hx) for hx in hexes])
+
+
+# this one is not frozen and not exposed externally
+@dataclass
+class Hex:
+    name: str
+    terrain: str
+    country: str
+    region: str
+    x: int
+    y: int
+    z: int
+
+
+# The idea here is for hexes we hold the cards in a "semi-actualized" form where
+# we have the template deck shared across multiple hexes (so you don't see a sandstorm
+# in multiple hexes in a row most of the time), but the cards don't get fully actualized
+# until drawn (because we don't know whether the hex is a more or less dangerous one, or
+# whether this is being drawn in the context of a job or travel)
+@dataclass
+class BoardDeck:
+    name: str  # note this name is assumed to match the template deck
+    deck: List[TemplateCard]
 
 
 class HexStorage(ObjectStorageBase[Hex]):
@@ -161,6 +170,36 @@ class HexStorage(ObjectStorageBase[Hex]):
     def update(cls, hx: Hex) -> Hex:
         cls._update_helper(hx)
         return hx
+
+
+class BoardDeckStorage(ObjectStorageBase[BoardDeck]):
+    TABLE_NAME = "board_deck"
+    TYPE = BoardDeck
+    PRIMARY_KEY = "name"
+
+    @classmethod
+    def load(cls) -> List[BoardDeck]:
+        return cls._select_helper([], {})
+
+    @classmethod
+    def load_by_name(cls, name: str) -> BoardDeck:
+        decks = cls._select_helper(["name = :name"], {"name": name})
+        if not decks:
+            raise Exception(f"No such deck: {name}")
+        return decks[0]
+
+    @classmethod
+    def insert(cls, deck: BoardDeck) -> None:
+        cls._insert_helper([deck])
+
+    @classmethod
+    def update(cls, deck: BoardDeck) -> None:
+        cls._update_helper(deck)
+
+    @classmethod
+    def insert_initial_data(cls, _json_dir: str) -> List[BoardDeck]:
+        vals = [BoardDeck(name=t, deck=[]) for t in Terrains]
+        cls._insert_helper(vals)
 
 
 class TokenStorage(ObjectStorageBase[Token]):

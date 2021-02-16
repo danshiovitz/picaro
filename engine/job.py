@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Sequence, Tuple
 
 from .deck import EncounterDeck, load_deck
 from .storage import ObjectStorageBase
-from .types import Hex, FullCard, JobType, TemplateCard
+from .types import EncounterContextType, Hex, FullCard, JobType, TemplateCard
 
 
 @dataclass(frozen=True)
@@ -20,7 +20,7 @@ class Job:
     def make_deck(self, additional: List[TemplateCard] = None) -> List[FullCard]:
         # template_deck = load_deck(self.deck_name)
         template_deck = load_deck("Raider")
-        return template_deck.actualize(self.rank + 1, additional)
+        return template_deck.actualize(self.rank + 1, EncounterContextType.JOB, additional)
 
     def fits_hex(self, hx: Hex) -> bool:
         # later: some jobs filter by country and/or terrain type

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum, auto as enum_auto
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Generic, List, Optional, Sequence, Tuple, TypeVar
 
 from picaro.common.hexmap.types import OffsetCoordinate
 
@@ -57,6 +57,7 @@ class EffectType(Enum):
     DISRUPT_JOB = enum_auto()
     TRANSPORT = enum_auto()
     LOSE_TURNS = enum_auto()
+    LOSE_SPEED = enum_auto()
 
 
 @dataclass(frozen=True)
@@ -118,10 +119,51 @@ class TableauCard:
     location_name: str
 
 
+class EncounterContextType(Enum):
+    JOB = enum_auto()
+    TRAVEL = enum_auto()
+    CAMP = enum_auto()
+
+
 @dataclass(frozen=True)
 class Encounter:
     card: FullCard
     rolls: Sequence[int]
+    context_type: EncounterContextType
+    context_values: Optional[Sequence[str]]
+
+
+@dataclass(frozen=True)
+class EncounterActions:
+    adjusts: Sequence[int]
+    transfers: Sequence[Tuple[int, int]]
+    flee: bool
+    luck: int
+    rolls: Sequence[int]
+    choice: Optional[int]
+
+
+T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class EncounterSingleOutcome(Generic[T]):
+    new_val: T
+    old_val: T
+    comments: List[str]
+
+
+@dataclass(frozen=True)
+class EncounterOutcome:
+    coins: Optional[EncounterSingleOutcome[int]]
+    xp: Dict[str, EncounterSingleOutcome[int]]
+    reputation: Optional[EncounterSingleOutcome[int]]
+    health: Optional[EncounterSingleOutcome[int]]
+    resources: Optional[EncounterSingleOutcome[int]]
+    quest: Optional[EncounterSingleOutcome[int]]
+    turns: Optional[EncounterSingleOutcome[int]]
+    transport_location: Optional[EncounterSingleOutcome[str]]
+    new_job: Optional[EncounterSingleOutcome[str]]
 
 
 @dataclass(frozen=True)
@@ -139,6 +181,7 @@ class Character:
     location: str
     remaining_turns: int
     luck: int
+    speed: int
     tableau: Sequence[TableauCard]
     encounters: Sequence[Encounter]
 
