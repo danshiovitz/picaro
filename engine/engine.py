@@ -1,4 +1,5 @@
-from typing import List
+from pathlib import Path
+from typing import Sequence
 
 from .board import ActiveBoard
 from .character import Party
@@ -14,7 +15,7 @@ class Engine:
         self._board = ActiveBoard()
         self._characters = Party()
 
-    def create_game(self, player_id: int, name: str, json_dir: str) -> int:
+    def create_game(self, player_id: int, name: str, json_dir: Path) -> int:
         with ConnectionManager(player_id=player_id, game_id=None):
             game = create_game(name, json_dir)
             # create_game fixes the game_id in the session, so we can just call this:
@@ -48,7 +49,7 @@ class Engine:
         with ConnectionManager(player_id=player_id, game_id=game_id):
             return self._characters.get_character(character_name, self._board)
 
-    def start_season(self, player_id: int, game_id: int) -> None:
+    def start_season(self, player_id: Optional[int], game_id: int) -> None:
         with ConnectionManager(player_id=player_id, game_id=game_id):
             self._characters.start_season(self._board)
 
@@ -59,7 +60,7 @@ class Engine:
             self._characters.do_job(character_name, card_id, self._board)
 
     def do_travel(
-        self, player_id: int, game_id: int, character_name: str, route: List[str]
+        self, player_id: int, game_id: int, character_name: str, route: Sequence[str]
     ) -> None:
         with ConnectionManager(player_id=player_id, game_id=game_id):
             self._characters.do_travel(character_name, route, self._board)

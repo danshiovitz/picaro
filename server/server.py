@@ -1,6 +1,6 @@
 import functools
 from traceback import print_exc
-from typing import Any, Dict, Type, TypeVar
+from typing import Any, Callable, Dict, Type, TypeVar
 
 from picaro.common.serializer import deserialize, recursive_to_dict, serialize
 from picaro.engine import Engine
@@ -22,15 +22,15 @@ from .api_types import (
 )
 
 
-def wrap_errors():
-    def decorator(func):
+def wrap_errors() -> Callable[[Callable[..., Any]], Callable[..., bottle.HTTPResponse]]:
+    def decorator(func: Callable[..., Any]) -> Callable[..., bottle.HTTPResponse]:
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> bottle.HTTPResponse:
             type: ErrorType
             message = ""
             try:
                 response = func(*args, **kwargs)
-                return bottle.HTTPResponse(status=200, body=serialize(response))
+                return bottle.HTTPResponse(status=200, body=serialize(response))  # type: ignore
             except IllegalMoveException as ime:
                 type = ErrorType.ILLEGAL_MOVE
                 message = str(ime)
@@ -42,7 +42,7 @@ def wrap_errors():
                 message = f"Unexpected: {e.__class__.__name__} {e}"
                 print_exc()
             response = ErrorResponse(type=type, message=message)
-            return bottle.HTTPResponse(status=418, body=serialize(response))
+            return bottle.HTTPResponse(status=418, body=serialize(response))  # type: ignore
 
         return wrapper
 
@@ -57,53 +57,49 @@ class Server:
         self._engine = engine
 
     @wrap_errors()
-    def get_board(self, game_id: int) -> Dict[str, Any]:
+    def get_board(self, game_id: int) -> Any:
         player_id = self._extract_player_id()
-        return recursive_to_dict(self._engine.get_board(player_id, game_id))
+        return self._engine.get_board(player_id, game_id)
 
     @wrap_errors()
-    def get_character(self, game_id: int, character_name: str) -> Dict[str, Any]:
+    def get_character(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
-        return recursive_to_dict(
-            Character.from_engine_Character(
-                self._engine.get_character(player_id, game_id, character_name)
-            )
+        return Character.from_engine_Character(
+            self._engine.get_character(player_id, game_id, character_name)
         )
 
     @wrap_errors()
-    def job_action(self, game_id: int, character_name: str) -> Dict[str, Any]:
+    def job_action(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(JobRequest)
         self._engine.do_job(player_id, game_id, character_name, req.card_id)
-        return recursive_to_dict(JobResponse())
+        return JobResponse()
 
     @wrap_errors()
-    def travel_action(self, game_id: int, character_name: str) -> Dict[str, Any]:
+    def travel_action(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(TravelRequest)
         self._engine.do_travel(player_id, game_id, character_name, req.route)
-        return recursive_to_dict(TravelResponse())
+        return TravelResponse()
 
     @wrap_errors()
-    def camp_action(self, game_id: int, character_name: str) -> Dict[str, Any]:
+    def camp_action(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(CampRequest)
         self._engine.do_camp(player_id, game_id, character_name)
         if not req.rest:
             raise BadStateException("Rest is false!")
         else:
-            return recursive_to_dict(CampResponse())
+            return CampResponse()
 
     @wrap_errors()
-    def resolve_encounter_action(
-        self, game_id: int, character_name: str
-    ) -> Dict[str, Any]:
+    def resolve_encounter_action(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(ResolveEncounterRequest)
         outcome = self._engine.do_resolve_encounter(
             player_id, game_id, character_name, req.actions
         )
-        return recursive_to_dict(ResolveEncounterResponse(outcome=outcome))
+        return ResolveEncounterResponse(outcome=outcome)
 
     def run(self) -> None:
         bottle.route(path="/game/<game_id>/board", callback=self.get_board)
@@ -131,7 +127,7 @@ class Server:
             method="POST",
             callback=self.resolve_encounter_action,
         )
-        bottle.run(host="localhost", port=8080, debug=True)
+        bottle.run(host="localhost", port=8080, debug=True)  # type: ignore
 
     def _extract_player_id(self) -> int:
         return 103

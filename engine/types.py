@@ -120,7 +120,7 @@ class TemplateCard:
 
 @dataclass(frozen=True)
 class FullCard:
-    id: str
+    id: int
     name: str
     desc: str
     checks: Sequence[EncounterCheck]
@@ -186,7 +186,7 @@ class EncounterOutcome:
 @dataclass(frozen=True)
 class Character:
     name: str
-    player_id: str
+    player_id: int
     skills: Dict[str, int]
     skill_xp: Dict[str, int]
     job: str

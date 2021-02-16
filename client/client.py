@@ -1,8 +1,9 @@
 import re
 from argparse import ArgumentParser, Namespace
 from collections import defaultdict
+from http.client import HTTPResponse
 from string import ascii_lowercase
-from typing import List, Optional, Set, Type, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Set, Type, TypeVar
 from urllib.request import HTTPErrorProcessor, Request, build_opener, urlopen
 
 from picaro.client.colors import colors
@@ -33,6 +34,7 @@ from picaro.server.api_types import (
     JobResponse,
     ResolveEncounterRequest,
     ResolveEncounterResponse,
+    Token,
     TravelRequest,
     TravelResponse,
 )
@@ -51,7 +53,7 @@ class BadStateException(Exception):
 
 
 class NonThrowingHTTPErrorProcessor(HTTPErrorProcessor):
-    def http_response(self, request, response):
+    def http_response(self, request: Request, response: HTTPResponse) -> Any:
         return response
 
 
@@ -63,7 +65,7 @@ class Client:
         client.args.cmd(client)
 
     @classmethod
-    def parse_args(cls) -> None:
+    def parse_args(cls) -> Namespace:
         parser = ArgumentParser()
         parser.add_argument("--host", type=str, default="http://localhost:8080")
         parser.add_argument("--game_id", type=int, default=1)
@@ -113,7 +115,7 @@ class Client:
         board = self._get("/board", Board)
         coords = {hx.coordinate: hx for hx in board.hexes}
 
-        tokens = defaultdict(list)
+        tokens: Dict[str, List[Token]] = defaultdict(list)
         for tok in board.tokens:
             tokens[tok.location].append(tok)
 
@@ -158,16 +160,16 @@ class Client:
                 print(tok)
 
         if self.args.country:
-            ccount = defaultdict(int)
+            ccount: Dict[str, int] = defaultdict(int)
             for hx in board.hexes:
                 ccount[hx.country] += 1
             print(sorted(ccount.items()))
 
         if self.args.region:
-            ccount = defaultdict(lambda: defaultdict(int))
+            rcount: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
             for hx in board.hexes:
-                ccount[hx.country][hx.region] += 1
-            for ct, rs in ccount.items():
+                rcount[hx.country][hx.region] += 1
+            for ct, rs in rcount.items():
                 print(f"{ct}: {sorted(rs.items())}")
 
     def _make_small_map(
@@ -181,19 +183,16 @@ class Client:
     ) -> List[str]:
         coords = {hx.coordinate: hx for hx in board.hexes}
 
-        tokens = defaultdict(list)
+        tokens: Dict[str, List[Token]] = defaultdict(list)
         for tok in board.tokens:
             tokens[tok.location].append(tok)
-
-        if not encounters:
-            encounters = set()
 
         def display(coord: OffsetCoordinate) -> str:
             hx = coords[coord]
 
             if hx.name in tokens:
                 return colors.bold + "@" + colors.reset
-            elif hx.name in encounters:
+            elif encounters is not None and hx.name in encounters:
                 return colors.bold + colors.bg.red + "!" + colors.reset
 
             color, symbol = self.terrains[hx.terrain]
@@ -271,7 +270,9 @@ class Client:
         while len(display) < 14:
             display.append("")
 
-        pad = lambda val, width: val + " " * (width - len(val))
+        pad: Callable[[str, int], str] = lambda val, width: val + " " * (
+            width - len(val)
+        )
         display = [
             pad(display[idx], 80) + (minimap[idx] if idx < len(minimap) else "")
             for idx in range(len(display))
@@ -344,7 +345,7 @@ class Client:
         self._input_encounter_action(board, ch)
         return True
 
-    def _input_encounter_action(self, board: Board, ch: Character) -> None:
+    def _input_encounter_action(self, board: Board, ch: Character) -> bool:
         rolls = list(ch.encounters[0].rolls[:])
         luck = ch.luck
         transfers = []
@@ -613,7 +614,7 @@ class Client:
     def _http_common(self, request: Request, cls: Type[T]) -> T:
         with self.opener.open(request) as response:
             data = response.read().decode("utf-8")
-        if response.status == 200:
+        if isinstance(response, HTTPResponse) and response.status == 200:
             return deserialize(data, cls)
         try:
             err = deserialize(data, ErrorResponse)
@@ -626,5 +627,5 @@ class Client:
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    args = Client.parse_args()
     args.cmd(args)

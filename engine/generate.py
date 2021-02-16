@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from functools import reduce
 from math import floor
 from string import ascii_uppercase
-from typing import Dict, List, Set
+from typing import Callable, Dict, List, Set
 
 from picaro.common.hexmap.types import CubeCoordinate, OffsetCoordinate
 from picaro.common.hexmap.utils import calc_offset_neighbor_map
@@ -71,7 +71,9 @@ def generate(
 ) -> List[Hex]:
     terrain = {k: v for k, v in starting_terrain.items()}
     if not terrain:
-        terrain[(num_rows // 2, num_columns // 2)] = random.choice(list(TRANSITIONS))
+        terrain[
+            OffsetCoordinate(row=num_rows // 2, column=num_columns // 2)
+        ] = random.choice(list(TRANSITIONS))
 
     neighbors_map = calc_offset_neighbor_map(num_rows, num_columns)
 
@@ -118,7 +120,7 @@ def generate_from_mini(
         "&": "Swamp",
     }
 
-    def project_choose(row, col) -> str:
+    def project_choose(row: int, col: int) -> str:
         sym = minimap[row_project[row]][col_project[col]]
         return _choose_terrain(TRANSITIONS[mini_names[sym]])
 
@@ -262,6 +264,7 @@ def _make_country_map(
             best_score = score
             best_assignment = assignment
 
+    assert best_assignment is not None
     for c, n in best_assignment.items():
         ret[c] = n
 
@@ -308,6 +311,7 @@ def _make_region_map(
                 best_score = score
                 best_assignment = assignment
 
+        assert best_assignment is not None
         for c, n in best_assignment.items():
             ret[c] = n
 
@@ -395,7 +399,9 @@ def _pick_capitols(
     cities = [random.choice(all_cities)]
     all_cities.remove(cities[0])
     while len(cities) < cnt:
-        max_min = lambda c: min(c.distance(n) for n in cities)
+        max_min: Callable[[CubeCoordinate], int] = lambda c: min(
+            c.distance(n) for n in cities
+        )
         all_cities.sort(key=lambda c: (-max_min(c), c.x, c.y, c.z))
         cities.append(all_cities.pop(0))
     return [c.to_offset() for c in cities]
@@ -407,10 +413,14 @@ def _assign_countries(
     neighbors_map: Dict[OffsetCoordinate, Set[OffsetCoordinate]],
 ) -> Dict[OffsetCoordinate, str]:
     ret = {coord: country for coord, country in capitols.items()}
-    countries = {country: set() for country in capitols.values()}
-    neighbors = {country: set() for country in capitols.values()}
+    countries: Dict[str, Set[OffsetCoordinate]] = {
+        country: set() for country in capitols.values()
+    }
+    neighbors: Dict[str, Set[OffsetCoordinate]] = {
+        country: set() for country in capitols.values()
+    }
 
-    def add_coord(country, coord) -> None:
+    def add_coord(country: str, coord: OffsetCoordinate) -> None:
         ret[coord] = country
         countries[country].add(coord)
         for nghs in neighbors.values():
@@ -435,7 +445,7 @@ def _assign_countries(
 
 
 def _score_assignment(assignment: Dict[OffsetCoordinate, str]) -> int:
-    countries = defaultdict(set)
+    countries: Dict[str, Set[OffsetCoordinate]] = defaultdict(set)
     for coord, cty in assignment.items():
         countries[cty].add(coord)
     min_size = min(len(coords) for coords in countries.values())
@@ -444,7 +454,7 @@ def _score_assignment(assignment: Dict[OffsetCoordinate, str]) -> int:
     size_score = -(max_size - min_size)
     print(f"max size {max_size}, min size {min_size}, size score: {size_score}")
 
-    def squareness(cc):
+    def squareness(cc: Set[OffsetCoordinate]) -> float:
         min_row = min(c.row for c in cc)
         max_row = max(c.row for c in cc)
         min_column = min(c.column for c in cc)
@@ -455,7 +465,7 @@ def _score_assignment(assignment: Dict[OffsetCoordinate, str]) -> int:
     # this 300 * is just heuristic to give the squareness roughly the
     # same weight as the size, based on observed typical size and squareness
     # values
-    squareness_score = -int(300 * sum(squarenesses) / len(squarenesses))
+    squareness_score = -int(300 * sum(squarenesses) / len(squarenesses))  # type: ignore
     print(
         f"squarenesses: {list(f'{sq:.03f}' for sq in squarenesses)} score: {squareness_score}"
     )

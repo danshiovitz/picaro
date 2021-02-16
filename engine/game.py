@@ -1,11 +1,12 @@
 #!/usr/bin/python3
+from pathlib import Path
 from typing import Any, List
 
 from .storage import ConnectionManager, ObjectStorageBase
 from .types import Game
 
 
-def create_game(name: str, json_dir: str) -> Game:
+def create_game(name: str, json_dir: Path) -> Game:
     game_id = GameStorage.create(Game(id=0, name=name))
     ConnectionManager.fix_game_id(game_id)
     for store in ConnectionManager.ALL_STORES:

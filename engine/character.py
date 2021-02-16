@@ -96,7 +96,7 @@ class Party:
         board.move_token(ch.name, card.location_name, adjacent=False)
         CharacterStorage.update(ch)
 
-    def do_travel(self, name: str, route: List[str], board: Board) -> None:
+    def do_travel(self, name: str, route: Sequence[str], board: Board) -> None:
         ch = CharacterStorage.load_by_name(name)
         ch.check_can_act()
         ch.acted_this_turn = True
@@ -572,7 +572,7 @@ class Character:
     def draw_camp_card(self, board: Board) -> FullCard:
         if not self.camp_deck:
             template_deck = load_deck("Camp")
-            additional = []
+            additional: List[TemplateCard] = []
             job = load_job(self.job_name)
             self.camp_deck = template_deck.actualize(
                 job.rank + 1, EncounterContextType.CAMP, additional

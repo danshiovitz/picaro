@@ -15,10 +15,12 @@ from typing import (
     List,
     Optional,
     Sequence,
+    Set,
     Tuple,
     Type,
     TypeVar,
     Union,
+    cast,
 )
 
 from picaro.common.serializer import deserialize, recursive_from_dict, serialize
@@ -37,14 +39,14 @@ current_session: ContextVar[Session] = ContextVar("current_session")
 class ConnectionManager:
     DB_STR: str = "UNSET"
     FIRST: bool = False
-    ALL_STORES = set()
+    ALL_STORES: Set[Type["StorageBase[Any]"]] = set()
     MEMORY_CONNECTION_HANDLE: Optional[Connection] = None
 
     @classmethod
     def initialize(cls, db_path: Optional[str]) -> None:
         if db_path:
             cls.DB_STR = f"file:{db_path}"
-            cls.FIRST = Path.exists(db_path)
+            cls.FIRST = Path(db_path).exists()
         else:
             cls.DB_STR = "file:ephemeral_db?mode=memory&cache=shared"
             cls.FIRST = True
@@ -66,17 +68,17 @@ class ConnectionManager:
     def __enter__(self) -> "ConnectionManager":
         connection = connect(self.DB_STR, uri=True)
         connection.row_factory = Row
-        connection.__enter__()
+        connection.__enter__()  # type: ignore
         session = Session(
             player_id=self.player_id, game_id=self.game_id, connection=connection
         )
         self.ctx_token = current_session.set(session)
         return self
 
-    def __exit__(self, *exc) -> None:
+    def __exit__(self, *exc: Any) -> None:
         session = current_session.get()
         current_session.reset(self.ctx_token)
-        session.connection.__exit__(*exc)
+        session.connection.__exit__(*exc)  # type: ignore
 
     @classmethod
     def fix_game_id(cls, game_id: int) -> None:
@@ -90,11 +92,11 @@ T = TypeVar("T")
 class StorageBase(ABC, Generic[T]):
     TABLE_NAME = "unset"
     TYPE: Type[T]
-    PARENT_STORE: Optional["StorageBase[Any]"] = None
-    SUBTABLES = {}
+    PARENT_STORE: Optional[Type["StorageBase[Any]"]] = None
+    SUBTABLES: Dict[str, Type["StorageBase[Any]"]] = {}
 
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)  # type: ignore
         if cls.TABLE_NAME != "unset":
             ConnectionManager.ALL_STORES.add(cls)
 
@@ -128,12 +130,12 @@ class StorageBase(ABC, Generic[T]):
             sub_base._create_table_helper()
 
     @classmethod
-    def insert_initial_data(cls, json_dir: str) -> List[T]:
-        json_path = Path(json_dir) / f"{cls.TABLE_NAME}s.json"
+    def insert_initial_data(cls, json_dir: Path) -> None:
+        json_path = json_dir / f"{cls.TABLE_NAME}s.json"
         if not json_path.exists():
-            return []
+            return
         with open(json_path) as f:
-            vals = deserialize(f.read(), List[cls.TYPE])
+            vals: List[T] = deserialize(f.read(), List[cls.TYPE])  # type: ignore
         if vals:
             cls._insert_helper(vals)
 
@@ -151,9 +153,11 @@ class StorageBase(ABC, Generic[T]):
     def _full_table_schema(cls) -> List[Tuple[str, str, bool]]:
         cols = cls._table_schema()
         if cls.PARENT_STORE:
-            par_cols = [c for c in cls.PARENT_STORE._table_schema() if c[2]]
-            for c in par_cols:
-                c[0] = cls.PARENT_STORE.TABLE_NAME + "_" + c[0]
+            par_cols = [
+                (cls.PARENT_STORE.TABLE_NAME + "_" + c[0], c[1], c[2])
+                for c in cls.PARENT_STORE._table_schema()
+                if c[2]
+            ]
             cols = par_cols + cols
         elif cls.TABLE_NAME != "game":
             cols = [("game_id", "int not null", True)] + cols
@@ -163,7 +167,7 @@ class StorageBase(ABC, Generic[T]):
     def _select_helper(
         cls, where_clauses: List[str], params: Dict[str, Any]
     ) -> List[T]:
-        return cls._select_helper_grouped(where_clauses, params)[()]
+        return cast(List[T], cls._select_helper_grouped(where_clauses, params)[()])
 
     @classmethod
     def _select_helper_grouped(
@@ -177,13 +181,13 @@ class StorageBase(ABC, Generic[T]):
         if where_clauses:
             sql += " WHERE (" + ") AND (".join(where_clauses) + ")"
 
-        ret = defaultdict(list)
+        ret: Dict[Sequence[Any], List[T]] = defaultdict(list)
         rows = list(session.connection.execute(sql, params))
         all_secondaries = cls._select_secondaries(rows)
         for row, snds in zip(rows, all_secondaries):
             for sf, sv in snds.items():
                 row[sf] = sv
-            val = cls._construct_val(row)
+            val: T = cls._construct_val(row)
             parent_key = cls._select_parent_key(row)
             ret[parent_key].append(val)
         return ret
@@ -201,26 +205,33 @@ class StorageBase(ABC, Generic[T]):
     def _select_secondaries(
         cls, rows: List[Dict[str, Any]]
     ) -> List[Dict[str, List[Any]]]:
-        ret = [defaultdict(list) for _ in rows]
+        ret: List[Dict[str, List[Any]]] = [defaultdict(list) for _ in rows]
         if not cls.SUBTABLES:
             return ret
 
-        pk_names = [c for c in cls._table_schema() if c[2]]
-        pk_values = [[row[n] for n in pk_names] for row in rows]
+        pk_names = [c[0] for c in cls._table_schema() if c[2]]
         select_wheres = " OR ".join(
-            [
-                "(("
-                + ") AND (".join(f"{cls.TABLE_NAME}_{n} = ?" for n in pk_names)
-                + "))"
-            ]
-            * len(rows)
+            "(("
+            + ") AND (".join(
+                f"{cls.TABLE_NAME}_{n} = :{cls.TABLE_NAME}_{n}_{ridx}" for n in pk_names
+            )
+            + "))"
+            for ridx in range(len(rows))
         )
-        select_params = [v for row in pk_values for val in row]
-        row_idxs = {tuple(vals): idx for idx, vals in enumerate(pk_values)}
+        select_params = {
+            f"{cls.TABLE_NAME}_{n}_{ridx}": rows[ridx][n]
+            for ridx in range(len(rows))
+            for n in pk_names
+        }
+        row_idxs: Dict[Sequence[Any], int] = {
+            tuple(row[n] for n in pk_names): idx for idx, row in enumerate(rows)
+        }
 
         ret = [defaultdict(list) for _ in rows]
         for sub_field, sub_base in cls.SUBTABLES.items():
-            grps = sub_base._select_helper(select_wheres, select_params)
+            grps: Dict[Sequence[Any], List[Any]] = sub_base._select_helper_grouped(
+                [select_wheres], select_params
+            )
             for key, sub_vals in grps.items():
                 ret[row_idxs[key]][sub_field].extend(sub_vals)
         return ret
@@ -249,10 +260,12 @@ class StorageBase(ABC, Generic[T]):
     @classmethod
     def _project_all(
         cls, values: List[T]
-    ) -> Dict["StorageBase[Any]", List[Dict[str, Any]]]:
+    ) -> Dict[Type["StorageBase[Any]"], List[Dict[str, Any]]]:
         session = current_session.get()
 
-        all_projected = defaultdict(list)
+        all_projected: Dict[
+            Type["StorageBase[Any]"], List[Dict[str, Any]]
+        ] = defaultdict(list)
         for val in values:
             proj = cls._project_val(val)
             if (
@@ -268,7 +281,7 @@ class StorageBase(ABC, Generic[T]):
                 if c[2]
             }
             for sub_f, sub_cls in cls.SUBTABLES.items():
-                sub_projection = sub_cls._project_all(val[sub_f])
+                sub_projection = sub_cls._project_all(proj[sub_f])
                 # add the parent row's pk data to the sub's fields
                 for sub_val in sub_projection[sub_cls]:
                     sub_val.update(pk_vals)
@@ -282,7 +295,6 @@ class StorageBase(ABC, Generic[T]):
         for storage_base, rows in all_projected.items():
             pk_names = {c[0] for c in storage_base._full_table_schema() if c[2]}
             val_names = list(n for n in rows[0].keys() if n not in pk_names)
-            pk_names = list(pk_names)
             if not val_names:
                 continue
             for row in rows:
@@ -294,7 +306,7 @@ class StorageBase(ABC, Generic[T]):
 
 
 class ValueStorageBase(StorageBase[str]):
-    TYPE: Type[T] = str
+    TYPE = str
 
     @classmethod
     def _table_schema(cls) -> List[Tuple[str, str, bool]]:
@@ -302,7 +314,7 @@ class ValueStorageBase(StorageBase[str]):
 
     @classmethod
     def _construct_val(cls, row: Dict[str, Any]) -> str:
-        return row["value"]
+        return cast(str, row["value"])
 
     @classmethod
     def _project_val(cls, val: str) -> Dict[str, Any]:
@@ -362,7 +374,7 @@ class ObjectStorageBase(StorageBase[T]):
             if fval is None:
                 return None
             # pull out the first type which is assumed to be the non-none type
-            ftype = ftype.__args__[0]
+            ftype = ftype.__args__[0]  # type: ignore
             bt = getattr(ftype, "__origin__", ftype)
 
         if bt in (str, int, float, bool):

@@ -31,7 +31,7 @@ class Player:
 
 @dataclass(frozen=True)
 class CardPreview:
-    id: str
+    id: int
     name: str
     checks: Sequence[EncounterCheck]
     choice_type: ChoiceType
@@ -79,7 +79,7 @@ class Encounter:
 @dataclass(frozen=True)
 class Character:
     name: str
-    player_id: str
+    player_id: int
     skills: Dict[str, int]
     skill_xp: Dict[str, int]
     job: str
