@@ -120,7 +120,15 @@ class Party:
         self, name: str, actions: EncounterActions, board: Board
     ) -> EncounterOutcome:
         ch = CharacterStorage.load_by_name(name)
-        outcome = ch.resolve_encounter(actions, board)
+
+        encounter = ch.pop_encounter()
+        effects = ch.calc_effects(encounter, actions)
+        outcome = ch.apply_effects(
+            effects, encounter.context_type, encounter.context_values, board
+        )
+        if not ch.encounters:
+            ch.finish_turn(board)
+
         CharacterStorage.update(ch)
         return outcome
 
@@ -263,22 +271,43 @@ class Character:
         if self.acted_this_turn:
             raise BadStateException("You have already acted this turn.")
 
-    def resolve_encounter(
-        self, actions: EncounterActions, board: Board
-    ) -> EncounterOutcome:
+    def pop_encounter(self) -> Encounter:
         if not self.encounters:
             raise BadStateException("There is no active encounter.")
 
-        encounter = self.encounters.pop(0)
-        effects = self._calc_effects(encounter, actions)
-        outcome = self._apply_effects(
-            effects, encounter.context_type, encounter.context_values, board
-        )
+        return self.encounters.pop(0)
 
-        if not self.encounters:
-            self._finish_turn(board)
+    def calc_effects(
+        self, encounter: Encounter, actions: EncounterActions
+    ) -> List[Effect]:
+        self._validate_actions(encounter, actions)
+        if actions.flee:
+            return []
 
-        return outcome
+        ret = []
+
+        if encounter.card.checks:
+            ocs = defaultdict(int)
+
+            for idx, check in enumerate(encounter.card.checks):
+                if encounter.rolls[idx] >= check.target_number:
+                    ocs[check.reward] += 1
+                else:
+                    ocs[check.penalty] += 1
+                    ocs[EffectType.CHECK_FAILURE] += 1
+
+            vals = {
+                EffectType.GAIN_XP: encounter.card.checks[0].skill,
+                EffectType.CHECK_FAILURE: encounter.card.checks[0].skill,
+            }
+            ret.extend(
+                Effect(type=k, rank=v, param=vals.get(k, None)) for k, v in ocs.items()
+            )
+
+        if actions.choice is not None:
+            ret.extend(encounter.card.choices[actions.choice])
+
+        return ret
 
     # note this does update luck as well as validating stuff
     def _validate_actions(
@@ -332,39 +361,7 @@ class Character:
             if actions.choice is not None:
                 raise BadStateException("Choice not allowed here")
 
-    def _calc_effects(
-        self, encounter: Encounter, actions: EncounterActions
-    ) -> List[Effect]:
-        self._validate_actions(encounter, actions)
-        if actions.flee:
-            return []
-
-        ret = []
-
-        if encounter.card.checks:
-            ocs = defaultdict(int)
-
-            for idx, check in enumerate(encounter.card.checks):
-                if encounter.rolls[idx] >= check.target_number:
-                    ocs[check.reward] += 1
-                else:
-                    ocs[check.penalty] += 1
-                    ocs[EffectType.CHECK_FAILURE] += 1
-
-            vals = {
-                EffectType.GAIN_XP: encounter.card.checks[0].skill,
-                EffectType.CHECK_FAILURE: encounter.card.checks[0].skill,
-            }
-            ret.extend(
-                Effect(type=k, rank=v, param=vals.get(k, None)) for k, v in ocs.items()
-            )
-
-        if actions.choice is not None:
-            ret.extend(encounter.card.choices[actions.choice])
-
-        return ret
-
-    def _apply_effects(
+    def apply_effects(
         self,
         effects: List[Effect],
         context_type: EncounterContextType,
@@ -422,7 +419,7 @@ class Character:
                 rep_mods = [(None, 3, "set to 3 for job switch")]
                 transport_mods = [(3, None, "+3")]
             else:
-                rep_mods.append((-2, None, "-2"))
+                rep_mods.append((-2, None, "-2 from job challenge: " + msg))
 
         def make_single(mods, field, max_val=None, min_val=0):
             if not mods:
@@ -542,7 +539,7 @@ class Character:
             new_job=make_job(job_mods),
         )
 
-    def _finish_turn(self, board: Board) -> None:
+    def finish_turn(self, board: Board) -> None:
         self.remaining_turns -= 1
         self.acted_this_turn = False
 
