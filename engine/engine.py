@@ -7,6 +7,7 @@ from .game import create_game
 from .storage import ConnectionManager
 from .types import Board, Character, EncounterActions, EncounterOutcome, Optional, Token
 
+
 class Engine:
     def __init__(self, db_path: Optional[str]) -> None:
         ConnectionManager.initialize(db_path=db_path)
@@ -24,11 +25,26 @@ class Engine:
         with ConnectionManager(player_id=player_id, game_id=game_id):
             return self._board.get_snapshot()
 
-    def add_character(self, player_id: int, game_id: int, character_name: str, location: str, job_name: str) -> None:
+    def add_character(
+        self,
+        player_id: int,
+        game_id: int,
+        character_name: str,
+        location: str,
+        job_name: str,
+    ) -> None:
         with ConnectionManager(player_id=player_id, game_id=game_id):
-            self._characters.create_character(name=character_name, player_id=player_id, job_name=job_name, board=self._board, location=location)
+            self._characters.create_character(
+                name=character_name,
+                player_id=player_id,
+                job_name=job_name,
+                board=self._board,
+                location=location,
+            )
 
-    def get_character(self, player_id: int, game_id: int, character_name: str) -> Character:
+    def get_character(
+        self, player_id: int, game_id: int, character_name: str
+    ) -> Character:
         with ConnectionManager(player_id=player_id, game_id=game_id):
             return self._characters.get_character(character_name, self._board)
 
@@ -36,11 +52,15 @@ class Engine:
         with ConnectionManager(player_id=player_id, game_id=game_id):
             self._characters.start_season(self._board)
 
-    def do_job(self, player_id: int, game_id: int, character_name: str, card_id: int) -> None:
+    def do_job(
+        self, player_id: int, game_id: int, character_name: str, card_id: int
+    ) -> None:
         with ConnectionManager(player_id=player_id, game_id=game_id):
             self._characters.do_job(character_name, card_id, self._board)
 
-    def do_travel(self, player_id: int, game_id: int, character_name: str, route: List[str]) -> None:
+    def do_travel(
+        self, player_id: int, game_id: int, character_name: str, route: List[str]
+    ) -> None:
         with ConnectionManager(player_id=player_id, game_id=game_id):
             self._characters.do_travel(character_name, route, self._board)
 
@@ -48,6 +68,14 @@ class Engine:
         with ConnectionManager(player_id=player_id, game_id=game_id):
             self._characters.do_camp(character_name, self._board)
 
-    def do_resolve_encounter(self, player_id: int, game_id: int, character_name: str, actions: EncounterActions) -> EncounterOutcome:
+    def do_resolve_encounter(
+        self,
+        player_id: int,
+        game_id: int,
+        character_name: str,
+        actions: EncounterActions,
+    ) -> EncounterOutcome:
         with ConnectionManager(player_id=player_id, game_id=game_id):
-            return self._characters.resolve_encounter(character_name, actions, self._board)
+            return self._characters.resolve_encounter(
+                character_name, actions, self._board
+            )

@@ -11,11 +11,28 @@ from .exceptions import BadStateException, IllegalMoveException
 from .job import load_job, load_jobs
 from .skills import load_skills
 from .storage import ObjectStorageBase
-from .types import Character as CharacterSnapshot, ChoiceType, TableauCard, Effect, EffectType, Encounter, EncounterActions, EncounterContextType, EncounterOutcome, EncounterSingleOutcome, FullCard, JobType, TemplateCard, Token
+from .types import (
+    Character as CharacterSnapshot,
+    ChoiceType,
+    TableauCard,
+    Effect,
+    EffectType,
+    Encounter,
+    EncounterActions,
+    EncounterContextType,
+    EncounterOutcome,
+    EncounterSingleOutcome,
+    FullCard,
+    JobType,
+    TemplateCard,
+    Token,
+)
 
 
 class Party:
-    def create_character(self, name: str, player_id: int, job_name: str, board: Board, location: str) -> None:
+    def create_character(
+        self, name: str, player_id: int, job_name: str, board: Board, location: str
+    ) -> None:
         ch = Character(
             name=name,
             player_id=player_id,
@@ -86,7 +103,9 @@ class Party:
         for hx in route:
             board.move_token(ch.name, hx, adjacent=True)
         card = ch.draw_travel_card(board.get_token(ch.name).location, board)
-        ch.queue_encounter(card, context_type=EncounterContextType.TRAVEL, context_values=route)
+        ch.queue_encounter(
+            card, context_type=EncounterContextType.TRAVEL, context_values=route
+        )
         CharacterStorage.update(ch)
 
     def do_camp(self, name: str, board: Board) -> None:
@@ -97,14 +116,25 @@ class Party:
         ch.queue_encounter(card, context_type=EncounterContextType.CAMP)
         CharacterStorage.update(ch)
 
-    def resolve_encounter(self, name: str, actions: EncounterActions, board: Board) -> EncounterOutcome:
+    def resolve_encounter(
+        self, name: str, actions: EncounterActions, board: Board
+    ) -> EncounterOutcome:
         ch = CharacterStorage.load_by_name(name)
         outcome = ch.resolve_encounter(actions, board)
         CharacterStorage.update(ch)
         return outcome
 
 
-DRAW_HEX_CARD = TemplateCard(1, name="Draw from Hex Deck", desc="", skills=[], rewards=[], penalties=[], choice_type=ChoiceType.NONE, choices=[])
+DRAW_HEX_CARD = TemplateCard(
+    1,
+    name="Draw from Hex Deck",
+    desc="",
+    skills=[],
+    rewards=[],
+    penalties=[],
+    choice_type=ChoiceType.NONE,
+    choices=[],
+)
 
 
 # This class is not frozen, and also not exposed externally - it needs to be loaded every time
@@ -194,22 +224,38 @@ class Character:
             if card.name == DRAW_HEX_CARD.name:
                 card = board.draw_hex_card(location, EncounterContextType.JOB)
 
-            self.tableau.append(TableauCard(card=card, location_name=location, age=self.get_card_age()))
+            self.tableau.append(
+                TableauCard(card=card, location_name=location, age=self.get_card_age())
+            )
 
     def remove_tableau_card(self, card_id) -> TableauCard:
-        idx = [i for i in range(len(self.tableau)) if self.tableau[i].card.id == card_id]
+        idx = [
+            i for i in range(len(self.tableau)) if self.tableau[i].card.id == card_id
+        ]
         if not idx:
             raise BadStateException(f"No such encounter card found ({card_id})")
         return self.tableau.pop(idx[0])
 
-    def queue_encounter(self, card: FullCard, context_type: EncounterContextType, context_values: Optional[Sequence[str]] = None) -> None:
+    def queue_encounter(
+        self,
+        card: FullCard,
+        context_type: EncounterContextType,
+        context_values: Optional[Sequence[str]] = None,
+    ) -> None:
         rolls = []
         for chk in card.checks:
             bonus = self.get_skill_rank(chk.skill)
             rolls.append(random.randint(1, 8) + bonus)
         if card.choice_type == ChoiceType.RANDOM:
             rolls.append(random.randint(1, len(card.choices)))
-        self.encounters.append(Encounter(card=card, rolls=rolls, context_type=context_type, context_values=context_values))
+        self.encounters.append(
+            Encounter(
+                card=card,
+                rolls=rolls,
+                context_type=context_type,
+                context_values=context_values,
+            )
+        )
 
     def check_can_act(self) -> None:
         if self.encounters:
@@ -217,13 +263,17 @@ class Character:
         if self.acted_this_turn:
             raise BadStateException("You have already acted this turn.")
 
-    def resolve_encounter(self, actions: EncounterActions, board: Board) -> EncounterOutcome:
+    def resolve_encounter(
+        self, actions: EncounterActions, board: Board
+    ) -> EncounterOutcome:
         if not self.encounters:
             raise BadStateException("There is no active encounter.")
 
         encounter = self.encounters.pop(0)
         effects = self._calc_effects(encounter, actions)
-        outcome = self._apply_effects(effects, encounter.context_type, encounter.context_values, board)
+        outcome = self._apply_effects(
+            effects, encounter.context_type, encounter.context_values, board
+        )
 
         if not self.encounters:
             self._finish_turn(board)
@@ -231,7 +281,9 @@ class Character:
         return outcome
 
     # note this does update luck as well as validating stuff
-    def _validate_actions(self, encounter: Encounter, actions: EncounterActions) -> None:
+    def _validate_actions(
+        self, encounter: Encounter, actions: EncounterActions
+    ) -> None:
         if encounter.card.checks:
             # validate the actions by rerunning them
             luck = self.luck
@@ -261,19 +313,28 @@ class Character:
             self.luck = luck
 
         if encounter.card.choice_type != ChoiceType.NONE:
-            if actions.choice is None and encounter.card.choice_type == ChoiceType.REQUIRED:
+            if (
+                actions.choice is None
+                and encounter.card.choice_type == ChoiceType.REQUIRED
+            ):
                 if encounter.card.choices:
                     raise BadStateException("Choice must be supplied")
             if encounter.card.choice_type == ChoiceType.RANDOM:
                 if actions.choice != encounter.rolls[-1] - 1:
                     raise BadStateException("Choice should match roll for random")
-            if actions.choice is not None and (actions.choice < 0 or actions.choice >= len(encounter.card.choices)):
-                raise BadStateException(f"Choice out of range ({actions.choice}, max {len(encounter.card.choices)})")
+            if actions.choice is not None and (
+                actions.choice < 0 or actions.choice >= len(encounter.card.choices)
+            ):
+                raise BadStateException(
+                    f"Choice out of range ({actions.choice}, max {len(encounter.card.choices)})"
+                )
         else:
             if actions.choice is not None:
                 raise BadStateException("Choice not allowed here")
 
-    def _calc_effects(self, encounter: Encounter, actions: EncounterActions) -> List[Effect]:
+    def _calc_effects(
+        self, encounter: Encounter, actions: EncounterActions
+    ) -> List[Effect]:
         self._validate_actions(encounter, actions)
         if actions.flee:
             return []
@@ -294,14 +355,22 @@ class Character:
                 EffectType.GAIN_XP: encounter.card.checks[0].skill,
                 EffectType.CHECK_FAILURE: encounter.card.checks[0].skill,
             }
-            ret.extend(Effect(type=k, rank=v, param=vals.get(k, None)) for k, v in ocs.items())
+            ret.extend(
+                Effect(type=k, rank=v, param=vals.get(k, None)) for k, v in ocs.items()
+            )
 
         if actions.choice is not None:
             ret.extend(encounter.card.choices[actions.choice])
 
         return ret
 
-    def _apply_effects(self, effects: List[Effect], context_type: EncounterContextType, context_values: Optional[Sequence[str]], board: Board) -> EncounterOutcome:
+    def _apply_effects(
+        self,
+        effects: List[Effect],
+        context_type: EncounterContextType,
+        context_values: Optional[Sequence[str]],
+        board: Board,
+    ) -> EncounterOutcome:
         # want something like: first process gain coins, if any, then process lose coins, if any,
         # then gain resources, then lose resources, ... , then job change, then pick the actual
         # transport location if any
@@ -373,7 +442,9 @@ class Character:
             if new_val < min_val:
                 new_val = min_val
             setattr(self, field, new_val)
-            return EncounterSingleOutcome[int](old_val=old_val, new_val=new_val, comments=msgs)
+            return EncounterSingleOutcome[int](
+                old_val=old_val, new_val=new_val, comments=msgs
+            )
 
         def make_xp(mods):
             if not mods:
@@ -396,7 +467,9 @@ class Character:
                 new_rank = self.get_skill_rank(key)
                 if new_rank != old_rank:
                     msgs.append(f"new rank is {new_rank}")
-                ret[key] = EncounterSingleOutcome[int](old_val=old_val, new_val=new_val, comments=msgs)
+                ret[key] = EncounterSingleOutcome[int](
+                    old_val=old_val, new_val=new_val, comments=msgs
+                )
             return ret
 
         def make_transport(transport_mods, speed_mods):
@@ -413,7 +486,9 @@ class Character:
                         msgs.append(msg)
                 if tp <= 0:
                     return None
-                new_location = random.choice(board.find_hexes_near_token(self.name, tp - 2, tp + 2))
+                new_location = random.choice(
+                    board.find_hexes_near_token(self.name, tp - 2, tp + 2)
+                )
             elif speed_mods and context_type == EncounterContextType.TRAVEL:
                 move_idx = len(context_values) - 1
                 msgs = []
@@ -430,7 +505,9 @@ class Character:
                 return None
             old_loc = board.get_token(self.name).location
             board.move_token(self.name, new_location)
-            return EncounterSingleOutcome[str](old_val=old_loc, new_val=new_location, comments=msgs)
+            return EncounterSingleOutcome[str](
+                old_val=old_loc, new_val=new_location, comments=msgs
+            )
 
         def make_job(mods):
             if not mods:
@@ -449,7 +526,9 @@ class Character:
             self.tableau = []
             self.job_deck = []
             self.refill_tableau(board)
-            return EncounterSingleOutcome[str](old_val=old_job, new_val=new_job, comments=msgs)
+            return EncounterSingleOutcome[str](
+                old_val=old_job, new_val=new_job, comments=msgs
+            )
 
         return EncounterOutcome(
             coins=make_single(coins_mods, "coins"),
@@ -468,12 +547,14 @@ class Character:
         self.acted_this_turn = False
 
         # filter to encounters near the PC (since they may have been transported, or just moved)
-        near : Set[str] = {hx for hx in board.find_hexes_near_token(self.name, 0, 5)}
+        near: Set[str] = {hx for hx in board.find_hexes_near_token(self.name, 0, 5)}
 
         def _is_valid(card: TableauCard) -> bool:
             return card.age > 1 and card.location_name in near
 
-        self.tableau = [dataclasses.replace(c, age=c.age - 1) for c in self.tableau if _is_valid(c)]
+        self.tableau = [
+            dataclasses.replace(c, age=c.age - 1) for c in self.tableau if _is_valid(c)
+        ]
         self.refill_tableau(board)
 
     def draw_travel_card(self, location: str, board: Board) -> FullCard:
@@ -482,7 +563,9 @@ class Character:
             # assume a 12-card travel deck, we want hex cards about a third of the time
             additional = [dataclasses.replace(DRAW_HEX_CARD, copies=6)]
             job = load_job(self.job_name)
-            self.travel_deck = template_deck.actualize(job.rank + 1, EncounterContextType.TRAVEL, additional)
+            self.travel_deck = template_deck.actualize(
+                job.rank + 1, EncounterContextType.TRAVEL, additional
+            )
 
         card = self.travel_deck.pop(0)
         if card.name == DRAW_HEX_CARD.name:
@@ -494,7 +577,9 @@ class Character:
             template_deck = load_deck("Camp")
             additional = []
             job = load_job(self.job_name)
-            self.camp_deck = template_deck.actualize(job.rank + 1, EncounterContextType.CAMP, additional)
+            self.camp_deck = template_deck.actualize(
+                job.rank + 1, EncounterContextType.CAMP, additional
+            )
 
         return self.camp_deck.pop(0)
 

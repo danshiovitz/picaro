@@ -20,7 +20,9 @@ class Job:
     def make_deck(self, additional: List[TemplateCard] = None) -> List[FullCard]:
         # template_deck = load_deck(self.deck_name)
         template_deck = load_deck("Raider")
-        return template_deck.actualize(self.rank + 1, EncounterContextType.JOB, additional)
+        return template_deck.actualize(
+            self.rank + 1, EncounterContextType.JOB, additional
+        )
 
     def fits_hex(self, hx: Hex) -> bool:
         # later: some jobs filter by country and/or terrain type

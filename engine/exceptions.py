@@ -4,6 +4,7 @@
 class IllegalMoveException(Exception):
     pass
 
+
 # The player has tried to make a move that doesn't make sense given their current state (trying to
 # activate an encounter not in their tableau, trying to travel when they're out of turns or have an
 # encounter active). The client should display the error message and discard the current UI position,

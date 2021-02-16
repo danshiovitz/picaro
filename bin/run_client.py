@@ -1,5 +1,6 @@
 import pathlib
 import sys
+
 sys.path.append(str(pathlib.Path(__file__).absolute().parent.parent.parent))
 
 from picaro.client import Client

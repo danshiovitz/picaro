@@ -7,7 +7,19 @@ from dataclasses import dataclass, fields as dataclass_fields
 from enum import Enum
 from pathlib import Path
 from sqlite3 import Connection, Row, connect
-from typing import Any, ContextManager, Dict, Generic, List, Optional, Sequence, Tuple, Type, TypeVar, Union
+from typing import (
+    Any,
+    ContextManager,
+    Dict,
+    Generic,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
 
 from picaro.common.serializer import deserialize, recursive_from_dict, serialize
 
@@ -55,7 +67,9 @@ class ConnectionManager:
         connection = connect(self.DB_STR, uri=True)
         connection.row_factory = Row
         connection.__enter__()
-        session = Session(player_id=self.player_id, game_id=self.game_id, connection=connection)
+        session = Session(
+            player_id=self.player_id, game_id=self.game_id, connection=connection
+        )
         self.ctx_token = current_session.set(session)
         return self
 
@@ -146,11 +160,15 @@ class StorageBase(ABC, Generic[T]):
         return cols
 
     @classmethod
-    def _select_helper(cls, where_clauses: List[str], params: Dict[str, Any]) -> List[T]:
+    def _select_helper(
+        cls, where_clauses: List[str], params: Dict[str, Any]
+    ) -> List[T]:
         return cls._select_helper_grouped(where_clauses, params)[()]
 
     @classmethod
-    def _select_helper_grouped(cls, where_clauses: List[str], params: Dict[str, Any]) -> Dict[Sequence[Any], List[T]]:
+    def _select_helper_grouped(
+        cls, where_clauses: List[str], params: Dict[str, Any]
+    ) -> Dict[Sequence[Any], List[T]]:
         session = current_session.get()
         if session.game_id is not None and cls.TABLE_NAME != "game":
             where_clauses.append("game_id = :game_id")
@@ -175,17 +193,28 @@ class StorageBase(ABC, Generic[T]):
         if not cls.PARENT_STORE:
             return ()
         par = cls.PARENT_STORE
-        return tuple(row[par.TABLE_NAME + "_" + c[0]] for c in par._table_schema() if c[2])
+        return tuple(
+            row[par.TABLE_NAME + "_" + c[0]] for c in par._table_schema() if c[2]
+        )
 
     @classmethod
-    def _select_secondaries(cls, rows: List[Dict[str, Any]]) -> List[Dict[str, List[Any]]]:
+    def _select_secondaries(
+        cls, rows: List[Dict[str, Any]]
+    ) -> List[Dict[str, List[Any]]]:
         ret = [defaultdict(list) for _ in rows]
         if not cls.SUBTABLES:
             return ret
 
         pk_names = [c for c in cls._table_schema() if c[2]]
         pk_values = [[row[n] for n in pk_names] for row in rows]
-        select_wheres = " OR ".join(["((" + ") AND (".join(f"{cls.TABLE_NAME}_{n} = ?" for n in pk_names) + "))"] * len(rows))
+        select_wheres = " OR ".join(
+            [
+                "(("
+                + ") AND (".join(f"{cls.TABLE_NAME}_{n} = ?" for n in pk_names)
+                + "))"
+            ]
+            * len(rows)
+        )
         select_params = [v for row in pk_values for val in row]
         row_idxs = {tuple(vals): idx for idx, vals in enumerate(pk_values)}
 
@@ -202,7 +231,7 @@ class StorageBase(ABC, Generic[T]):
         # too many fields at once, so chunk it:
         last_id = -1
         for idx in range(0, len(values), 20):
-            all_projected = cls._project_all(values[idx:idx + 20])
+            all_projected = cls._project_all(values[idx : idx + 20])
             for storage_base, rows in all_projected.items():
                 names = list(n for n in rows[0].keys() if n != "id")
                 each_params = tuple(row[n] for row in rows for n in names)
@@ -218,16 +247,26 @@ class StorageBase(ABC, Generic[T]):
         return last_id
 
     @classmethod
-    def _project_all(cls, values: List[T]) -> Dict["StorageBase[Any]", List[Dict[str, Any]]]:
+    def _project_all(
+        cls, values: List[T]
+    ) -> Dict["StorageBase[Any]", List[Dict[str, Any]]]:
         session = current_session.get()
 
         all_projected = defaultdict(list)
         for val in values:
             proj = cls._project_val(val)
-            if session.game_id is not None and cls.PARENT_STORE is None and cls.TABLE_NAME != "game":
+            if (
+                session.game_id is not None
+                and cls.PARENT_STORE is None
+                and cls.TABLE_NAME != "game"
+            ):
                 proj["game_id"] = session.game_id
             all_projected[cls].append(proj)
-            pk_vals = {cls.TABLE_NAME + "_" + c[0]: proj[c[0]] for c in cls._table_schema() if c[2]}
+            pk_vals = {
+                cls.TABLE_NAME + "_" + c[0]: proj[c[0]]
+                for c in cls._table_schema()
+                if c[2]
+            }
             for sub_f, sub_cls in cls.SUBTABLES.items():
                 sub_projection = sub_cls._project_all(val[sub_f])
                 # add the parent row's pk data to the sub's fields
@@ -236,7 +275,6 @@ class StorageBase(ABC, Generic[T]):
                 for ss_cls, ss_rows in sub_projection.items():
                     all_projected[ss_cls].extend(ss_rows)
         return all_projected
-
 
     @classmethod
     def _update_helper(cls, value: T) -> None:
@@ -253,6 +291,7 @@ class StorageBase(ABC, Generic[T]):
                 sql += " WHERE "
                 sql += " AND ".join(f"{n} = :{n}" for n in pk_names)
                 current_session.get().connection.execute(sql, row)
+
 
 class ValueStorageBase(StorageBase[str]):
     TYPE: Type[T] = str
@@ -285,7 +324,7 @@ class ObjectStorageBase(StorageBase[T]):
             col_name = fname
             base_type = getattr(ftype, "__origin__", ftype)
             nn = " not null"
-            if base_type == Union: # ie, it was an optional
+            if base_type == Union:  # ie, it was an optional
                 # pull out the first type which is assumed to be the non-none type
                 ftype = ftype.__args__[0]
                 base_type = getattr(ftype, "__origin__", ftype)
@@ -319,7 +358,7 @@ class ObjectStorageBase(StorageBase[T]):
     @classmethod
     def _serialize_val(cls, ftype: Type[T], fval: Any) -> Any:
         bt = getattr(ftype, "__origin__", ftype)
-        if bt == Union: # ie, it was an optional
+        if bt == Union:  # ie, it was an optional
             if fval is None:
                 return None
             # pull out the first type which is assumed to be the non-none type

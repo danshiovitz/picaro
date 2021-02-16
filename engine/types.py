@@ -6,12 +6,29 @@ from picaro.common.hexmap.types import OffsetCoordinate
 
 
 Terrains = [
-    "Forest", "Jungle", "Hills", "Mountains", "Plains", "Desert", "Water", "City", "Swamp", "Coastal", "Arctic",
+    "Forest",
+    "Jungle",
+    "Hills",
+    "Mountains",
+    "Plains",
+    "Desert",
+    "Water",
+    "City",
+    "Swamp",
+    "Coastal",
+    "Arctic",
 ]
 
 
 Countries = [
-    "Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Theta", "Iota",
+    "Alpha",
+    "Beta",
+    "Gamma",
+    "Delta",
+    "Epsilon",
+    "Zeta",
+    "Theta",
+    "Iota",
 ]
 
 

@@ -1,5 +1,6 @@
 import pathlib
 import sys
+
 sys.path.append(str(pathlib.Path(__file__).absolute().parent.parent))
 
 from dataclasses import dataclass
@@ -7,6 +8,7 @@ from typing import Dict, List
 from unittest import TestCase, main
 
 from serializer import serialize, deserialize
+
 
 @dataclass(frozen=True)
 class Foo:
@@ -28,7 +30,7 @@ class SerializeTest(TestCase):
         txt = serialize(f)
         g = deserialize(txt, Foo)
         self.assertEqual(f, g)
-        self.assertEqual(txt, "{\"a\": \"fish\", \"b\": 3, \"c\": \"bagels\"}")
+        self.assertEqual(txt, '{"a": "fish", "b": 3, "c": "bagels"}')
 
     def test_roundtrip_complex(self):
         f1 = Foo(a="fish", b=3, c="bagels")
@@ -38,8 +40,11 @@ class SerializeTest(TestCase):
         txt = serialize(c)
         g = deserialize(txt, Complex)
         self.assertEqual(c, g)
-        self.assertEqual(txt, '{\"some\": {\"a\": \"fish\", \"b\": 3, \"c\": \"bagels\"}, \"more\": [{\"a\": \"cat\", \"b\": 7, \"c\": \"sandwiches\"}, {\"a\": \"dog\", \"b\": 5, \"c\": \"hot dogs\"}], \"most\": {\"fish\": {\"a\": \"fish\", \"b\": 3, \"c\": \"bagels\"}, \"dog\": {\"a\": \"dog\", \"b\": 5, \"c\": \"hot dogs\"}}}')
+        self.assertEqual(
+            txt,
+            '{"some": {"a": "fish", "b": 3, "c": "bagels"}, "more": [{"a": "cat", "b": 7, "c": "sandwiches"}, {"a": "dog", "b": 5, "c": "hot dogs"}], "most": {"fish": {"a": "fish", "b": 3, "c": "bagels"}, "dog": {"a": "dog", "b": 5, "c": "hot dogs"}}}',
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

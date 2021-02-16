@@ -4,8 +4,10 @@ from typing import Any, Dict, List
 
 from .storage import ValueStorageBase
 
+
 def load_skills() -> List[str]:
     return SkillsStorage.load()
+
 
 class SkillsStorage(ValueStorageBase):
     TABLE_NAME = "skill"

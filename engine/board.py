@@ -4,11 +4,20 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from picaro.common.hexmap.types import CubeCoordinate
+
 from .deck import EncounterDeck, load_deck
 from .exceptions import BadStateException, IllegalMoveException
 from .generate import generate_from_mini
 from .storage import ObjectStorageBase
-from .types import Board as BoardSnapshot, EncounterContextType, FullCard, Hex as HexSnapshot, TemplateCard, Terrains, Token
+from .types import (
+    Board as BoardSnapshot,
+    EncounterContextType,
+    FullCard,
+    Hex as HexSnapshot,
+    TemplateCard,
+    Terrains,
+    Token,
+)
 
 
 # This one isn't serialized at all, it owns no data directly
@@ -44,7 +53,9 @@ class ActiveBoard:
         if adjacent and token.location != self.NOWHERE:
             nearby = self.find_hexes_near_token(token_name, 0, 1)
             if new_hex.name not in nearby:
-                raise IllegalMoveException(f"Location {new_hex.name} isn't adjacent to {token_name}")
+                raise IllegalMoveException(
+                    f"Location {new_hex.name} isn't adjacent to {token_name}"
+                )
 
         token = dataclasses.replace(token, location=to)
         TokenStorage.update(token)
@@ -52,12 +63,16 @@ class ActiveBoard:
     def get_token(self, token_name: str) -> Token:
         return TokenStorage.load_by_name(token_name)
 
-    def find_hexes_near_token(self, token_name: str, min_distance: int, max_distance: int) -> List[str]:
+    def find_hexes_near_token(
+        self, token_name: str, min_distance: int, max_distance: int
+    ) -> List[str]:
         token = TokenStorage.load_by_name(token_name)
         if token.location == self.NOWHERE:
             return []
         center_hex = HexStorage.load_by_name(token.location)
-        nearby = HexStorage.load_by_distance(center_hex.x, center_hex.y, center_hex.z, min_distance, max_distance)
+        nearby = HexStorage.load_by_distance(
+            center_hex.x, center_hex.y, center_hex.z, min_distance, max_distance
+        )
         return [hx.name for hx in nearby]
 
     def get_hex(self, location: str) -> HexSnapshot:
@@ -69,7 +84,7 @@ class ActiveBoard:
             terrain=hx.terrain,
             country=hx.country,
             region=hx.region,
-            coordinate=CubeCoordinate(x=hx.x, y=hx.y, z=hx.z).to_offset()
+            coordinate=CubeCoordinate(x=hx.x, y=hx.y, z=hx.z).to_offset(),
         )
 
     def draw_hex_card(self, hex_name: str, context: EncounterContextType) -> FullCard:
@@ -91,11 +106,11 @@ class ActiveBoard:
             raise Exception("Can't generate, hexes already exist")
 
         minimap = [
-            '^n::n::~',
+            "^n::n::~",
             'n:n."..~',
             '"."."".~',
             '^n."".nn',
-            '^.~~~~~~',
+            "^.~~~~~~",
             '.."~~..:',
             '""""^::n',
             '&&"^n:::',
@@ -104,7 +119,9 @@ class ActiveBoard:
 
         # translate these into storage format:
         def trans(hx: HexSnapshot) -> Hex:
-            cube = CubeCoordinate.from_row_col(row=hx.coordinate.row, col=hx.coordinate.column)
+            cube = CubeCoordinate.from_row_col(
+                row=hx.coordinate.row, col=hx.coordinate.column
+            )
             return Hex(
                 name=hx.name,
                 terrain=hx.terrain,
@@ -158,9 +175,20 @@ class HexStorage(ObjectStorageBase[Hex]):
         return hexes[0]
 
     @classmethod
-    def load_by_distance(cls, c_x: int, c_y: int, c_z: int, min_distance: int, max_distance: int) -> List[Hex]:
+    def load_by_distance(
+        cls, c_x: int, c_y: int, c_z: int, min_distance: int, max_distance: int
+    ) -> List[Hex]:
         dist_clause = "((abs(:c_x - x) + abs(:c_y - y) + abs(:c_z - z)) / 2) BETWEEN :min_distance AND :max_distance"
-        return cls._select_helper([dist_clause], {"c_x": c_x, "c_y": c_y, "c_z": c_z, "min_distance": min_distance, "max_distance": max_distance})
+        return cls._select_helper(
+            [dist_clause],
+            {
+                "c_x": c_x,
+                "c_y": c_y,
+                "c_z": c_z,
+                "min_distance": min_distance,
+                "max_distance": max_distance,
+            },
+        )
 
     @classmethod
     def insert(cls, hexes: List[Hex]) -> None:

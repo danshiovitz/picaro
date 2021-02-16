@@ -3,12 +3,15 @@ from dataclasses import fields as dataclass_fields, is_dataclass
 from enum import Enum
 from typing import Any, Dict, Optional, Sequence, Type, TypeVar, Union
 
+
 def serialize(val: Any, indent: Optional[int] = None) -> str:
     dt = recursive_to_dict(val)
     return json.dumps(dt, indent=indent)
 
 
 T = TypeVar("T")
+
+
 def deserialize(data: str, cls: Type[T], frozen: Optional[bool] = None) -> T:
     dt = json.loads(data)
     return recursive_from_dict(dt, cls, frozen)
@@ -25,7 +28,7 @@ def recursive_to_dict(val: T, cls: Type[T] = type(None)) -> Any:
             subv = getattr(val, field.name)
             ut = field.type
             bt = getattr(ut, "__origin__", ut)
-            if bt == Union: # ie, it was an optional
+            if bt == Union:  # ie, it was an optional
                 if subv is None:
                     ret[field.name] = None
                     continue
@@ -45,11 +48,15 @@ def recursive_to_dict(val: T, cls: Type[T] = type(None)) -> Any:
         return [recursive_to_dict(sv, exp_types[0]) for sv in val]
     elif issubclass(cls_base, Dict):
         exp_types = getattr(cls, "__args__", [type(None), type(None)])
-        return {recursive_to_dict(k, exp_types[0]): recursive_to_dict(v, exp_types[1]) for k, v in val.items()}
+        return {
+            recursive_to_dict(k, exp_types[0]): recursive_to_dict(v, exp_types[1])
+            for k, v in val.items()
+        }
     elif issubclass(cls_base, Enum):
         return val.name
     else:
         return val
+
 
 def recursive_from_dict(val: Any, cls: Type[T], frozen: Optional[bool] = None) -> T:
     cls_base = getattr(cls, "__origin__", cls)
@@ -68,7 +75,7 @@ def recursive_from_dict(val: Any, cls: Type[T], frozen: Optional[bool] = None) -
         for field in dataclass_fields(cls_base):
             ut = field.type
             bt = getattr(ut, "__origin__", ut)
-            if bt == Union: # ie, it was an optional
+            if bt == Union:  # ie, it was an optional
                 if val[field.name] is None:
                     dt[field.name] = None
                     continue
@@ -83,7 +90,10 @@ def recursive_from_dict(val: Any, cls: Type[T], frozen: Optional[bool] = None) -
     elif issubclass(cls_base, tuple):
         if type(val) == str:
             val = logged_load(val)
-        return tuple(recursive_from_dict(sv, cls.__args__[idx], frozen) for idx, sv in enumerate(val))
+        return tuple(
+            recursive_from_dict(sv, cls.__args__[idx], frozen)
+            for idx, sv in enumerate(val)
+        )
     elif cls_base != str and issubclass(cls_base, Sequence):
         if type(val) == str:
             val = logged_load(val)
@@ -92,11 +102,16 @@ def recursive_from_dict(val: Any, cls: Type[T], frozen: Optional[bool] = None) -
     elif issubclass(cls_base, Dict):
         if type(val) == str:
             val = logged_load(val)
-        return {recursive_from_dict(k, cls.__args__[0], frozen): recursive_from_dict(v, cls.__args__[1], frozen) for k, v in val.items()}
+        return {
+            recursive_from_dict(k, cls.__args__[0], frozen): recursive_from_dict(
+                v, cls.__args__[1], frozen
+            )
+            for k, v in val.items()
+        }
     elif issubclass(cls_base, Enum):
         return cls[val]
     elif cls_base == bool:
         # this gets serialized weird in sqlite for some reason
-        return val not in ('0', 0, False)
+        return val not in ("0", 0, False)
     else:
         return val

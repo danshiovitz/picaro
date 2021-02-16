@@ -6,9 +6,36 @@ from typing import List, Optional, Set, Type, TypeVar
 from urllib.request import HTTPErrorProcessor, Request, build_opener, urlopen
 
 from picaro.client.colors import colors
-from picaro.common.hexmap.display import CubeCoordinate, DisplayInfo, OffsetCoordinate, render_simple, render_large
+from picaro.common.hexmap.display import (
+    CubeCoordinate,
+    DisplayInfo,
+    OffsetCoordinate,
+    render_simple,
+    render_large,
+)
 from picaro.common.serializer import deserialize, serialize
-from picaro.server.api_types import Board, CampRequest, CampResponse, CardPreview, Character, ChoiceType, Effect, EffectType, EncounterCheck, EncounterActions, EncounterOutcome, EncounterSingleOutcome, ErrorResponse, ErrorType, JobRequest, JobResponse, ResolveEncounterRequest, ResolveEncounterResponse, TravelRequest, TravelResponse
+from picaro.server.api_types import (
+    Board,
+    CampRequest,
+    CampResponse,
+    CardPreview,
+    Character,
+    ChoiceType,
+    Effect,
+    EffectType,
+    EncounterCheck,
+    EncounterActions,
+    EncounterOutcome,
+    EncounterSingleOutcome,
+    ErrorResponse,
+    ErrorType,
+    JobRequest,
+    JobResponse,
+    ResolveEncounterRequest,
+    ResolveEncounterResponse,
+    TravelRequest,
+    TravelResponse,
+)
 
 
 S = TypeVar("S")
@@ -45,20 +72,20 @@ class Client:
 
         get_board_parser = subparsers.add_parser("board")
         get_board_parser.set_defaults(cmd=lambda cli: cli.get_board())
-        get_board_parser.add_argument('--country', '--countries', action='store_true')
-        get_board_parser.add_argument('--region', '--regions', action='store_true')
-        get_board_parser.add_argument('--large', action='store_true')
-        get_board_parser.add_argument('--center', type=str, default=None)
+        get_board_parser.add_argument("--country", "--countries", action="store_true")
+        get_board_parser.add_argument("--region", "--regions", action="store_true")
+        get_board_parser.add_argument("--large", action="store_true")
+        get_board_parser.add_argument("--center", type=str, default=None)
 
         get_character_parser = subparsers.add_parser("character")
         get_character_parser.set_defaults(cmd=lambda cli: cli.get_character())
-        get_character_parser.add_argument('name', type=str)
-        get_character_parser.add_argument('--all', action='store_true')
+        get_character_parser.add_argument("name", type=str)
+        get_character_parser.add_argument("--all", action="store_true")
 
         play_parser = subparsers.add_parser("play")
         play_parser.set_defaults(cmd=lambda cli: cli.play())
-        play_parser.add_argument('name', type=str)
-        play_parser.add_argument('--season', action='store_true')
+        play_parser.add_argument("name", type=str)
+        play_parser.add_argument("--season", action="store_true")
 
         return parser.parse_args()
 
@@ -68,7 +95,7 @@ class Client:
         if self.base_url and self.base_url[-1] == "/":
             self.base_url = self.base_url[:-1]
         self.terrains = {
-            "Forest": (colors.fg.green, "\""),
+            "Forest": (colors.fg.green, '"'),
             "Jungle": (colors.bold + colors.fg.green, "%"),
             "Hills": (colors.fg.orange, "n"),
             "Mountains": (colors.fg.darkgrey, "^"),
@@ -84,15 +111,14 @@ class Client:
 
     def get_board(self) -> None:
         board = self._get("/board", Board)
-        coords = {
-            hx.coordinate: hx for hx in board.hexes
-        }
+        coords = {hx.coordinate: hx for hx in board.hexes}
 
         tokens = defaultdict(list)
         for tok in board.tokens:
             tokens[tok.location].append(tok)
 
         if self.args.large:
+
             def display(coord: OffsetCoordinate) -> DisplayInfo:
                 hx = coords[coord]
 
@@ -102,7 +128,11 @@ class Client:
                 body2 = body2[0:4] + hx.region[0]
 
                 if hx.name in tokens:
-                    body2 = colors.bold + (tokens[hx.name][0].name + "     ")[0:5] + colors.reset
+                    body2 = (
+                        colors.bold
+                        + (tokens[hx.name][0].name + "     ")[0:5]
+                        + colors.reset
+                    )
                 return DisplayInfo(
                     fill=color + symbol + colors.reset,
                     body1=body1,
@@ -111,11 +141,15 @@ class Client:
 
             center_name = self.args.center or board.tokens[0].location
             center_hx = [hx for hx in board.hexes if hx.name == center_name][0]
-            for line in render_large(set(coords), display, center=center_hx.coordinate, radius=2):
+            for line in render_large(
+                set(coords), display, center=center_hx.coordinate, radius=2
+            ):
                 print(line)
 
         else:
-            for line in self._make_small_map(board, show_country=self.args.country, show_region=self.args.region):
+            for line in self._make_small_map(
+                board, show_country=self.args.country, show_region=self.args.region
+            ):
                 print(line)
 
         if board.tokens:
@@ -136,10 +170,16 @@ class Client:
             for ct, rs in ccount.items():
                 print(f"{ct}: {sorted(rs.items())}")
 
-    def _make_small_map(self, board: Board, show_country: bool = False, show_region: bool = False, center: Optional[OffsetCoordinate] = None, radius: int = 2, encounters: Optional[Set[str]] = None) -> List[str]:
-        coords = {
-            hx.coordinate: hx for hx in board.hexes
-        }
+    def _make_small_map(
+        self,
+        board: Board,
+        show_country: bool = False,
+        show_region: bool = False,
+        center: Optional[OffsetCoordinate] = None,
+        radius: int = 2,
+        encounters: Optional[Set[str]] = None,
+    ) -> List[str]:
+        coords = {hx.coordinate: hx for hx in board.hexes}
 
         tokens = defaultdict(list)
         for tok in board.tokens:
@@ -149,26 +189,28 @@ class Client:
             encounters = set()
 
         def display(coord: OffsetCoordinate) -> str:
-                hx = coords[coord]
+            hx = coords[coord]
 
-                if hx.name in tokens:
-                    return colors.bold + "@" + colors.reset
-                elif hx.name in encounters:
-                    return colors.bold + colors.bg.red + "!" + colors.reset
+            if hx.name in tokens:
+                return colors.bold + "@" + colors.reset
+            elif hx.name in encounters:
+                return colors.bold + colors.bg.red + "!" + colors.reset
 
-                color, symbol = self.terrains[hx.terrain]
-                if show_country:
-                    symbol = hx.country[0]
-                elif show_region:
-                    symbol = hx.region[0]
-                return color + symbol + colors.reset
+            color, symbol = self.terrains[hx.terrain]
+            if show_country:
+                symbol = hx.country[0]
+            elif show_region:
+                symbol = hx.region[0]
+            return color + symbol + colors.reset
 
         return render_simple(set(coords), 1, display, center=center, radius=radius)
 
     def get_character(self) -> None:
         ch = self._get(f"/character/{self.args.name}", Character)
         print(f"{ch.name} ({ch.player_id}) - a {ch.job} [{ch.location}]")
-        print(f"Health: {ch.health}   Coins: {ch.coins}  Reputation: {ch.reputation} Resources: {ch.resources}   Quest: {ch.quest}")
+        print(
+            f"Health: {ch.health}   Coins: {ch.coins}  Reputation: {ch.reputation} Resources: {ch.resources}   Quest: {ch.quest}"
+        )
         print("Skills:")
         for sk, v in sorted(ch.skills.items()):
             if self.args.all or v > 0 or ch.skill_xp[sk] > 0:
@@ -200,22 +242,29 @@ class Client:
                 print()
                 continue
 
-
     def _display_play(self, board: Board, ch: Character) -> None:
         encounters = {card.location_name for card in ch.tableau}
 
         ch_hex = [hx for hx in board.hexes if hx.name == ch.location][0]
-        minimap = self._make_small_map(board, center=ch_hex.coordinate, radius=3, encounters=encounters)
+        minimap = self._make_small_map(
+            board, center=ch_hex.coordinate, radius=3, encounters=encounters
+        )
 
         display = []
-        display.append(f"{ch.name} ({ch.player_id}) - a {ch.job} [{ch.location}, in {ch_hex.country}]")
+        display.append(
+            f"{ch.name} ({ch.player_id}) - a {ch.job} [{ch.location}, in {ch_hex.country}]"
+        )
         display.append("")
-        display.append(f"Health: {ch.health:2}   Coins: {ch.coins:2}   Reputation: {ch.reputation:2}   Resources: {ch.resources:2}   Quest: {ch.quest:2}")
+        display.append(
+            f"Health: {ch.health:2}   Coins: {ch.coins:2}   Reputation: {ch.reputation:2}   Resources: {ch.resources:2}   Quest: {ch.quest:2}"
+        )
         if ch.remaining_turns:
             display.append(f" Turns: {ch.remaining_turns:2}    Luck: {ch.luck:2}")
             display.append("")
             for idx, card in enumerate(ch.tableau):
-                display.append(f"{ascii_lowercase[idx]}. ({card.age}) {card.name} [{card.location_name}]:")
+                display.append(
+                    f"{ascii_lowercase[idx]}. ({card.age}) {card.name} [{card.location_name}]:"
+                )
                 display.append(f"       {self._check_str(card.checks[0], ch)}")
             display.append("t. Travel (uio.jkl)")
             display.append("x. Camp")
@@ -223,8 +272,10 @@ class Client:
             display.append("")
 
         pad = lambda val, width: val + " " * (width - len(val))
-        display = [pad(display[idx], 80) + (minimap[idx] if idx < len(minimap) else "")
-                  for idx in range(len(display))]
+        display = [
+            pad(display[idx], 80) + (minimap[idx] if idx < len(minimap) else "")
+            for idx in range(len(display))
+        ]
         while display[-1].strip() == "":
             display.pop()
 
@@ -235,8 +286,10 @@ class Client:
     def _check_str(self, check: EncounterCheck, ch: Character) -> str:
         reward_name = self._render_effect_type(check.reward)
         penalty_name = self._render_effect_type(check.penalty)
-        return (f"{check.skill} (1d8{ch.skills[check.skill]:+}) vs {check.target_number} "
-                f"({reward_name} / {penalty_name})")
+        return (
+            f"{check.skill} (1d8{ch.skills[check.skill]:+}) vs {check.target_number} "
+            f"({reward_name} / {penalty_name})"
+        )
 
     def _input_play_action(self, board: Board, ch: Character) -> None:
         while True:
@@ -266,10 +319,16 @@ class Client:
                 print()
                 continue
 
-    def _do_encounter(self, card_preview: Optional[CardPreview], board: Board, ch: Character) -> bool:
+    def _do_encounter(
+        self, card_preview: Optional[CardPreview], board: Board, ch: Character
+    ) -> bool:
         if not ch.encounters and card_preview is not None:
             try:
-                resp = self._post(f"/play/{ch.name}/job", JobRequest(card_id=card_preview.id), JobResponse)
+                resp = self._post(
+                    f"/play/{ch.name}/job",
+                    JobRequest(card_id=card_preview.id),
+                    JobResponse,
+                )
             except IllegalMoveException as e:
                 print(e)
                 print()
@@ -297,7 +356,9 @@ class Client:
             print()
             for idx, check in enumerate(ch.encounters[0].checks):
                 status = "SUCCESS" if rolls[idx] >= check.target_number else "FAILURE"
-                print(f"Check #{idx+1}: {self._check_str(check, ch)}: {rolls[idx]} - {status}")
+                print(
+                    f"Check #{idx+1}: {self._check_str(check, ch)}: {rolls[idx]} - {status}"
+                )
             print("You can go, transfer, adjust, or flee: ", end="")
             line = input().lower().strip()
             if not line:
@@ -351,12 +412,18 @@ class Client:
 
         if not flee and ch.encounters[0].choice_type != ChoiceType.NONE:
             all_choices = ch.encounters[0].choices
-            can_choose = len(all_choices) > 1 and ch.encounters[0].choice_type != ChoiceType.RANDOM
+            can_choose = (
+                len(all_choices) > 1
+                and ch.encounters[0].choice_type != ChoiceType.RANDOM
+            )
             for idx, choices in enumerate(all_choices):
                 pfx = (" " + ascii_lowercase[idx] + ". ") if can_choose else " * "
                 line = pfx + ", ".join(self._render_effect(eff) for eff in choices)
-                if ch.encounters[0].choice_type == ChoiceType.RANDOM and ch.encounters[0].rolls[-1] == idx + 1:
-                     line = colors.bold + line + colors.reset
+                if (
+                    ch.encounters[0].choice_type == ChoiceType.RANDOM
+                    and ch.encounters[0].rolls[-1] == idx + 1
+                ):
+                    line = colors.bold + line + colors.reset
                 print(line)
             if can_choose:
                 while True:
@@ -378,9 +445,20 @@ class Client:
                 elif len(ch.encounters[0].choices) == 1:
                     choice = 0
 
-        actions = EncounterActions(flee=flee, transfers=transfers, adjusts=adjusts, luck=luck, rolls=rolls, choice=choice)
+        actions = EncounterActions(
+            flee=flee,
+            transfers=transfers,
+            adjusts=adjusts,
+            luck=luck,
+            rolls=rolls,
+            choice=choice,
+        )
         try:
-            resp = self._post(f"/play/{ch.name}/resolve_encounter", ResolveEncounterRequest(actions=actions), ResolveEncounterResponse)
+            resp = self._post(
+                f"/play/{ch.name}/resolve_encounter",
+                ResolveEncounterRequest(actions=actions),
+                ResolveEncounterResponse,
+            )
         except IllegalMoveException as e:
             print(e)
             print()
@@ -388,15 +466,23 @@ class Client:
         print()
         print(f"The outcome of your encounter:")
 
-        def render_single_int(pfx: str, single: Optional[EncounterSingleOutcome[int]]) -> None:
+        def render_single_int(
+            pfx: str, single: Optional[EncounterSingleOutcome[int]]
+        ) -> None:
             if single is None:
                 return
             if single.new_val > single.old_val:
-                print(f"* {pfx} increased to {single.new_val} ({', '.join(single.comments)}).")
+                print(
+                    f"* {pfx} increased to {single.new_val} ({', '.join(single.comments)})."
+                )
             elif single.new_val < single.old_val:
-                print(f"* {pfx} decreased to {single.new_val} ({', '.join(single.comments)}).")
+                print(
+                    f"* {pfx} decreased to {single.new_val} ({', '.join(single.comments)})."
+                )
             else:
-                print(f"* {pfx} remained at {single.new_val} ({', '.join(single.comments)}).")
+                print(
+                    f"* {pfx} remained at {single.new_val} ({', '.join(single.comments)})."
+                )
 
         render_single_int("Your health has", resp.outcome.health)
         render_single_int("Your coins have", resp.outcome.coins)
@@ -433,7 +519,7 @@ class Client:
             EffectType.LOSE_TURNS: "-turns",
             EffectType.LOSE_SPEED: "-speed",
             EffectType.DISRUPT_JOB: "-job",
-            EffectType.TRANSPORT: "-transport"
+            EffectType.TRANSPORT: "-transport",
         }
         return names.get(eff, eff.name)
 
@@ -449,9 +535,14 @@ class Client:
             print()
             return False
 
-        cubes = {CubeCoordinate.from_row_col(hx.coordinate.row, hx.coordinate.column): hx for hx in board.hexes}
+        cubes = {
+            CubeCoordinate.from_row_col(hx.coordinate.row, hx.coordinate.column): hx
+            for hx in board.hexes
+        }
         ch_hex = [hx for hx in board.hexes if hx.name == ch.location][0]
-        cur = CubeCoordinate.from_row_col(ch_hex.coordinate.row, ch_hex.coordinate.column)
+        cur = CubeCoordinate.from_row_col(
+            ch_hex.coordinate.row, ch_hex.coordinate.column
+        )
 
         dir_map = {
             "u": (-1, +1, 0),
@@ -483,7 +574,9 @@ class Client:
             return False
 
         try:
-            resp = self._post(f"/play/{ch.name}/travel", TravelRequest(route=route), TravelResponse)
+            resp = self._post(
+                f"/play/{ch.name}/travel", TravelRequest(route=route), TravelResponse
+            )
         except IllegalMoveException as e:
             print(e)
             print()
@@ -493,7 +586,9 @@ class Client:
 
     def _do_camp(self, board: Board, ch: Character) -> bool:
         try:
-            resp = self._post(f"/play/{ch.name}/camp", CampRequest(rest=True), CampResponse)
+            resp = self._post(
+                f"/play/{ch.name}/camp", CampRequest(rest=True), CampResponse
+            )
         except IllegalMoveException as e:
             print(e)
             print()

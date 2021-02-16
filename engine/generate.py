@@ -6,9 +6,10 @@ from math import floor
 from string import ascii_uppercase
 from typing import Dict, List, Set
 
-from .types import Countries, Hex, Terrains
 from picaro.common.hexmap.types import CubeCoordinate, OffsetCoordinate
 from picaro.common.hexmap.utils import calc_offset_neighbor_map
+
+from .types import Countries, Hex, Terrains
 
 # generation code from https://welshpiper.com/hex-based-campaign-design-part-1/
 @dataclass(frozen=True)
@@ -20,16 +21,54 @@ class TerrainData:
 
 
 TRANSITIONS = {
-    "Water": TerrainData(primary=["Water"], secondary=["Plains"], tertiary=["Forest"], wildcards=["Swamp", "Desert", "Hills"]),
-    "Swamp": TerrainData(primary=["Swamp"], secondary=["Plains"], tertiary=["Forest"], wildcards=["Water"]),
-    "Desert": TerrainData(primary=["Desert"], secondary=["Hills"], tertiary=["Plains"], wildcards=["Water", "Mountains"]),
-    "Plains": TerrainData(primary=["Plains"], secondary=["Forest"], tertiary=["Hills"], wildcards=["Water", "Swamp", "Desert"]),
-    "Forest": TerrainData(primary=["Forest"], secondary=["Plains"], tertiary=["Hills"], wildcards=["Water", "Swamp", "Desert"]),
-    "Hills": TerrainData(primary=["Hills"], secondary=["Mountains"], tertiary=["Plains"], wildcards=["Water", "Desert", "Forest"]),
-    "Mountains": TerrainData(primary=["Mountains"], secondary=["Hills"], tertiary=["Forest"], wildcards=["Desert"]),
+    "Water": TerrainData(
+        primary=["Water"],
+        secondary=["Plains"],
+        tertiary=["Forest"],
+        wildcards=["Swamp", "Desert", "Hills"],
+    ),
+    "Swamp": TerrainData(
+        primary=["Swamp"],
+        secondary=["Plains"],
+        tertiary=["Forest"],
+        wildcards=["Water"],
+    ),
+    "Desert": TerrainData(
+        primary=["Desert"],
+        secondary=["Hills"],
+        tertiary=["Plains"],
+        wildcards=["Water", "Mountains"],
+    ),
+    "Plains": TerrainData(
+        primary=["Plains"],
+        secondary=["Forest"],
+        tertiary=["Hills"],
+        wildcards=["Water", "Swamp", "Desert"],
+    ),
+    "Forest": TerrainData(
+        primary=["Forest"],
+        secondary=["Plains"],
+        tertiary=["Hills"],
+        wildcards=["Water", "Swamp", "Desert"],
+    ),
+    "Hills": TerrainData(
+        primary=["Hills"],
+        secondary=["Mountains"],
+        tertiary=["Plains"],
+        wildcards=["Water", "Desert", "Forest"],
+    ),
+    "Mountains": TerrainData(
+        primary=["Mountains"],
+        secondary=["Hills"],
+        tertiary=["Forest"],
+        wildcards=["Desert"],
+    ),
 }
 
-def generate(num_rows: int, num_columns: int, starting_terrain: Dict[OffsetCoordinate, str]) -> List[Hex]:
+
+def generate(
+    num_rows: int, num_columns: int, starting_terrain: Dict[OffsetCoordinate, str]
+) -> List[Hex]:
     terrain = {k: v for k, v in starting_terrain.items()}
     if not terrain:
         terrain[(num_rows // 2, num_columns // 2)] = random.choice(list(TRANSITIONS))
@@ -37,10 +76,12 @@ def generate(num_rows: int, num_columns: int, starting_terrain: Dict[OffsetCoord
     neighbors_map = calc_offset_neighbor_map(num_rows, num_columns)
 
     while True:
-        terrain_neighbors = [(cur, ngh)
+        terrain_neighbors = [
+            (cur, ngh)
             for cur in terrain
             for ngh in neighbors_map[cur]
-            if ngh not in terrain]
+            if ngh not in terrain
+        ]
         if not terrain_neighbors:
             break
         from_hex, to_hex = random.choice(terrain_neighbors)
@@ -58,12 +99,12 @@ def generate(num_rows: int, num_columns: int, starting_terrain: Dict[OffsetCoord
             region=str(random.choice(range(6)) + 1),
         )
 
-    return [
-        make_hex(k) for k in terrain
-    ]
+    return [make_hex(k) for k in terrain]
 
 
-def generate_from_mini(num_rows: int, num_columns: int, minimap: List[str]) -> List[Hex]:
+def generate_from_mini(
+    num_rows: int, num_columns: int, minimap: List[str]
+) -> List[Hex]:
     row_project = _calc_axis_projection(len(minimap), num_rows)
     col_project = _calc_axis_projection(len(minimap[0]), num_columns)
 
@@ -72,7 +113,7 @@ def generate_from_mini(num_rows: int, num_columns: int, minimap: List[str]) -> L
         "n": "Hills",
         ".": "Plains",
         ":": "Desert",
-        "\"": "Forest",
+        '"': "Forest",
         "~": "Water",
         "&": "Swamp",
     }
@@ -104,9 +145,7 @@ def generate_from_mini(num_rows: int, num_columns: int, minimap: List[str]) -> L
             region=region_map[coord],
         )
 
-    return [
-        make_hex(k) for k in terrain
-    ]
+    return [make_hex(k) for k in terrain]
 
 
 def _calc_axis_projection(small: int, big: int) -> Dict[int, int]:
@@ -131,15 +170,22 @@ def _choose_terrain(data: TerrainData) -> str:
     return random.choice(random.choice(xs))
 
 
-def _adjust_terrain(terrain: Dict[OffsetCoordinate, str], neighbor_map: Dict[OffsetCoordinate, Set[OffsetCoordinate]]) -> None:
+def _adjust_terrain(
+    terrain: Dict[OffsetCoordinate, str],
+    neighbor_map: Dict[OffsetCoordinate, Set[OffsetCoordinate]],
+) -> None:
     def _neighbor_count(coord: OffsetCoordinate, ttype: str) -> int:
         return len([1 for ngh in neighbor_map[coord] if terrain[ngh] == ttype])
 
-    near_water = {coord: cnt for coord, cnt in (
-        (coord, _neighbor_count(coord, "Water"))
-        for coord, ttype in terrain.items()
-        if ttype != "Water"
-    ) if cnt >= 1}
+    near_water = {
+        coord: cnt
+        for coord, cnt in (
+            (coord, _neighbor_count(coord, "Water"))
+            for coord, ttype in terrain.items()
+            if ttype != "Water"
+        )
+        if cnt >= 1
+    }
 
     for coord, cnt in near_water.items():
         # reduce the number of islands:
@@ -150,14 +196,24 @@ def _adjust_terrain(terrain: Dict[OffsetCoordinate, str], neighbor_map: Dict[Off
 
     num_rows = max(x.row for x in terrain) + 1
 
-    hot_forests = [coord for coord, ttype in terrain.items() if ttype == "Forest" and coord.row >= num_rows // 2]
+    hot_forests = [
+        coord
+        for coord, ttype in terrain.items()
+        if ttype == "Forest" and coord.row >= num_rows // 2
+    ]
     jungle_chance = {k: p * 10 for k, p in _calc_axis_projection(10, num_rows).items()}
     for coord in hot_forests:
         if random.randint(1, 100) < jungle_chance[coord.row]:
             terrain[coord] = "Jungle"
 
-    cold_lands = [coord for coord, ttype in terrain.items() if ttype not in ("Mountains", "Water") and coord.row <= num_rows // 4]
-    arctic_chance = {k: 80 - p * 15 for k, p in _calc_axis_projection(20, num_rows).items()}
+    cold_lands = [
+        coord
+        for coord, ttype in terrain.items()
+        if ttype not in ("Mountains", "Water") and coord.row <= num_rows // 4
+    ]
+    arctic_chance = {
+        k: 80 - p * 15 for k, p in _calc_axis_projection(20, num_rows).items()
+    }
     for coord in cold_lands:
         if random.randint(1, 100) < arctic_chance[coord.row]:
             terrain[coord] = "Arctic"
@@ -176,12 +232,16 @@ def _adjust_terrain(terrain: Dict[OffsetCoordinate, str], neighbor_map: Dict[Off
         city_spots -= clear_set
 
 
-def _make_country_map(terrain_map: Dict[OffsetCoordinate, str], neighbors_map: Dict[OffsetCoordinate, Set[OffsetCoordinate]]) -> Dict[OffsetCoordinate, str]:
+def _make_country_map(
+    terrain_map: Dict[OffsetCoordinate, str],
+    neighbors_map: Dict[OffsetCoordinate, Set[OffsetCoordinate]],
+) -> Dict[OffsetCoordinate, str]:
     ret = {c: "Unassigned" for c in terrain_map}
 
     # first identify all wild areas
-    wilds = (_find_area("Water", terrain_map, neighbors_map) |
-             _find_area("Mountains", terrain_map, neighbors_map))
+    wilds = _find_area("Water", terrain_map, neighbors_map) | _find_area(
+        "Mountains", terrain_map, neighbors_map
+    )
     for w in wilds:
         ret[w] = "Wild"
 
@@ -192,7 +252,9 @@ def _make_country_map(terrain_map: Dict[OffsetCoordinate, str], neighbors_map: D
         unassigned = {c for c, n in ret.items() if n == "Unassigned"}
         countries = Countries[:]
         random.shuffle(countries)
-        capitols = dict(zip(_pick_capitols(unassigned, terrain_map, len(countries)), countries))
+        capitols = dict(
+            zip(_pick_capitols(unassigned, terrain_map, len(countries)), countries)
+        )
 
         assignment = _assign_countries(unassigned, capitols, neighbors_map)
         score = _score_assignment(assignment)
@@ -210,7 +272,10 @@ def _make_country_map(terrain_map: Dict[OffsetCoordinate, str], neighbors_map: D
     return ret
 
 
-def _make_region_map(country_map: Dict[OffsetCoordinate, str], neighbors_map: Dict[OffsetCoordinate, Set[OffsetCoordinate]]) -> Dict[OffsetCoordinate, str]:
+def _make_region_map(
+    country_map: Dict[OffsetCoordinate, str],
+    neighbors_map: Dict[OffsetCoordinate, Set[OffsetCoordinate]],
+) -> Dict[OffsetCoordinate, str]:
     ret = {c: "Unassigned" for c in country_map}
 
     countries = set(country_map.values())
@@ -220,7 +285,11 @@ def _make_region_map(country_map: Dict[OffsetCoordinate, str], neighbors_map: Di
         best_assignment = None
 
         for _ in range(10):
-            unassigned = {c for c, n in ret.items() if n == "Unassigned" and country_map[c] == ctry}
+            unassigned = {
+                c
+                for c, n in ret.items()
+                if n == "Unassigned" and country_map[c] == ctry
+            }
             if ctry != "Wild":
                 regions = [str(i + 1) for i in range(6)]
                 capitols = dict(zip(random.sample(unassigned, len(regions)), regions))
@@ -249,12 +318,19 @@ def _make_region_map(country_map: Dict[OffsetCoordinate, str], neighbors_map: Di
     return ret
 
 
-def _find_area(area_type: str, terrain_map: Dict[OffsetCoordinate, str], neighbors_map: Dict[OffsetCoordinate, Set[OffsetCoordinate]]) -> Set[OffsetCoordinate]:
+def _find_area(
+    area_type: str,
+    terrain_map: Dict[OffsetCoordinate, str],
+    neighbors_map: Dict[OffsetCoordinate, Set[OffsetCoordinate]],
+) -> Set[OffsetCoordinate]:
     def type_neighbor_count(coord: OffsetCoordinate) -> int:
         return len([1 for ngh in neighbors_map[coord] if terrain_map[ngh] == area_type])
 
-    area_set = {coord for coord, ttype in terrain_map.items()
-        if ttype == area_type and type_neighbor_count(coord) >= 4}
+    area_set = {
+        coord
+        for coord, ttype in terrain_map.items()
+        if ttype == area_type and type_neighbor_count(coord) >= 4
+    }
 
     def non_area_neighbor_count(coord: OffsetCoordinate) -> int:
         return len([1 for ngh in neighbors_map[coord] if ngh not in area_set])
@@ -267,8 +343,9 @@ def _find_area(area_type: str, terrain_map: Dict[OffsetCoordinate, str], neighbo
                     continue
                 # we go based on non_area_neighbor rather than area_neighbor count
                 # to deal with being at the edge of the board
-                if ((terrain_map[ngh] == area_type and non_area_neighbor_count(ngh) <= 3) or
-                    (non_area_neighbor_count(ngh) <= 1)):
+                if (
+                    terrain_map[ngh] == area_type and non_area_neighbor_count(ngh) <= 3
+                ) or (non_area_neighbor_count(ngh) <= 1):
                     new_vals.add(ngh)
         if not new_vals:
             break
@@ -276,7 +353,10 @@ def _find_area(area_type: str, terrain_map: Dict[OffsetCoordinate, str], neighbo
     return area_set
 
 
-def _find_contiguous(unassigned: Set[OffsetCoordinate], neighbors_map: Dict[OffsetCoordinate, Set[OffsetCoordinate]]) -> List[Set[OffsetCoordinate]]:
+def _find_contiguous(
+    unassigned: Set[OffsetCoordinate],
+    neighbors_map: Dict[OffsetCoordinate, Set[OffsetCoordinate]],
+) -> List[Set[OffsetCoordinate]]:
     ret = []
     cpy = unassigned.copy()
     while cpy:
@@ -298,11 +378,19 @@ def _find_contiguous(unassigned: Set[OffsetCoordinate], neighbors_map: Dict[Offs
     return ret
 
 
-def _pick_capitols(unassigned: Set[OffsetCoordinate], terrain_map: Dict[OffsetCoordinate, str], cnt: int) -> List[OffsetCoordinate]:
+def _pick_capitols(
+    unassigned: Set[OffsetCoordinate],
+    terrain_map: Dict[OffsetCoordinate, str],
+    cnt: int,
+) -> List[OffsetCoordinate]:
     # pick relatively-separated cities to be the centers of the countries
     all_cities = sorted(
-        [CubeCoordinate.from_row_col(c.row, c.column) for c, t in terrain_map.items() if t == "City" and c in unassigned],
-        key=lambda c: (c.to_offset().row, c.to_offset().column)
+        [
+            CubeCoordinate.from_row_col(c.row, c.column)
+            for c, t in terrain_map.items()
+            if t == "City" and c in unassigned
+        ],
+        key=lambda c: (c.to_offset().row, c.to_offset().column),
     )
     cities = [random.choice(all_cities)]
     all_cities.remove(cities[0])
@@ -313,7 +401,11 @@ def _pick_capitols(unassigned: Set[OffsetCoordinate], terrain_map: Dict[OffsetCo
     return [c.to_offset() for c in cities]
 
 
-def _assign_countries(coords: Set[OffsetCoordinate], capitols: Dict[OffsetCoordinate, str], neighbors_map: Dict[OffsetCoordinate, Set[OffsetCoordinate]]) -> Dict[OffsetCoordinate, str]:
+def _assign_countries(
+    coords: Set[OffsetCoordinate],
+    capitols: Dict[OffsetCoordinate, str],
+    neighbors_map: Dict[OffsetCoordinate, Set[OffsetCoordinate]],
+) -> Dict[OffsetCoordinate, str]:
     ret = {coord: country for coord, country in capitols.items()}
     countries = {country: set() for country in capitols.values()}
     neighbors = {country: set() for country in capitols.values()}
@@ -364,5 +456,7 @@ def _score_assignment(assignment: Dict[OffsetCoordinate, str]) -> int:
     # same weight as the size, based on observed typical size and squareness
     # values
     squareness_score = -int(300 * sum(squarenesses) / len(squarenesses))
-    print(f"squarenesses: {list(f'{sq:.03f}' for sq in squarenesses)} score: {squareness_score}")
+    print(
+        f"squarenesses: {list(f'{sq:.03f}' for sq in squarenesses)} score: {squareness_score}"
+    )
     return size_score + squareness_score

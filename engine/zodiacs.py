@@ -2,8 +2,10 @@ from typing import Any, Dict, List
 
 from .storage import ValueStorageBase
 
+
 def load_zodiacs() -> List[str]:
     return ZodiacStorage.load()
+
 
 class ZodiacStorage(ValueStorageBase):
     TABLE_NAME = "zodiac"
