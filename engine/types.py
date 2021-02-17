@@ -183,6 +183,29 @@ class EncounterOutcome:
     new_job: Optional[EncounterSingleOutcome[str]]
 
 
+class HookType(Enum):
+    INIT_CARD_AGE = enum_auto()
+    INIT_TURNS = enum_auto()
+    MAX_HEALTH = enum_auto()
+    MAX_LUCK = enum_auto()
+    MAX_TABLEAU_SIZE = enum_auto()
+    SKILL_RANK = enum_auto()
+    SPEED = enum_auto()
+
+
+@dataclass(frozen=True)
+class Feat:
+    hook: HookType
+    value: int
+    param: Optional[str]
+
+
+@dataclass(frozen=True)
+class Emblem:
+    name: str
+    feats: List[Feat]
+
+
 @dataclass(frozen=True)
 class Character:
     name: str
@@ -201,6 +224,7 @@ class Character:
     speed: int
     tableau: Sequence[TableauCard]
     encounters: Sequence[Encounter]
+    emblems: Sequence[Emblem]
 
 
 @dataclass(frozen=True)

@@ -24,12 +24,15 @@ from picaro.server.api_types import (
     ChoiceType,
     Effect,
     EffectType,
+    Emblem,
     EncounterCheck,
     EncounterActions,
     EncounterOutcome,
     EncounterSingleOutcome,
     ErrorResponse,
     ErrorType,
+    Feat,
+    HookType,
     JobRequest,
     JobResponse,
     ResolveEncounterRequest,
@@ -217,6 +220,24 @@ class Client:
         if not self.args.all:
             print("(Use --all to see all skills)")
         print()
+        print("Emblems:")
+        for emblem in ch.emblems:
+            print(f"* {self._render_emblem(emblem)}")
+        if not ch.emblems:
+            print("* None")
+        print()
+
+    def _render_emblem(self, emblem: Emblem) -> str:
+        ret = emblem.name
+        if emblem.feats:
+            ret += f" ({','.join(self._render_feat(f) for f in emblem.feats)})"
+        return ret
+
+    def _render_feat(self, feat: Feat) -> str:
+        names = {
+            HookType.SPEED: "speed"
+        }
+        return f"{feat.value:+} {names.get(feat.hook, feat.hook.name)}"
 
     def play(self) -> None:
         while True:

@@ -3,7 +3,18 @@ import random
 from collections import defaultdict
 from dataclasses import dataclass
 from itertools import groupby
-from typing import Any, Dict, Generic, List, Optional, Sequence, Set, Tuple, TypeVar
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    TypeVar,
+)
 
 from .board import ActiveBoard as Board
 from .deck import load_deck
@@ -17,12 +28,15 @@ from .types import (
     TableauCard,
     Effect,
     EffectType,
+    Emblem,
     Encounter,
     EncounterActions,
     EncounterContextType,
     EncounterOutcome,
     EncounterSingleOutcome,
+    Feat,
     FullCard,
+    HookType,
     JobType,
     TemplateCard,
     Token,
@@ -33,26 +47,7 @@ class Party:
     def create_character(
         self, name: str, player_id: int, job_name: str, board: Board, location: str
     ) -> None:
-        ch = Character(
-            name=name,
-            player_id=player_id,
-            job_name=job_name,
-            skill_xp={},
-            health=0,
-            coins=0,
-            resources=0,
-            reputation=5,
-            quest=0,
-            remaining_turns=0,
-            luck=0,
-            tableau=[],
-            encounters=[],
-            job_deck=[],
-            travel_deck=[],
-            camp_deck=[],
-            acted_this_turn=False,
-        )
-        ch.health = ch.get_max_health()
+        ch = Character.create(name, player_id, job_name)
         board.add_token(Token(name=name, type="Character", location=location))
         return CharacterStorage.create(ch)
 
@@ -77,6 +72,7 @@ class Party:
             speed=ch.get_speed(),
             tableau=tuple(ch.tableau),
             encounters=tuple(ch.encounters),
+            emblems=tuple(ch.emblems),
         )
 
     def start_season(self, board: Board) -> None:
@@ -145,6 +141,18 @@ DRAW_HEX_CARD = TemplateCard(
 )
 
 
+def clamp(val: int, min: Optional[int] = None, max: Optional[int] = None) -> int:
+    if min is not None and val < min:
+        return min
+    elif max is not None and val > max:
+        return max
+    else:
+        return val
+
+
+ModTuple = Tuple[Optional[int], Optional[int], str]
+
+
 # This class is not frozen, and also not exposed externally - it needs to be loaded every time
 # it's used and saved at the end
 @dataclass
@@ -160,6 +168,7 @@ class Character:
     quest: int
     remaining_turns: int
     luck: int
+    emblems: Sequence[Emblem]
     tableau: List[TableauCard]
     encounters: List[Encounter]
     job_deck: List[FullCard]
@@ -167,49 +176,91 @@ class Character:
     camp_deck: List[FullCard]
     acted_this_turn: bool
 
+    @classmethod
+    def create(cls, name: str, player_id: int, job_name: str) -> "Character":
+        ch = Character(
+            name=name,
+            player_id=player_id,
+            job_name=job_name,
+            skill_xp={},
+            health=0,
+            coins=0,
+            resources=0,
+            reputation=5,
+            quest=0,
+            remaining_turns=0,
+            luck=0,
+            emblems=[],
+            tableau=[],
+            encounters=[],
+            job_deck=[],
+            travel_deck=[],
+            camp_deck=[],
+            acted_this_turn=False,
+        )
+        ch.health = ch.get_max_health()
+        return ch
+
     def get_init_turns(self) -> int:
-        return 20
+        return clamp(20 + self._calc_hook(HookType.INIT_TURNS), min=10, max=40)
 
     def get_max_luck(self) -> int:
-        return 5
+        return clamp(5 + self._calc_hook(HookType.MAX_LUCK), min=0)
 
     def get_max_tableau_size(self) -> int:
-        return 3
+        return clamp(3 + self._calc_hook(HookType.MAX_TABLEAU_SIZE), min=1)
 
-    def get_card_age(self) -> int:
-        return 3
+    def get_init_card_age(self) -> int:
+        return clamp(3 + self._calc_hook(HookType.INIT_CARD_AGE), min=1)
 
     def get_max_health(self) -> int:
-        return 20
+        return clamp(3 + self._calc_hook(HookType.MAX_HEALTH), min=1)
 
     def get_skill_rank(self, skill_name: str) -> int:
         # 20 xp for rank 1, 30 xp for rank 5, 25 xp for all others
         xp = self.skill_xp.get(skill_name, 0)
         if xp < 20:
-            return 0
+            base_rank = 0
         elif 20 <= xp < 45:
-            return 1
+            base_rank = 1
         elif 45 <= xp < 70:
-            return 2
+            base_rank = 2
         elif 70 <= xp < 95:
-            return 3
+            base_rank = 3
         elif 95 <= xp < 125:
-            return 4
+            base_rank = 4
         else:
-            return 5
+            base_rank = 5
+        return clamp(base_rank + self._calc_hook(HookType.SKILL_RANK, skill_name), min=0, max=6)
 
     def get_speed(self) -> int:
         job = load_job(self.job_name)
         if job.type == JobType.LACKEY:
             return 0
-        elif job.type == JobType.SOLO:
-            return 3
+
+        if job.type == JobType.SOLO:
+            base_speed = 3
         elif job.type == JobType.CAPTAIN:
-            return 2
+            base_speed = 2
         elif job.type == JobType.KING:
-            return 1
+            base_speed = 1
         else:
             raise Exception(f"Unknown job type: {job.type}")
+        return clamp(base_speed + self._calc_hook(HookType.SPEED), min=0)
+
+    def _calc_hook(self, hook_name: HookType, hook_param: Optional[str] = None) -> int:
+        tot = 0
+        for emblem in self.emblems:
+            for feat in emblem.feats:
+                if feat.hook == hook_name:
+                    param_match = (
+                        hook_param is None or
+                        feat.param is None or
+                        hook_param == feat.param
+                    )
+                    if param_match:
+                        tot += feat.value
+        return tot
 
     def start_season(self, board: Board) -> None:
         # leave the encounters queue alone, since there
@@ -233,7 +284,7 @@ class Character:
                 card = board.draw_hex_card(location, EncounterContextType.JOB)
 
             self.tableau.append(
-                TableauCard(card=card, location_name=location, age=self.get_card_age())
+                TableauCard(card=card, location_name=location, age=self.get_init_card_age())
             )
 
     def remove_tableau_card(self, card_id) -> TableauCard:
@@ -374,17 +425,6 @@ class Character:
         # we do it this way because we want, eg, to be able to overwrite reputation changes with
         # reputation set via job change (note that any 'set' overwrites previous comments, as well)
 
-        def simple_eff(eff_type, mods, val_fn):
-            for eff in (eff for eff in effects if eff.type == eff_type):
-                v = val_fn(eff.rank)
-                tup = (v, None, f"{v:+}")
-                if eff.param:
-                    mods[eff.param].append(tup)
-                else:
-                    mods.append(tup)
-
-        sum_til = lambda v: (v * v + v) // 2
-
         coins_mods = []
         rep_mods = []
         health_mods = []
@@ -394,149 +434,249 @@ class Character:
         resrc_mods = []
         speed_mods = []
         transport_mods = []
-        job_mods = None
+        job_mods = []
 
-        simple_eff(EffectType.GAIN_COINS, coins_mods, lambda rank: sum_til(rank))
-        simple_eff(EffectType.LOSE_COINS, coins_mods, lambda rank: -rank)
-        simple_eff(EffectType.GAIN_REPUTATION, rep_mods, lambda rank: sum_til(rank))
-        simple_eff(EffectType.LOSE_REPUTATION, rep_mods, lambda rank: -rank)
-        simple_eff(EffectType.GAIN_HEALING, health_mods, lambda rank: rank * 3)
-        simple_eff(EffectType.DAMAGE, health_mods, lambda rank: -sum_til(rank))
-        simple_eff(EffectType.GAIN_QUEST, quest_mods, lambda rank: rank)
-        simple_eff(EffectType.GAIN_XP, xp_mods, lambda rank: rank * 5)
-        simple_eff(EffectType.CHECK_FAILURE, xp_mods, lambda rank: rank)
-        simple_eff(EffectType.GAIN_RESOURCES, resrc_mods, lambda rank: rank - 1)
-        simple_eff(EffectType.LOSE_RESOURCES, resrc_mods, lambda rank: -rank)
-        simple_eff(EffectType.GAIN_TURNS, turn_mods, lambda rank: rank)
-        simple_eff(EffectType.LOSE_TURNS, turn_mods, lambda rank: -rank)
-        simple_eff(EffectType.LOSE_SPEED, speed_mods, lambda rank: -rank)
-        simple_eff(EffectType.TRANSPORT, transport_mods, lambda rank: rank * 5)
-        for eff in (eff for eff in effects if eff.type == EffectType.DISRUPT_JOB):
-            msg, new_job = self._job_check(eff.rank)
+        sum_til = lambda v: (v * v + v) // 2
+
+        self._accumulate_mods(
+            effects, EffectType.GAIN_COINS, coins_mods, lambda rank: sum_til(rank)
+        )
+        self._accumulate_mods(
+            effects, EffectType.LOSE_COINS, coins_mods, lambda rank: -rank
+        )
+        self._accumulate_mods(
+            effects, EffectType.GAIN_REPUTATION, rep_mods, lambda rank: sum_til(rank)
+        )
+        self._accumulate_mods(
+            effects, EffectType.LOSE_REPUTATION, rep_mods, lambda rank: -rank
+        )
+        self._accumulate_mods(
+            effects, EffectType.GAIN_HEALING, health_mods, lambda rank: rank * 3
+        )
+        self._accumulate_mods(
+            effects, EffectType.DAMAGE, health_mods, lambda rank: -sum_til(rank)
+        )
+        self._accumulate_mods(
+            effects, EffectType.GAIN_QUEST, quest_mods, lambda rank: rank
+        )
+        self._accumulate_mods_dict(
+            effects, EffectType.GAIN_XP, xp_mods, lambda rank: rank * 5
+        )
+        self._accumulate_mods_dict(
+            effects, EffectType.CHECK_FAILURE, xp_mods, lambda rank: rank
+        )
+        self._accumulate_mods(
+            effects, EffectType.GAIN_RESOURCES, resrc_mods, lambda rank: rank - 1
+        )
+        self._accumulate_mods(
+            effects, EffectType.LOSE_RESOURCES, resrc_mods, lambda rank: -rank
+        )
+        self._accumulate_mods(
+            effects, EffectType.GAIN_TURNS, turn_mods, lambda rank: rank
+        )
+        self._accumulate_mods(
+            effects, EffectType.LOSE_TURNS, turn_mods, lambda rank: -rank
+        )
+        self._accumulate_mods(
+            effects, EffectType.LOSE_SPEED, speed_mods, lambda rank: -rank
+        )
+        self._accumulate_mods(
+            effects, EffectType.TRANSPORT, transport_mods, lambda rank: rank * 5
+        )
+        self._accumulate_mods_job_check(effects, job_mods, transport_mods, rep_mods)
+
+        return EncounterOutcome(
+            coins=self._make_single_outcome(coins_mods, "coins"),
+            reputation=self._make_single_outcome(rep_mods, "reputation"),
+            xp=self._make_xp_outcome(xp_mods),
+            health=self._make_single_outcome(
+                health_mods, "health", max_val=self.get_max_health()
+            ),
+            resources=self._make_single_outcome(resrc_mods, "resources"),
+            quest=self._make_single_outcome(quest_mods, "quest"),
+            turns=self._make_single_outcome(turn_mods, "remaining_turns"),
+            transport_location=self._make_transport_outcome(
+                transport_mods, speed_mods, context_type, context_values, board
+            ),
+            new_job=self._make_job_outcome(job_mods, board),
+        )
+
+    # for simple effects, just append their modifiers to a list
+    def _accumulate_mods(
+        self,
+        effects: List[Effect],
+        effect_type: EffectType,
+        mods: List[ModTuple],
+        val_fn: Callable[[int], int],
+    ) -> None:
+        for effect in effects:
+            if effect.type != effect_type:
+                continue
+            val = val_fn(effect.rank)
+            tup = (val, None, f"{val:+}")
+            if effect.param:
+                raise Exception(
+                    f"Don't know how to handle param {param} here for {effect_type}"
+                )
+            else:
+                mods.append(tup)
+
+    def _accumulate_mods_dict(
+        self,
+        effects: List[Effect],
+        effect_type: EffectType,
+        mods: Dict[str, List[ModTuple]],
+        val_fn: Callable[[int], int],
+    ) -> None:
+        for effect in effects:
+            if effect.type != effect_type:
+                continue
+            val = val_fn(effect.rank)
+            tup = (val, None, f"{val:+}")
+            if effect.param:
+                mods[effect.param].append(tup)
+            else:
+                raise Exception(f"Expected param here for {effect_type}")
+
+    def _accumulate_mods_job_check(
+        self,
+        effects: List[Effect],
+        job_mods: List[Tuple[str, str]],
+        transport_mods: List[ModTuple],
+        rep_mods: List[ModTuple],
+    ) -> None:
+        for effect in effects:
+            if effect.type != EffectType.DISRUPT_JOB:
+                continue
+            if effect.param:
+                raise Exception(
+                    f"Don't know how to handle param {param} here for DISRUPT_JOB"
+                )
+
+            msg, new_job = self._job_check(effect.rank)
             if new_job:
-                job_mods = [(new_job, msg)]
+                job_mods.clear()
+                job_mods.append((new_job, msg))
+                # also move some (more)
+                transport_mods.append((3, None, "+3"))
                 # blow away earlier rep mods:
-                rep_mods = [(None, 3, "set to 3 for job switch")]
-                transport_mods = [(3, None, "+3")]
+                rep_mods.clear()
+                rep_mods.append((None, 3, "set to 3 for job switch"))
             else:
                 rep_mods.append((-2, None, "-2 from job challenge: " + msg))
 
-        def make_single(mods, field, max_val=None, min_val=0):
-            if not mods:
-                return None
-            old_val = getattr(self, field)
+    def _make_single_outcome(
+        self, mods: List[ModTuple], field: str, max_val=None, min_val=0
+    ) -> Optional[EncounterSingleOutcome[int]]:
+        if not mods:
+            return None
+        old_val = getattr(self, field)
+        new_val = old_val
+        msgs = []
+        for mod, flat, msg in mods:
+            if mod is not None:
+                new_val += mod
+            if flat is not None:
+                new_val = flat
+            if msg is not None:
+                msgs.append(msg)
+        if max_val is not None and new_val > max_val:
+            new_val = max_val
+        if new_val < min_val:
+            new_val = min_val
+        setattr(self, field, new_val)
+        return EncounterSingleOutcome[int](
+            old_val=old_val, new_val=new_val, comments=msgs
+        )
+
+    def _make_xp_outcome(
+        self, mods: List[ModTuple]
+    ) -> Dict[str, EncounterSingleOutcome[int]]:
+        if not mods:
+            return {}
+        ret = {}
+        prop = self.skill_xp
+        for key in mods:
+            old_val = prop.get(key, 0)
+            old_rank = self.get_skill_rank(key)
             new_val = old_val
             msgs = []
-            for mod, flat, msg in mods:
+            for mod, flat, msg in mods[key]:
                 if mod is not None:
                     new_val += mod
                 if flat is not None:
                     new_val = flat
                 if msg is not None:
                     msgs.append(msg)
-            if max_val is not None and new_val > max_val:
-                new_val = max_val
-            if new_val < min_val:
-                new_val = min_val
-            setattr(self, field, new_val)
-            return EncounterSingleOutcome[int](
+            prop[key] = new_val
+            new_rank = self.get_skill_rank(key)
+            if new_rank != old_rank:
+                msgs.append(f"new rank is {new_rank}")
+            ret[key] = EncounterSingleOutcome[int](
                 old_val=old_val, new_val=new_val, comments=msgs
             )
+        return ret
 
-        def make_xp(mods):
-            if not mods:
-                return {}
-            ret = {}
-            prop = self.skill_xp
-            for key in mods:
-                old_val = prop.get(key, 0)
-                old_rank = self.get_skill_rank(key)
-                new_val = old_val
-                msgs = []
-                for mod, flat, msg in mods[key]:
-                    if mod is not None:
-                        new_val += mod
-                    if flat is not None:
-                        new_val = flat
-                    if msg is not None:
-                        msgs.append(msg)
-                prop[key] = new_val
-                new_rank = self.get_skill_rank(key)
-                if new_rank != old_rank:
-                    msgs.append(f"new rank is {new_rank}")
-                ret[key] = EncounterSingleOutcome[int](
-                    old_val=old_val, new_val=new_val, comments=msgs
-                )
-            return ret
-
-        def make_transport(transport_mods, speed_mods):
-            new_location: Optional[str] = None
-            if transport_mods:
-                tp = 0
-                msgs = []
-                for mod, flat, msg in transport_mods:
-                    if mod is not None:
-                        tp += mod
-                    if flat is not None:
-                        tp = flat
-                    if msg is not None:
-                        msgs.append(msg)
-                if tp <= 0:
-                    return None
-                new_location = random.choice(
-                    board.find_hexes_near_token(self.name, tp - 2, tp + 2)
-                )
-            elif speed_mods and context_type == EncounterContextType.TRAVEL:
-                move_idx = len(context_values) - 1
-                msgs = []
-                for mod, flat, msg in speed_mods:
-                    if mod is not None:
-                        move_idx += mod
-                    if flat is not None:
-                        move_idx = flat
-                    if msg is not None:
-                        msgs.append(msg)
-                if move_idx < len(context_values) - 1:
-                    new_location = context_values[max(move_idx, 0)]
-            if not new_location:
-                return None
-            old_loc = board.get_token(self.name).location
-            board.move_token(self.name, new_location)
-            return EncounterSingleOutcome[str](
-                old_val=old_loc, new_val=new_location, comments=msgs
-            )
-
-        def make_job(mods):
-            if not mods:
-                return None
-            new_job = None
+    def _make_transport_outcome(
+        self, transport_mods: List[ModTuple], speed_mods: List[ModTuple], context_type: EncounterContextType, context_values: Optional[Sequence[str]], board: Board
+    ) -> Optional[EncounterSingleOutcome[str]]:
+        new_location: Optional[str] = None
+        if transport_mods:
+            tp = 0
             msgs = []
-            for jn, msg in mods:
-                if jn is not None:
-                    new_job = jn
+            for mod, flat, msg in transport_mods:
+                if mod is not None:
+                    tp += mod
+                if flat is not None:
+                    tp = flat
                 if msg is not None:
                     msgs.append(msg)
-            if not new_job:
+            if tp <= 0:
                 return None
-            old_job = self.job_name
-            self.job_name = new_job
-            self.tableau = []
-            self.job_deck = []
-            self.refill_tableau(board)
-            return EncounterSingleOutcome[str](
-                old_val=old_job, new_val=new_job, comments=msgs
+            new_location = random.choice(
+                board.find_hexes_near_token(self.name, tp - 2, tp + 2)
             )
+        elif speed_mods and context_type == EncounterContextType.TRAVEL:
+            move_idx = len(context_values) - 1
+            msgs = []
+            for mod, flat, msg in speed_mods:
+                if mod is not None:
+                    move_idx += mod
+                if flat is not None:
+                    move_idx = flat
+                if msg is not None:
+                    msgs.append(msg)
+            if move_idx < len(context_values) - 1:
+                new_location = context_values[max(move_idx, 0)]
+        if not new_location:
+            return None
+        old_loc = board.get_token(self.name).location
+        board.move_token(self.name, new_location)
+        return EncounterSingleOutcome[str](
+            old_val=old_loc, new_val=new_location, comments=msgs
+        )
 
-        return EncounterOutcome(
-            coins=make_single(coins_mods, "coins"),
-            reputation=make_single(rep_mods, "reputation"),
-            xp=make_xp(xp_mods),
-            health=make_single(health_mods, "health", max_val=self.get_max_health()),
-            resources=make_single(resrc_mods, "resources"),
-            quest=make_single(quest_mods, "quest"),
-            turns=make_single(turn_mods, "remaining_turns"),
-            transport_location=make_transport(transport_mods, speed_mods),
-            new_job=make_job(job_mods),
+    def _make_job_outcome(
+        self, mods: List[Tuple[str, str]], board: Board
+    ) -> Optional[EncounterSingleOutcome[str]]:
+        if not mods:
+            return None
+        new_job = None
+        msgs = []
+        for jn, msg in mods:
+            if jn is not None:
+                new_job = jn
+            if msg is not None:
+                msgs.append(msg)
+        if not new_job:
+            return None
+        old_job = self.job_name
+        self.job_name = new_job
+        self.tableau = []
+        self.job_deck = []
+        self.refill_tableau(board)
+        return EncounterSingleOutcome[str](
+            old_val=old_job, new_val=new_job, comments=msgs
         )
 
     def finish_turn(self, board: Board) -> None:

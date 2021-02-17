@@ -11,12 +11,15 @@ from picaro.engine.types import (
     TableauCard,
     Effect,
     EffectType,
+    Emblem,
     EncounterCheck,
     Encounter as engine_Encounter,
     EncounterActions,
     EncounterOutcome,
     EncounterSingleOutcome,
+    Feat,
     Hex,
+    HookType,
     Terrains,
     Token,
     TokenTypes,
@@ -94,6 +97,7 @@ class Character:
     speed: int
     tableau: Sequence[CardPreview]
     encounters: Sequence[Encounter]
+    emblems: Sequence[Emblem]
 
     @classmethod
     def from_engine_Character(cls, ch: engine_Character) -> "Character":
@@ -116,6 +120,7 @@ class Character:
             encounters=tuple(
                 Encounter.from_engine_Encounter(enc) for enc in ch.encounters
             ),
+            emblems=ch.emblems,
         )
 
 

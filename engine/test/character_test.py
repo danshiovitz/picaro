@@ -6,11 +6,12 @@ sys.path.append(str(pathlib.Path(__file__).absolute().parent.parent.parent.paren
 from dataclasses import dataclass
 from typing import Dict, List, cast
 from unittest import TestCase, main
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from picaro.engine.board import ActiveBoard
 from picaro.engine.character import Character
-from picaro.engine.types import Effect, EffectType, EncounterContextType
+from picaro.engine.job import Job
+from picaro.engine.types import Effect, EffectType, Emblem, EncounterContextType, Feat, HookType, JobType
 
 
 class CharacterTest(TestCase):
@@ -53,6 +54,14 @@ class CharacterTest(TestCase):
                 ch.get_skill_rank("Foo"), rank, f"Expected rank={rank} for xp={xp}"
             )
 
+        ch.skill_xp["Foo"] = 70
+        emblem = Emblem(name="Foo Boost", feats=[Feat(hook=HookType.SKILL_RANK, param="Foo", value=2)])
+        ch.emblems.append(emblem)
+        self.assertEqual(ch.get_skill_rank("Foo"), 5)
+        emblem = Emblem(name="Generic Boost", feats=[Feat(hook=HookType.SKILL_RANK, param=None, value=2)])
+        ch.emblems.append(emblem)
+        self.assertEqual(ch.get_skill_rank("Foo"), 6)  # capped at 6
+
     def test_apply_effect_gain_coins(self) -> None:
         ch = self._make_ch()
         board = self._make_board()
@@ -72,29 +81,49 @@ class CharacterTest(TestCase):
         self.assertEqual(outcome.coins.old_val, 4)
         self.assertEqual(outcome.coins.new_val, 14)
 
+    @patch("picaro.engine.character.load_job")
+    def test_speed_hook(self, load_job_mock: Mock) -> None:
+        ch = self._make_ch()
+        load_job_mock.return_value = self._make_job()
+        self.assertEqual(ch.get_speed(), 3)
+        load_job_mock.assert_called()
+
+        emblem = Emblem(name="Speed Boost", feats=[Feat(hook=HookType.SPEED, param=None, value=2)])
+        ch.emblems.append(emblem)
+        self.assertEqual(ch.get_speed(), 5)
+
+        emblem = Emblem(name="Speed Penalty", feats=[Feat(hook=HookType.SPEED, param=None, value=-4)])
+        ch.emblems.append(emblem)
+        self.assertEqual(ch.get_speed(), 1)
+
+        emblem = Emblem(name="Speed Penalty", feats=[Feat(hook=HookType.SPEED, param=None, value=-3)])
+        ch.emblems.append(emblem)
+        self.assertEqual(ch.get_speed(), 0)
+
+        ch.emblems.pop()
+        ch.emblems.pop()
+        self.assertEqual(ch.get_speed(), 5)
+
+        load_job_mock.return_value = self._make_job(type=JobType.LACKEY)
+        self.assertEqual(ch.get_speed(), 0)
+
     def _make_ch(self) -> Character:
-        return Character(
-            name="Test",
-            player_id=100,
-            job_name="Tester",
-            skill_xp={},
-            health=20,
-            coins=0,
-            resources=0,
-            reputation=5,
-            quest=0,
-            remaining_turns=0,
-            luck=0,
-            tableau=[],
-            encounters=[],
-            job_deck=[],
-            travel_deck=[],
-            camp_deck=[],
-            acted_this_turn=False,
-        )
+        return Character.create(name="Test", player_id=100, job_name="Tester")
 
     def _make_board(self) -> ActiveBoard:
         return cast(ActiveBoard, Mock(spec=ActiveBoard))
+
+    def _make_job(self, **kwargs) -> Job:
+        defaults = {
+            "name": "Tester",
+            "type": JobType.SOLO,
+            "rank": 2,
+            "promotions": [],
+            "deck_name": "Tester",
+            "encounter_distances": [0, 1, 2, 3],
+        }
+        defaults.update(kwargs)
+        return Job(**defaults)
 
 
 if __name__ == "__main__":
