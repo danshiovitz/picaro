@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from string import ascii_lowercase
 from typing import Generic, List, Sequence, Tuple, TypeVar
 
+from .exceptions import IllegalMoveException
 from .skills import load_skills
 from .storage import ObjectStorageBase
 from .types import (
@@ -17,7 +18,7 @@ from .zodiacs import load_zodiacs
 
 
 @dataclass(frozen=True)
-class EncounterDeck:
+class TemplateDeck:
     name: str
     templates: Sequence[TemplateCard]
     base_skills: Sequence[str]
@@ -166,8 +167,8 @@ class EncounterDeck:
         return difficulty * 2 + 1
 
 
-def load_deck(deck_name: str) -> EncounterDeck:
-    return DeckStorage.load_by_name(deck_name)
+def load_deck(deck_name: str) -> TemplateDeck:
+    return TemplateDeckStorage.load_by_name(deck_name)
 
 
 class TemplateCardStorage(ObjectStorageBase[TemplateCard]):
@@ -183,23 +184,23 @@ class TemplateCardStorage(ObjectStorageBase[TemplateCard]):
     def load_by_name(cls, name) -> TemplateCard:
         cards = cls._select_helper(["name = :name"], {"name": name})
         if not cards:
-            raise Exception(f"No such card: {name}")
+            raise IllegalMoveException(f"No such card: {name}")
         return cards[0]
 
 
-class DeckStorage(ObjectStorageBase[EncounterDeck]):
+class TemplateDeckStorage(ObjectStorageBase[TemplateDeck]):
     TABLE_NAME = "template_deck"
-    TYPE = EncounterDeck
+    TYPE = TemplateDeck
     PRIMARY_KEY = "name"
     SUBCLASSES = {"template_cards": TemplateCardStorage}
 
     @classmethod
-    def load(cls) -> List[EncounterDeck]:
+    def load(cls) -> List[TemplateDeck]:
         return cls._select_helper([], {})
 
     @classmethod
-    def load_by_name(cls, name) -> EncounterDeck:
+    def load_by_name(cls, name) -> TemplateDeck:
         decks = cls._select_helper(["name = :name"], {"name": name})
         if not decks:
-            raise Exception(f"No such deck: {name}")
+            raise IllegalMoveException(f"No such deck: {name}")
         return decks[0]

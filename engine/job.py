@@ -3,7 +3,8 @@ import json
 from dataclasses import dataclass
 from typing import Any, Dict, List, Sequence, Tuple
 
-from .deck import EncounterDeck, load_deck
+from .deck import load_deck
+from .exceptions import IllegalMoveException
 from .storage import ObjectStorageBase
 from .types import EncounterContextType, Hex, FullCard, JobType, TemplateCard
 
@@ -50,5 +51,5 @@ class JobsStorage(ObjectStorageBase[Job]):
     def load_by_name(cls, name) -> Job:
         jobs = cls._select_helper(["name = :name"], {"name": name})
         if not jobs:
-            raise Exception(f"No such job: {name}")
+            raise IllegalMoveException(f"No such job: {name}")
         return jobs[0]

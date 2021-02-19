@@ -9,7 +9,7 @@ from typing import Callable, Dict, List, Set
 from picaro.common.hexmap.types import CubeCoordinate, OffsetCoordinate
 from picaro.common.hexmap.utils import calc_offset_neighbor_map
 
-from .types import Countries, Hex, Terrains
+from .types import Hex, Terrains
 
 # generation code from https://welshpiper.com/hex-based-campaign-design-part-1/
 @dataclass(frozen=True)
@@ -66,6 +66,18 @@ TRANSITIONS = {
 }
 
 
+Countries = [
+    "Alpha",
+    "Beta",
+    "Gamma",
+    "Delta",
+    "Epsilon",
+    "Zeta",
+    "Theta",
+    "Iota",
+]
+
+
 def generate(
     num_rows: int, num_columns: int, starting_terrain: Dict[OffsetCoordinate, str]
 ) -> List[Hex]:
@@ -99,6 +111,7 @@ def generate(
             terrain=terrain[coord],
             country=random.choice(Countries),
             region=str(random.choice(range(6)) + 1),
+            danger=1,
         )
 
     return [make_hex(k) for k in terrain]
@@ -145,6 +158,7 @@ def generate_from_mini(
             terrain=terrain[coord],
             country=country_map[coord],
             region=region_map[coord],
+            danger=2,
         )
 
     return [make_hex(k) for k in terrain]
@@ -295,6 +309,9 @@ def _make_region_map(
             }
             if ctry != "Wild":
                 regions = [str(i + 1) for i in range(6)]
+                if len(unassigned) <= len(regions) * 2:
+                    print(f"Too few unassigned items: {len(unassigned)}")
+                    continue
                 capitols = dict(zip(random.sample(unassigned, len(regions)), regions))
             else:
                 groups = _find_contiguous(unassigned, neighbors_map)
@@ -444,7 +461,9 @@ def _assign_countries(
     return ret
 
 
-def _score_assignment(assignment: Dict[OffsetCoordinate, str]) -> int:
+def _score_assignment(
+    assignment: Dict[OffsetCoordinate, str], verbose: bool = False
+) -> int:
     countries: Dict[str, Set[OffsetCoordinate]] = defaultdict(set)
     for coord, cty in assignment.items():
         countries[cty].add(coord)
@@ -452,7 +471,8 @@ def _score_assignment(assignment: Dict[OffsetCoordinate, str]) -> int:
     max_size = max(len(coords) for coords in countries.values())
     # better to have a smaller diff between min and max size
     size_score = -(max_size - min_size)
-    print(f"max size {max_size}, min size {min_size}, size score: {size_score}")
+    if verbose:
+        print(f"max size {max_size}, min size {min_size}, size score: {size_score}")
 
     def squareness(cc: Set[OffsetCoordinate]) -> float:
         min_row = min(c.row for c in cc)
@@ -466,7 +486,8 @@ def _score_assignment(assignment: Dict[OffsetCoordinate, str]) -> int:
     # same weight as the size, based on observed typical size and squareness
     # values
     squareness_score = -int(300 * sum(squarenesses) / len(squarenesses))  # type: ignore
-    print(
-        f"squarenesses: {list(f'{sq:.03f}' for sq in squarenesses)} score: {squareness_score}"
-    )
+    if verbose:
+        print(
+            f"squarenesses: {list(f'{sq:.03f}' for sq in squarenesses)} score: {squareness_score}"
+        )
     return size_score + squareness_score

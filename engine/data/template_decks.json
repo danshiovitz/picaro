@@ -9,9 +9,7 @@
         "desc": "...",
         "skills": ["Shoot", "Speed", "Command"],
         "rewards": ["GAIN_COINS", "GAIN_RESOURCES"],
-        "penalties": ["DAMAGE", "LOSE_REPUTATION"],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": ["DAMAGE", "LOSE_REPUTATION"]
       },
       {
         "copies": 2,
@@ -19,9 +17,7 @@
         "desc": "...",
         "skills": ["Observation", "Climb", "Appraisal"],
         "rewards": ["GAIN_XP", "GAIN_REPUTATION"],
-        "penalties": ["DAMAGE", "TRANSPORT"],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": ["DAMAGE", "TRANSPORT"]
       },
       {
         "copies": 2,
@@ -29,9 +25,7 @@
         "desc": "...",
         "skills": ["Stealth", "Formation Fighting", "Speed"],
         "rewards": ["GAIN_COINS", "GAIN_REPUTATION"],
-        "penalties": ["DAMAGE", "DISRUPT_JOB"],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": ["DAMAGE", "DISRUPT_JOB"]
       },
       {
         "copies": 1,
@@ -39,9 +33,7 @@
         "desc": "...",
         "skills": ["Might", "Carousing", "Debate"],
         "rewards": ["GAIN_RESOURCES", "GAIN_QUEST"],
-        "penalties": ["LOSE_RESOURCES", "LOSE_REPUTATION"],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": ["LOSE_RESOURCES", "LOSE_REPUTATION"]
       },
       {
         "copies": 1,
@@ -49,9 +41,7 @@
         "desc": "...",
         "skills": ["Speed", "Shoot", "Observation"],
         "rewards": ["GAIN_XP", "GAIN_RESOURCES"],
-        "penalties": ["DAMAGE", "LOSE_REPUTATION"],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": ["DAMAGE", "LOSE_REPUTATION"]
       },
       {
         "copies": 1,
@@ -59,9 +49,7 @@
         "desc": "...",
         "skills": ["Shoot", "Animal Training", "Ride"],
         "rewards": ["GAIN_HEALING", "GAIN_REPUTATION"],
-        "penalties": ["DAMAGE", "LOSE_COINS"],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": ["DAMAGE", "LOSE_COINS"]
       },
       {
         "copies": 1,
@@ -69,9 +57,7 @@
         "desc": "...",
         "skills": ["Carousing", "Charm", "Acrobatics"],
         "rewards": ["GAIN_COINS", "GAIN_HEALING"],
-        "penalties": ["NOTHING", "LOSE_COINS"],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": ["NOTHING", "LOSE_COINS"]
       }
     ]
   },
@@ -85,9 +71,7 @@
         "desc": "...",
         "skills": ["Carousing", "Observation", "Doctor"],
         "rewards": ["GAIN_COINS", "GAIN_HEALING"],
-        "penalties": ["DAMAGE", "LOSE_COINS"],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": ["DAMAGE", "LOSE_COINS"]
       },
       {
         "copies": 2,
@@ -95,9 +79,7 @@
         "desc": "...",
         "skills": ["Navigation", "Endurance", "Might"],
         "rewards": ["GAIN_XP", "NOTHING"],
-        "penalties": ["DAMAGE", "LOSE_REPUTATION"],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": ["DAMAGE", "LOSE_REPUTATION"]
       },
       {
         "copies": 2,
@@ -105,9 +87,7 @@
         "desc": "...",
         "skills": ["Charm", "Stealth", "Animal Training"],
         "rewards": ["GAIN_COINS", "GAIN_RESOURCES"],
-        "penalties": ["DAMAGE", "LOSE_RESOURCES"],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": ["DAMAGE", "LOSE_RESOURCES"]
       },
       {
         "copies": 2,
@@ -115,9 +95,7 @@
         "desc": "...",
         "skills": ["Endurance", "Endurance", "Desert Lore"],
         "rewards": ["GAIN_COINS", "GAIN_RESOURCES"],
-        "penalties": ["DAMAGE", "LOSE_REPUTATION"],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": ["DAMAGE", "LOSE_REPUTATION"]
       },
       {
         "copies": 2,
@@ -125,9 +103,7 @@
         "desc": "...",
         "skills": ["Spirit Binding", "Navigation", "Mesmerism"],
         "rewards": ["GAIN_QUEST", "GAIN_XP"],
-        "penalties": ["DAMAGE", "DISRUPT_JOB"],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": ["DAMAGE", "DISRUPT_JOB"]
       },
       {
         "copies": 2,
@@ -135,9 +111,7 @@
         "desc": "...",
         "skills": ["Observation", "Architecture", "Mesmerism"],
         "rewards": ["GAIN_COINS", "NOTHING"],
-        "penalties": ["TRANSPORT", "LOSE_REPUTATION"],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": ["TRANSPORT", "LOSE_REPUTATION"]
       }
     ]
   },
@@ -151,9 +125,7 @@
         "desc": "...",
         "skills": ["Acrobatics", "Throw", "Navigation"],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -161,9 +133,7 @@
         "desc": "...",
         "skills": ["Might", "Speed", "Acrobatics"],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -171,9 +141,7 @@
         "desc": "...",
         "skills": ["Spirit Binding", "Research", "Mechanisms"],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -181,9 +149,7 @@
         "desc": "...",
         "skills": ["Debate", "Pickpocket", "Might"],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -191,9 +157,7 @@
         "desc": "...",
         "skills": ["Architecture", "Navigation", "Thaumaturgy"],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -201,9 +165,7 @@
         "desc": "...",
         "skills": ["Endurance", "Acrobatics", "Mesmerism"],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       }
     ]
   },
@@ -217,9 +179,7 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -227,9 +187,7 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -237,9 +195,7 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -247,9 +203,7 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -257,9 +211,7 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -267,9 +219,7 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       }
     ]
   },
@@ -283,9 +233,7 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -293,9 +241,7 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -303,9 +249,7 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -313,9 +257,7 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -323,9 +265,7 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -333,9 +273,7 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       }
     ]
   },
@@ -349,9 +287,7 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -359,9 +295,7 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -369,9 +303,7 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -379,9 +311,7 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -389,9 +319,7 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       },
       {
         "copies": 2,
@@ -399,9 +327,7 @@
         "desc": "...",
         "skills": [],
         "rewards": [],
-        "penalties": [],
-        "choice_type": "NONE",
-        "choices": []
+        "penalties": []
       }
     ]
   },
@@ -413,9 +339,6 @@
         "copies": 4,
         "name": "Rest and Relaxation",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": [],
         "choice_type": "REQUIRED",
         "choices": [
           [
@@ -429,44 +352,6 @@
     "name": "Travel",
     "base_skills": [],
     "templates": [
-      {
-        "copies": 9,
-        "name": "Straightforward Trip",
-        "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": [],
-        "choice_type": "REQUIRED",
-        "choices": []
-      },
-      {
-        "copies": 2,
-        "name": "Faster Than Expected",
-        "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": [],
-        "choice_type": "REQUIRED",
-        "choices": [
-          [
-            {"type": "GAIN_TURNS", "rank": 1, "param": null}
-          ]
-        ]
-      },
-      {
-        "copies": 1,
-        "name": "Difficult Journey",
-        "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": [],
-        "choice_type": "REQUIRED",
-        "choices": [
-          [
-            {"type": "LOSE_TURNS", "rank": 1, "param": null}
-          ]
-        ]
-      }
     ]
   }
 ]

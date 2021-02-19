@@ -11,6 +11,8 @@ from .api_types import (
     CampRequest,
     CampResponse,
     Character,
+    EndTurnRequest,
+    EndTurnResponse,
     ErrorResponse,
     ErrorType,
     ResolveEncounterRequest,
@@ -64,9 +66,7 @@ class Server:
     @wrap_errors()
     def get_character(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
-        return Character.from_engine_Character(
-            self._engine.get_character(player_id, game_id, character_name)
-        )
+        return self._engine.get_character(player_id, game_id, character_name)
 
     @wrap_errors()
     def job_action(self, game_id: int, character_name: str) -> Any:
@@ -79,14 +79,14 @@ class Server:
     def travel_action(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(TravelRequest)
-        self._engine.do_travel(player_id, game_id, character_name, req.route)
+        self._engine.travel(player_id, game_id, character_name, req.step)
         return TravelResponse()
 
     @wrap_errors()
     def camp_action(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(CampRequest)
-        self._engine.do_camp(player_id, game_id, character_name)
+        self._engine.camp(player_id, game_id, character_name)
         if not req.rest:
             raise BadStateException("Rest is false!")
         else:
@@ -96,10 +96,17 @@ class Server:
     def resolve_encounter_action(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(ResolveEncounterRequest)
-        outcome = self._engine.do_resolve_encounter(
+        outcome = self._engine.resolve_encounter(
             player_id, game_id, character_name, req.actions
         )
         return ResolveEncounterResponse(outcome=outcome)
+
+    @wrap_errors()
+    def end_turn_action(self, game_id: int, character_name: str) -> Any:
+        player_id = self._extract_player_id()
+        req = self._read_body(EndTurnRequest)
+        self._engine.end_turn(player_id, game_id, character_name)
+        return EndTurnResponse()
 
     def run(self) -> None:
         bottle.route(path="/game/<game_id>/board", callback=self.get_board)
@@ -126,6 +133,11 @@ class Server:
             path="/game/<game_id>/play/<character_name>/resolve_encounter",
             method="POST",
             callback=self.resolve_encounter_action,
+        )
+        bottle.route(
+            path="/game/<game_id>/play/<character_name>/end_turn",
+            method="POST",
+            callback=self.end_turn_action,
         )
         bottle.run(host="localhost", port=8080, debug=True)  # type: ignore
 

@@ -1,16 +1,16 @@
 import dataclasses
 import random
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set, Tuple
 
 from picaro.common.hexmap.types import CubeCoordinate
 
-from .deck import EncounterDeck, load_deck
+from .deck import load_deck
 from .exceptions import BadStateException, IllegalMoveException
 from .generate import generate_from_mini
+from .snapshot import Board as snapshot_Board
 from .storage import ObjectStorageBase
 from .types import (
-    Board as BoardSnapshot,
     EncounterContextType,
     FullCard,
     Hex as HexSnapshot,
@@ -24,10 +24,10 @@ from .types import (
 class ActiveBoard:
     NOWHERE = "Nowhere"
 
-    def get_snapshot(self) -> BoardSnapshot:
+    def get_snapshot(self) -> snapshot_Board:
         hexes = tuple(self._translate_hex(hx) for hx in HexStorage.load())
         tokens = tuple(TokenStorage.load())
-        return BoardSnapshot(hexes=hexes, tokens=tokens)
+        return snapshot_Board(hexes=hexes, tokens=tokens)
 
     def add_token(self, token: Token) -> None:
         names = {t.name for t in TokenStorage.load()}
@@ -63,6 +63,9 @@ class ActiveBoard:
     def get_token(self, token_name: str) -> Token:
         return TokenStorage.load_by_name(token_name)
 
+    def get_hex(self, location: str) -> HexSnapshot:
+        return self._translate_hex(HexStorage.load_by_name(location))
+
     def find_hexes_near_token(
         self, token_name: str, min_distance: int, max_distance: int
     ) -> List[str]:
@@ -75,8 +78,23 @@ class ActiveBoard:
         )
         return [hx.name for hx in nearby]
 
-    def get_hex(self, location: str) -> HexSnapshot:
-        return self._translate_hex(HexStorage.load_by_name(location))
+    def best_route(self, start_hex: str, finish_hex: str) -> List[str]:
+        start_hx = HexStorage.load_by_name(start_hex)
+        finish_hx = HexStorage.load_by_name(finish_hex)
+
+        seen: Set[Tuple[int, int, int]] = set()
+        pool = [(start_hx, [])]
+        while pool:
+            cur, route = pool.pop(0)
+            if cur == finish_hx:
+                return route
+            if (cur.x, cur.y, cur.z) in seen:
+                continue
+            seen.add((cur.x, cur.y, cur.z))
+            nghs = HexStorage.load_by_distance(cur.x, cur.y, cur.z, 1, 1)
+            for ngh in nghs:
+                pool.append((ngh, route + [ngh.name]))
+        raise Exception(f"Couldn't find route from {start_hx} to {finish_hx}")
 
     def _translate_hex(self, hx: "Hex") -> HexSnapshot:
         return HexSnapshot(
@@ -85,12 +103,13 @@ class ActiveBoard:
             country=hx.country,
             region=hx.region,
             coordinate=CubeCoordinate(x=hx.x, y=hx.y, z=hx.z).to_offset(),
+            danger=hx.danger,
         )
 
     def draw_hex_card(self, hex_name: str, context: EncounterContextType) -> FullCard:
         hx = HexStorage.load_by_name(hex_name)
         deck_name = "Desert"
-        difficulty = 3
+        difficulty = hx.danger + 1
         board_deck = BoardDeckStorage.load_by_name(deck_name)
         template_deck = load_deck(deck_name)
         if not board_deck.deck:
@@ -130,6 +149,7 @@ class ActiveBoard:
                 x=cube.x,
                 y=cube.y,
                 z=cube.z,
+                danger=hx.danger,
             )
 
         HexStorage.insert([trans(hx) for hx in hexes])
@@ -145,6 +165,7 @@ class Hex:
     x: int
     y: int
     z: int
+    danger: int
 
 
 # The idea here is for hexes we hold the cards in a "semi-actualized" form where
@@ -171,7 +192,16 @@ class HexStorage(ObjectStorageBase[Hex]):
     def load_by_name(cls, name: str) -> Hex:
         hexes = cls._select_helper(["name = :name"], {"name": name})
         if not hexes:
-            raise Exception(f"No such hex: {name}")
+            raise IllegalMoveException(f"No such hex: {name}")
+        return hexes[0]
+
+    @classmethod
+    def load_by_coordinate(cls, x: int, y: int, z: int) -> Hex:
+        hexes = cls._select_helper(
+            ["x = :x", "y = :y", "z = :z"], {"x": x, "y": y, "z": z}
+        )
+        if not hexes:
+            raise IllegalMoveException(f"No such hex: {x},{y},{z}")
         return hexes[0]
 
     @classmethod
@@ -213,7 +243,7 @@ class BoardDeckStorage(ObjectStorageBase[BoardDeck]):
     def load_by_name(cls, name: str) -> BoardDeck:
         decks = cls._select_helper(["name = :name"], {"name": name})
         if not decks:
-            raise Exception(f"No such deck: {name}")
+            raise IllegalMoveException(f"No such deck: {name}")
         return decks[0]
 
     @classmethod
@@ -243,7 +273,7 @@ class TokenStorage(ObjectStorageBase[Token]):
     def load_by_name(cls, name: str) -> Token:
         tokens = cls._select_helper(["name = :name"], {"name": name})
         if not tokens:
-            raise Exception(f"No such token: {name}")
+            raise IllegalMoveException(f"No such token: {name}")
         return tokens[0]
 
     @classmethod

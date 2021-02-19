@@ -20,18 +20,6 @@ Terrains = [
 ]
 
 
-Countries = [
-    "Alpha",
-    "Beta",
-    "Gamma",
-    "Delta",
-    "Epsilon",
-    "Zeta",
-    "Theta",
-    "Iota",
-]
-
-
 @dataclass(frozen=True)
 class Hex:
     name: str
@@ -39,6 +27,7 @@ class Hex:
     terrain: str
     country: str
     region: str
+    danger: int
 
 
 TokenTypes = ["Character", "Other"]
@@ -49,12 +38,6 @@ class Token:
     name: str
     type: str
     location: str
-
-
-@dataclass(frozen=True)
-class Board:
-    hexes: Sequence[Hex]
-    tokens: Sequence[Token]
 
 
 class EffectType(Enum):
@@ -81,7 +64,7 @@ class EffectType(Enum):
 class Effect:
     type: EffectType
     rank: int
-    param: Optional[Any]
+    param: Optional[Any] = None
 
 
 class JobType(Enum):
@@ -111,16 +94,16 @@ class TemplateCard:
     copies: int
     name: str
     desc: str
-    skills: Sequence[str]
-    rewards: Sequence[EffectType]
-    penalties: Sequence[EffectType]
-    choice_type: ChoiceType
-    choices: Sequence[Sequence[Effect]]
+    skills: Sequence[str] = ()
+    rewards: Sequence[EffectType] = ()
+    penalties: Sequence[EffectType] = ()
+    choice_type: ChoiceType = ChoiceType.NONE
+    choices: Sequence[Sequence[Effect]] = ()
 
 
 @dataclass(frozen=True)
 class FullCard:
-    id: int
+    id: str
     name: str
     desc: str
     checks: Sequence[EncounterCheck]
@@ -133,7 +116,7 @@ class FullCard:
 class TableauCard:
     card: FullCard
     age: int
-    location_name: str
+    location: str
 
 
 class EncounterContextType(Enum):
@@ -147,7 +130,6 @@ class Encounter:
     card: FullCard
     rolls: Sequence[int]
     context_type: EncounterContextType
-    context_values: Optional[Sequence[str]]
 
 
 @dataclass(frozen=True)
@@ -179,6 +161,7 @@ class EncounterOutcome:
     resources: Optional[EncounterSingleOutcome[int]]
     quest: Optional[EncounterSingleOutcome[int]]
     turns: Optional[EncounterSingleOutcome[int]]
+    speed: Optional[EncounterSingleOutcome[int]]
     transport_location: Optional[EncounterSingleOutcome[str]]
     new_job: Optional[EncounterSingleOutcome[str]]
 
@@ -190,7 +173,7 @@ class HookType(Enum):
     MAX_LUCK = enum_auto()
     MAX_TABLEAU_SIZE = enum_auto()
     SKILL_RANK = enum_auto()
-    SPEED = enum_auto()
+    INIT_SPEED = enum_auto()
 
 
 @dataclass(frozen=True)

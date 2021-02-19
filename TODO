@@ -75,3 +75,25 @@ finish season:
 # then after 1 day or when everyone's done with rumors, we publish rumors
 - while the encounter queue is non-empty:
   - pop the first encounter and resolve it with default
+
+
+I guess the better flow is like
+  while speed > 0:
+     travel or
+     action in current hex (including any tableau cards and camp)
+Some actions will reduce speed to zero
+
+How does the travel deck work in this model?
+Do you just draw on every move, so sometimes you will indeed have a travel encounter on the way to your job encounter? Do you draw only when ending your turn without doing a job or camping? That feels a little gameable.
+
+Can kind of imagine a travel deck that's like
+  4x danger-1
+  4x danger-2
+  4x danger-3
+  4x slow
+  2x fast
+  2x loot
+Where danger-2 is like "you have an encounter if the hex is at least this danger level"
+Slow is -1 speed, fast is +1 speed, loot is random loot
+
+Do we support (a) as a shortcut to walk to encounter a's hex and then have that encounter? will it confuse things if the encounter is more than your speed away and/or you have an encounter on the way there? do we have any guarantees you don't have more than one encounter per turn?

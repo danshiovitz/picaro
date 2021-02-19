@@ -3,7 +3,7 @@ from argparse import ArgumentParser, Namespace
 from collections import defaultdict
 from http.client import HTTPResponse
 from string import ascii_lowercase
-from typing import Any, Callable, Dict, List, Optional, Set, Type, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Type, TypeVar
 from urllib.request import HTTPErrorProcessor, Request, build_opener, urlopen
 
 from picaro.client.colors import colors
@@ -19,7 +19,6 @@ from picaro.server.api_types import (
     Board,
     CampRequest,
     CampResponse,
-    CardPreview,
     Character,
     ChoiceType,
     Effect,
@@ -29,6 +28,8 @@ from picaro.server.api_types import (
     EncounterActions,
     EncounterOutcome,
     EncounterSingleOutcome,
+    EndTurnRequest,
+    EndTurnResponse,
     ErrorResponse,
     ErrorType,
     Feat,
@@ -37,6 +38,7 @@ from picaro.server.api_types import (
     JobResponse,
     ResolveEncounterRequest,
     ResolveEncounterResponse,
+    TableauCard,
     Token,
     TravelRequest,
     TravelResponse,
@@ -235,35 +237,52 @@ class Client:
 
     def _render_feat(self, feat: Feat) -> str:
         names = {
-            HookType.SPEED: "speed"
+            HookType.INIT_SPEED: "speed",
+            HookType.INIT_CARD_AGE: "age",
+            HookType.INIT_TURNS: "turns",
+            HookType.MAX_HEALTH: "health",
+            HookType.MAX_LUCK: "luck",
+            HookType.MAX_TABLEAU_SIZE: "tableau",
         }
-        return f"{feat.value:+} {names.get(feat.hook, feat.hook.name)}"
+        name = feat.param if feat.param else names.get(feat.hook, feat.hook.name)
+        return f"{feat.value:+} {name}"
 
     def play(self) -> None:
         while True:
             try:
-                board = self._get("/board", Board)
-                ch = self._get(f"/character/{self.args.name}", Character)
-                self._display_play(board, ch)
-                if ch.remaining_turns == 0:
-                    return
-                if ch.encounters:
-                    self._do_encounter(None, board, ch)
-                else:
-                    self._input_play_action(board, ch)
-                if not self.args.season:
-                    return
-                else:
-                    print()
-                    print("===========")
-                    print()
+                self._play_turn()
             except BadStateException as e:
                 print(e)
                 print()
                 continue
+            ch = self._get(f"/character/{self.args.name}", Character)
+            if not self.args.season or ch.remaining_turns <= 0:
+                return
+            else:
+                print("[End of turn, hit return for next]")
+                input()
+                print("===========")
+                print()
 
-    def _display_play(self, board: Board, ch: Character) -> None:
-        encounters = {card.location_name for card in ch.tableau}
+    def _play_turn(self) -> None:
+        acted = False
+        while True:
+            ch = self._get(f"/character/{self.args.name}", Character)
+            if ch.encounters:
+                print()
+                self._encounter(ch)
+                print()
+                continue
+            if not acted and ch.remaining_turns > 0:
+                self._display_play(ch)
+                if self._input_play_action():
+                    acted = True
+                continue
+            return
+
+    def _display_play(self, ch: Character) -> None:
+        board = self._get("/board", Board)
+        encounters = {card.location for card in ch.tableau}
 
         ch_hex = [hx for hx in board.hexes if hx.name == ch.location][0]
         minimap = self._make_small_map(
@@ -279,15 +298,21 @@ class Client:
             f"Health: {ch.health:2}   Coins: {ch.coins:2}   Reputation: {ch.reputation:2}   Resources: {ch.resources:2}   Quest: {ch.quest:2}"
         )
         if ch.remaining_turns:
-            display.append(f" Turns: {ch.remaining_turns:2}    Luck: {ch.luck:2}")
+            display.append(
+                f" Turns: {ch.remaining_turns:2}    Luck: {ch.luck:2}        Speed: {ch.speed:2}"
+            )
             display.append("")
             for idx, card in enumerate(ch.tableau):
+                card_dist = f"- {len(card.route)} away"
+                if len(card.route) > ch.speed:
+                    card_dist += " (too far)"
                 display.append(
-                    f"{ascii_lowercase[idx]}. ({card.age}) {card.name} [{card.location_name}]:"
+                    f"{ascii_lowercase[idx]}. ({card.age}) {card.name} [{card.location} {card_dist}]:"
                 )
                 display.append(f"       {self._check_str(card.checks[0], ch)}")
             display.append("t. Travel (uio.jkl)")
             display.append("x. Camp")
+            display.append("z. End Turn (if you don't want to do a job or camp)")
         while len(display) < 14:
             display.append("")
 
@@ -313,8 +338,11 @@ class Client:
             f"({reward_name} / {penalty_name})"
         )
 
-    def _input_play_action(self, board: Board, ch: Character) -> None:
+    def _input_play_action(self) -> bool:
         while True:
+            ch = self._get(f"/character/{self.args.name}", Character)
+            if ch.encounters:
+                return False
             print("Action? ", end="")
             line = input().lower().strip()
             if not line:
@@ -322,8 +350,8 @@ class Client:
             if line[0] in "abcde":
                 c_idx = "abcde".index(line[0])
                 if c_idx < len(ch.tableau):
-                    if self._do_encounter(ch.tableau[c_idx], board, ch):
-                        return
+                    if self._job(ch.tableau[c_idx], ch):
+                        return True
                 else:
                     print("No such encounter card!")
                     print()
@@ -331,42 +359,61 @@ class Client:
             elif line[0] == "t":
                 ww = re.split(r"\s+", line, 2)
                 dirs = "" if len(ww) == 1 else ww[1]
-                if self._do_travel(dirs, board, ch):
-                    return
+                self._travel(dirs, ch)
+                return False
             elif line[0] == "x":
-                if self._do_camp(board, ch):
-                    return
+                if self._camp(ch):
+                    return True
+            elif line[0] == "z":
+                if self._end_turn(ch):
+                    return True
             else:
                 print("Unknown action")
                 print()
                 continue
 
-    def _do_encounter(
-        self, card_preview: Optional[CardPreview], board: Board, ch: Character
-    ) -> bool:
-        if not ch.encounters and card_preview is not None:
-            try:
-                resp = self._post(
-                    f"/play/{ch.name}/job",
-                    JobRequest(card_id=card_preview.id),
-                    JobResponse,
-                )
-            except IllegalMoveException as e:
-                print(e)
-                print()
-                return False
-            # ok, so encounter started - re-request the character to get
-            # the full details:
-            ch = self._get(f"/character/{self.args.name}", Character)
+    def _job(self, card: TableauCard, ch: Character) -> bool:
+        self._travel_route(card.route, ch)
+        ch = self._get(f"/character/{self.args.name}", Character)
+        # if we didn't make it to the card's location uneventfully,
+        # then exit to let the player deal with the encounter and
+        # perhaps then make another choice for their main action
+        if ch.location != card.location or ch.encounters:
+            return False
 
+        # otherwise start the main job
+        try:
+            resp = self._post(
+                f"/play/{ch.name}/job",
+                JobRequest(card_id=card.id),
+                JobResponse,
+            )
+        except IllegalMoveException as e:
+            print(e)
+            print()
+            return False
+
+        return True
+
+    def _camp(self, ch: Character) -> bool:
+        try:
+            resp = self._post(
+                f"/play/{ch.name}/camp", CampRequest(rest=True), CampResponse
+            )
+        except IllegalMoveException as e:
+            print(e)
+            print()
+            return False
+        return True
+
+    def _encounter(self, ch: Character) -> bool:
         signs = ", ".join(ch.encounters[0].signs)
         print(f"{ch.encounters[0].name} [signs: {signs}]")
         print(ch.encounters[0].desc)
 
-        self._input_encounter_action(board, ch)
-        return True
+        return self._input_encounter_action(ch)
 
-    def _input_encounter_action(self, board: Board, ch: Character) -> bool:
+    def _input_encounter_action(self, ch: Character) -> bool:
         rolls = list(ch.encounters[0].rolls[:])
         luck = ch.luck
         transfers = []
@@ -460,8 +507,6 @@ class Client:
                     choice = c_idx
                     break
             else:
-                print("Hit return: ", end="")
-                input()
                 if ch.encounters[0].choice_type == ChoiceType.RANDOM:
                     choice = ch.encounters[0].rolls[-1] - 1
                 elif len(ch.encounters[0].choices) == 1:
@@ -514,6 +559,7 @@ class Client:
         render_single_int("Your resources have", resp.outcome.resources)
         render_single_int("Your quest points have", resp.outcome.quest)
         render_single_int("Your remaining turns have", resp.outcome.turns)
+        render_single_int("Your speed has", resp.outcome.speed)
         if resp.outcome.transport_location is not None:
             tl = resp.outcome.transport_location
             print(f"* You are now in hex {tl.new_val} ({', '.join(tl.comments)}).")
@@ -551,11 +597,13 @@ class Client:
             ret += " " + str(eff.param)
         return ret
 
-    def _do_travel(self, dirs: str, board: Board, ch: Character) -> bool:
+    def _travel(self, dirs: str, ch: Character) -> bool:
         if not dirs:
             print(f"No directions supplied!")
             print()
             return False
+
+        board = self._get("/board", Board)
 
         cubes = {
             CubeCoordinate.from_row_col(hx.coordinate.row, hx.coordinate.column): hx
@@ -591,32 +639,41 @@ class Client:
             route.append(cubes[cur].name)
 
         if len(route) > ch.speed:
-            print(f"Your maximum speed is {ch.speed}")
+            print(f"You have only {ch.speed} speed remaining.")
             print()
             return False
 
+        return self._travel_route(route, ch)
+
+    def _travel_route(self, route: Sequence[str], ch: Character) -> bool:
+        for step in route:
+            try:
+                resp = self._post(
+                    f"/play/{ch.name}/travel", TravelRequest(step=step), TravelResponse
+                )
+            except IllegalMoveException as e:
+                print(e)
+                print()
+                return False
+            ch = self._get(f"/character/{self.args.name}", Character)
+            if ch.encounters:
+                print(f"Your journey is interrupted in {ch.location}!")
+                return True
+            elif ch.speed <= 0 and ch.location != route[-1]:
+                print(f"You only make it to {ch.location} this turn.")
+                return True
+        return True
+
+    def _end_turn(self, ch: Character) -> bool:
         try:
             resp = self._post(
-                f"/play/{ch.name}/travel", TravelRequest(route=route), TravelResponse
+                f"/play/{ch.name}/end_turn", EndTurnRequest(), EndTurnResponse
             )
         except IllegalMoveException as e:
             print(e)
             print()
             return False
-        ch = self._get(f"/character/{self.args.name}", Character)
-        return self._do_encounter(None, board, ch)
-
-    def _do_camp(self, board: Board, ch: Character) -> bool:
-        try:
-            resp = self._post(
-                f"/play/{ch.name}/camp", CampRequest(rest=True), CampResponse
-            )
-        except IllegalMoveException as e:
-            print(e)
-            print()
-            return False
-        ch = self._get(f"/character/{self.args.name}", Character)
-        return self._do_encounter(None, board, ch)
+        return True
 
     def _get(self, path: str, cls: Type[T]) -> T:
         url = self.base_url

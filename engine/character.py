@@ -2,6 +2,7 @@ import dataclasses
 import random
 from collections import defaultdict
 from dataclasses import dataclass
+from enum import Enum, auto as enum_auto
 from itertools import groupby
 from typing import (
     Any,
@@ -21,9 +22,13 @@ from .deck import load_deck
 from .exceptions import BadStateException, IllegalMoveException
 from .job import load_job, load_jobs
 from .skills import load_skills
+from .snapshot import (
+    Character as snapshot_Character,
+    Encounter as snapshot_Encounter,
+    TableauCard as snapshot_TableauCard,
+)
 from .storage import ObjectStorageBase
 from .types import (
-    Character as CharacterSnapshot,
     ChoiceType,
     TableauCard,
     Effect,
@@ -51,11 +56,11 @@ class Party:
         board.add_token(Token(name=name, type="Character", location=location))
         return CharacterStorage.create(ch)
 
-    def get_character(self, name: str, board: Board) -> CharacterSnapshot:
+    def get_character(self, name: str, board: Board) -> snapshot_Character:
         ch = CharacterStorage.load_by_name(name)
         all_skills = load_skills()
         location = board.get_token(ch.name).location
-        return CharacterSnapshot(
+        return snapshot_Character(
             name=ch.name,
             player_id=ch.player_id,
             skills={sk: ch.get_skill_rank(sk) for sk in all_skills},
@@ -69,10 +74,39 @@ class Party:
             location=location,
             remaining_turns=ch.remaining_turns,
             luck=ch.luck,
-            speed=ch.get_speed(),
-            tableau=tuple(ch.tableau),
-            encounters=tuple(ch.encounters),
+            speed=ch.speed,
+            tableau=tuple(
+                self._tableau_snapshot(c, board.best_route(location, c.location))
+                for c in ch.tableau
+            ),
+            encounters=tuple(self._encounter_snapshot(e) for e in ch.encounters),
             emblems=tuple(ch.emblems),
+        )
+
+    def _tableau_snapshot(
+        self, card: TableauCard, route: Sequence[str]
+    ) -> Sequence[snapshot_TableauCard]:
+        # in the future might be able to preview more checks so leaving them as lists
+        return snapshot_TableauCard(
+            id=card.card.id,
+            name=card.card.name,
+            checks=card.card.checks[0:1],
+            choice_type=card.card.choice_type,
+            choices=card.card.choices[0:1],
+            age=card.age,
+            location=card.location,
+            route=tuple(route),
+        )
+
+    def _encounter_snapshot(self, encounter: Encounter) -> Sequence[snapshot_Encounter]:
+        return snapshot_Encounter(
+            name=encounter.card.name,
+            desc=encounter.card.desc,
+            checks=encounter.card.checks,
+            choice_type=encounter.card.choice_type,
+            choices=encounter.card.choices,
+            signs=encounter.card.signs,
+            rolls=encounter.rolls,
         )
 
     def start_season(self, board: Board) -> None:
@@ -83,31 +117,49 @@ class Party:
     def finish_season(self, board: Board) -> None:
         raise Exception("Not implemented yet")
 
-    def do_job(self, name: str, card_id: int, board: Board) -> None:
+    def do_job(self, name: str, card_id: str, board: Board) -> None:
         ch = CharacterStorage.load_by_name(name)
-        ch.check_can_act()
+        if ch.encounters:
+            raise BadStateException("An encounter is currently active.")
+        if ch.acted_this_turn:
+            raise BadStateException("You have already acted this turn.")
         ch.acted_this_turn = True
+        ch.speed = 0
         card = ch.remove_tableau_card(card_id)
+        location = board.get_token(ch.name).location
+        if card.location != location:
+            raise IllegalMoveException(
+                f"You must be in hex {card.location} for that encounter."
+            )
         ch.queue_encounter(card.card, context_type=EncounterContextType.JOB)
-        board.move_token(ch.name, card.location_name, adjacent=False)
+        board.move_token(ch.name, card.location, adjacent=False)
         CharacterStorage.update(ch)
 
-    def do_travel(self, name: str, route: Sequence[str], board: Board) -> None:
+    def travel(self, name: str, step: str, board: Board) -> None:
         ch = CharacterStorage.load_by_name(name)
-        ch.check_can_act()
-        ch.acted_this_turn = True
-        for hx in route:
-            board.move_token(ch.name, hx, adjacent=True)
-        card = ch.draw_travel_card(board.get_token(ch.name).location, board)
-        ch.queue_encounter(
-            card, context_type=EncounterContextType.TRAVEL, context_values=route
-        )
+        if ch.encounters:
+            raise BadStateException("An encounter is currently active.")
+        if ch.speed <= 0:
+            raise IllegalMoveException(f"You have no remaining speed.")
+
+        board.move_token(ch.name, step, adjacent=True)
+        ch.speed -= 1
+
+        if not ch.had_travel_encounter:
+            card = ch.draw_travel_card(board.get_token(ch.name).location, board)
+            if card:
+                ch.queue_encounter(card, context_type=EncounterContextType.TRAVEL)
+                ch.had_travel_encounter = True
         CharacterStorage.update(ch)
 
-    def do_camp(self, name: str, board: Board) -> None:
+    def camp(self, name: str, board: Board) -> None:
         ch = CharacterStorage.load_by_name(name)
-        ch.check_can_act()
+        if ch.encounters:
+            raise BadStateException("An encounter is currently active.")
+        if ch.acted_this_turn:
+            raise BadStateException("You have already acted this turn.")
         ch.acted_this_turn = True
+        ch.speed = 0
         card = ch.draw_camp_card(board)
         ch.queue_encounter(card, context_type=EncounterContextType.CAMP)
         CharacterStorage.update(ch)
@@ -119,26 +171,51 @@ class Party:
 
         encounter = ch.pop_encounter()
         effects = ch.calc_effects(encounter, actions)
-        outcome = ch.apply_effects(
-            effects, encounter.context_type, encounter.context_values, board
-        )
-        if not ch.encounters:
+        outcome = ch.apply_effects(effects, encounter.context_type, board)
+        if ch.acted_this_turn and not ch.encounters:
             ch.finish_turn(board)
 
         CharacterStorage.update(ch)
         return outcome
 
+    def end_turn(self, name: str, board: Board) -> None:
+        ch = CharacterStorage.load_by_name(name)
+        if ch.encounters:
+            raise BadStateException("An encounter is currently active.")
+        if ch.acted_this_turn:
+            raise BadStateException("You have already acted this turn.")
+        ch.finish_turn(board)
+        CharacterStorage.update(ch)
 
-DRAW_HEX_CARD = TemplateCard(
-    1,
-    name="Draw from Hex Deck",
+
+TRINKET_CARD = TemplateCard(
+    copies=1,
+    name="A Find Along The Way",
     desc="",
     skills=[],
     rewards=[],
     penalties=[],
-    choice_type=ChoiceType.NONE,
-    choices=[],
+    choice_type=ChoiceType.RANDOM,
+    choices=[
+        [Effect(type=EffectType.GAIN_HEALING, rank=1)],
+        [Effect(type=EffectType.GAIN_COINS, rank=1)],
+        [Effect(type=EffectType.GAIN_COINS, rank=3)],
+        [Effect(type=EffectType.GAIN_RESOURCES, rank=2)],
+        [Effect(type=EffectType.GAIN_QUEST, rank=1)],
+    ],
 )
+
+
+class TravelCardType(Enum):
+    NOTHING = enum_auto()
+    DANGER = enum_auto()
+    TRINKET = enum_auto()
+
+
+@dataclass
+class TravelCard:
+    type: TravelCardType
+    value: int = 0
 
 
 def clamp(val: int, min: Optional[int] = None, max: Optional[int] = None) -> int:
@@ -172,9 +249,11 @@ class Character:
     tableau: List[TableauCard]
     encounters: List[Encounter]
     job_deck: List[FullCard]
-    travel_deck: List[FullCard]
+    travel_deck: List[TravelCard]
     camp_deck: List[FullCard]
     acted_this_turn: bool
+    speed: int
+    had_travel_encounter: bool
 
     @classmethod
     def create(cls, name: str, player_id: int, job_name: str) -> "Character":
@@ -197,8 +276,11 @@ class Character:
             travel_deck=[],
             camp_deck=[],
             acted_this_turn=False,
+            speed=0,
+            had_travel_encounter=False,
         )
         ch.health = ch.get_max_health()
+        ch.speed = ch.get_init_speed()
         return ch
 
     def get_init_turns(self) -> int:
@@ -214,7 +296,7 @@ class Character:
         return clamp(3 + self._calc_hook(HookType.INIT_CARD_AGE), min=1)
 
     def get_max_health(self) -> int:
-        return clamp(3 + self._calc_hook(HookType.MAX_HEALTH), min=1)
+        return clamp(20 + self._calc_hook(HookType.MAX_HEALTH), min=1)
 
     def get_skill_rank(self, skill_name: str) -> int:
         # 20 xp for rank 1, 30 xp for rank 5, 25 xp for all others
@@ -231,9 +313,11 @@ class Character:
             base_rank = 4
         else:
             base_rank = 5
-        return clamp(base_rank + self._calc_hook(HookType.SKILL_RANK, skill_name), min=0, max=6)
+        return clamp(
+            base_rank + self._calc_hook(HookType.SKILL_RANK, skill_name), min=0, max=6
+        )
 
-    def get_speed(self) -> int:
+    def get_init_speed(self) -> int:
         job = load_job(self.job_name)
         if job.type == JobType.LACKEY:
             return 0
@@ -246,7 +330,7 @@ class Character:
             base_speed = 1
         else:
             raise Exception(f"Unknown job type: {job.type}")
-        return clamp(base_speed + self._calc_hook(HookType.SPEED), min=0)
+        return clamp(base_speed + self._calc_hook(HookType.INIT_SPEED), min=0)
 
     def _calc_hook(self, hook_name: HookType, hook_param: Optional[str] = None) -> int:
         tot = 0
@@ -254,9 +338,9 @@ class Character:
             for feat in emblem.feats:
                 if feat.hook == hook_name:
                     param_match = (
-                        hook_param is None or
-                        feat.param is None or
-                        hook_param == feat.param
+                        hook_param is None
+                        or feat.param is None
+                        or hook_param == feat.param
                     )
                     if param_match:
                         tot += feat.value
@@ -274,17 +358,14 @@ class Character:
         job = load_job(self.job_name)
         while len(self.tableau) < self.get_max_tableau_size():
             if not self.job_deck:
-                additional = [dataclasses.replace(DRAW_HEX_CARD, copies=2)]
+                additional: List[TemplateCard] = []
                 self.job_deck = job.make_deck(additional=additional)
             card = self.job_deck.pop(0)
             dst = random.choice(job.encounter_distances)
             location = random.choice(board.find_hexes_near_token(self.name, dst, dst))
 
-            if card.name == DRAW_HEX_CARD.name:
-                card = board.draw_hex_card(location, EncounterContextType.JOB)
-
             self.tableau.append(
-                TableauCard(card=card, location_name=location, age=self.get_init_card_age())
+                TableauCard(card=card, location=location, age=self.get_init_card_age())
             )
 
     def remove_tableau_card(self, card_id) -> TableauCard:
@@ -299,7 +380,6 @@ class Character:
         self,
         card: FullCard,
         context_type: EncounterContextType,
-        context_values: Optional[Sequence[str]] = None,
     ) -> None:
         rolls = []
         for chk in card.checks:
@@ -312,15 +392,8 @@ class Character:
                 card=card,
                 rolls=rolls,
                 context_type=context_type,
-                context_values=context_values,
             )
         )
-
-    def check_can_act(self) -> None:
-        if self.encounters:
-            raise BadStateException("An encounter is currently active.")
-        if self.acted_this_turn:
-            raise BadStateException("You have already acted this turn.")
 
     def pop_encounter(self) -> Encounter:
         if not self.encounters:
@@ -416,7 +489,6 @@ class Character:
         self,
         effects: List[Effect],
         context_type: EncounterContextType,
-        context_values: Optional[Sequence[str]],
         board: Board,
     ) -> EncounterOutcome:
         # want something like: first process gain coins, if any, then process lose coins, if any,
@@ -431,7 +503,7 @@ class Character:
         quest_mods = []
         turn_mods = []
         xp_mods = defaultdict(list)
-        resrc_mods = []
+        resource_mods = []
         speed_mods = []
         transport_mods = []
         job_mods = []
@@ -466,10 +538,10 @@ class Character:
             effects, EffectType.CHECK_FAILURE, xp_mods, lambda rank: rank
         )
         self._accumulate_mods(
-            effects, EffectType.GAIN_RESOURCES, resrc_mods, lambda rank: rank - 1
+            effects, EffectType.GAIN_RESOURCES, resource_mods, lambda rank: rank - 1
         )
         self._accumulate_mods(
-            effects, EffectType.LOSE_RESOURCES, resrc_mods, lambda rank: -rank
+            effects, EffectType.LOSE_RESOURCES, resource_mods, lambda rank: -rank
         )
         self._accumulate_mods(
             effects, EffectType.GAIN_TURNS, turn_mods, lambda rank: rank
@@ -492,11 +564,12 @@ class Character:
             health=self._make_single_outcome(
                 health_mods, "health", max_val=self.get_max_health()
             ),
-            resources=self._make_single_outcome(resrc_mods, "resources"),
+            resources=self._make_single_outcome(resource_mods, "resources"),
             quest=self._make_single_outcome(quest_mods, "quest"),
             turns=self._make_single_outcome(turn_mods, "remaining_turns"),
+            speed=self._make_single_outcome(speed_mods, "speed"),
             transport_location=self._make_transport_outcome(
-                transport_mods, speed_mods, context_type, context_values, board
+                transport_mods, context_type, board
             ),
             new_job=self._make_job_outcome(job_mods, board),
         )
@@ -618,7 +691,10 @@ class Character:
         return ret
 
     def _make_transport_outcome(
-        self, transport_mods: List[ModTuple], speed_mods: List[ModTuple], context_type: EncounterContextType, context_values: Optional[Sequence[str]], board: Board
+        self,
+        transport_mods: List[ModTuple],
+        context_type: EncounterContextType,
+        board: Board,
     ) -> Optional[EncounterSingleOutcome[str]]:
         new_location: Optional[str] = None
         if transport_mods:
@@ -636,18 +712,6 @@ class Character:
             new_location = random.choice(
                 board.find_hexes_near_token(self.name, tp - 2, tp + 2)
             )
-        elif speed_mods and context_type == EncounterContextType.TRAVEL:
-            move_idx = len(context_values) - 1
-            msgs = []
-            for mod, flat, msg in speed_mods:
-                if mod is not None:
-                    move_idx += mod
-                if flat is not None:
-                    move_idx = flat
-                if msg is not None:
-                    msgs.append(msg)
-            if move_idx < len(context_values) - 1:
-                new_location = context_values[max(move_idx, 0)]
         if not new_location:
             return None
         old_loc = board.get_token(self.name).location
@@ -682,32 +746,53 @@ class Character:
     def finish_turn(self, board: Board) -> None:
         self.remaining_turns -= 1
         self.acted_this_turn = False
+        self.speed = self.get_init_speed()
+        self.had_travel_encounter = False
 
         # filter to encounters near the PC (since they may have been transported, or just moved)
         near: Set[str] = {hx for hx in board.find_hexes_near_token(self.name, 0, 5)}
 
         def _is_valid(card: TableauCard) -> bool:
-            return card.age > 1 and card.location_name in near
+            return card.age > 1 and card.location in near
 
         self.tableau = [
             dataclasses.replace(c, age=c.age - 1) for c in self.tableau if _is_valid(c)
         ]
         self.refill_tableau(board)
 
-    def draw_travel_card(self, location: str, board: Board) -> FullCard:
+    def draw_travel_card(self, location: str, board: Board) -> Optional[FullCard]:
         if not self.travel_deck:
-            template_deck = load_deck("Travel")
-            # assume a 12-card travel deck, we want hex cards about a third of the time
-            additional = [dataclasses.replace(DRAW_HEX_CARD, copies=6)]
-            job = load_job(self.job_name)
-            self.travel_deck = template_deck.actualize(
-                job.rank + 1, EncounterContextType.TRAVEL, additional
-            )
+            self.travel_deck = self._make_travel_deck()
 
         card = self.travel_deck.pop(0)
-        if card.name == DRAW_HEX_CARD.name:
-            card = board.draw_hex_card(location, EncounterContextType.TRAVEL)
-        return card
+        if card.type == TravelCardType.NOTHING:
+            return None
+        elif card.type == TravelCardType.DANGER:
+            hx = board.get_hex(location)
+            if hx.danger >= card.value:
+                return board.draw_hex_card(location, EncounterContextType.TRAVEL)
+            else:
+                return None
+        elif card.type == TravelCardType.TRINKET:
+            travel_deck = load_deck("Travel")
+            return travel_deck.make_card(TRINKET_CARD, 1, EncounterContextType.TRAVEL)
+        else:
+            raise Exception(f"Unknown card type: {card.type}")
+
+    def _make_travel_deck(self) -> List[TravelCard]:
+        cards = (
+            [TravelCard(type=TravelCardType.NOTHING)] * 14
+            + [TravelCard(type=TravelCardType.DANGER, value=1)] * 2
+            + [TravelCard(type=TravelCardType.DANGER, value=2)] * 2
+            + [TravelCard(type=TravelCardType.DANGER, value=3)] * 2
+            + [TravelCard(type=TravelCardType.DANGER, value=4)] * 2
+            + [TravelCard(type=TravelCardType.DANGER, value=5)] * 2
+            + [TravelCard(type=TravelCardType.TRINKET)] * 2
+        )
+        random.shuffle(cards)
+        for _ in range((len(cards) // 10) + 1):
+            cards.pop()
+        return cards
 
     def draw_camp_card(self, board: Board) -> FullCard:
         if not self.camp_deck:
@@ -761,7 +846,7 @@ class CharacterStorage(ObjectStorageBase[Character]):
     def load_by_name(cls, name: str) -> Character:
         chars = cls._select_helper(["name = :name"], {"name": name})
         if not chars:
-            raise Exception(f"No such character: {name}")
+            raise IllegalMoveException(f"No such character: {name}")
         return chars[0]
 
     @classmethod

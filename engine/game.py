@@ -2,6 +2,7 @@
 from pathlib import Path
 from typing import Any, List
 
+from .exceptions import IllegalMoveException
 from .storage import ConnectionManager, ObjectStorageBase
 from .types import Game
 
@@ -27,7 +28,7 @@ class GameStorage(ObjectStorageBase[Game]):
     def load_by_id(cls, id: int) -> Game:
         games = cls._select_helper(["id = :id"], {"id": id})
         if not games:
-            raise Exception(f"No such game: {id}")
+            raise IllegalMoveException(f"No such game: {id}")
         return games[0]
 
     @classmethod

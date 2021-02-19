@@ -1,5 +1,5 @@
 import json
-from dataclasses import fields as dataclass_fields, is_dataclass
+from dataclasses import _MISSING_TYPE, fields as dataclass_fields, is_dataclass
 from enum import Enum
 from typing import Any, Dict, Optional, Sequence, Type, TypeVar, Union
 
@@ -85,7 +85,10 @@ def recursive_from_dict(val: Any, cls: Type[T], frozen: Optional[bool] = None) -
             # hack, assumes this dataclass is templated on a single variable only
             if isinstance(ut, TypeVar):
                 ut = cls.__args__[0]
-            dt[field.name] = recursive_from_dict(val[field.name], ut, frozen)
+            if field.name not in val and not isinstance(field.default, _MISSING_TYPE):
+                dt[field.name] = field.default
+            else:
+                dt[field.name] = recursive_from_dict(val[field.name], ut, frozen)
         return cls(**dt)
     elif issubclass(cls_base, tuple):
         if type(val) == str:

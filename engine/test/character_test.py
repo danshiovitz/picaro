@@ -11,10 +11,24 @@ from unittest.mock import Mock, patch
 from picaro.engine.board import ActiveBoard
 from picaro.engine.character import Character
 from picaro.engine.job import Job
-from picaro.engine.types import Effect, EffectType, Emblem, EncounterContextType, Feat, HookType, JobType
+from picaro.engine.types import (
+    Effect,
+    EffectType,
+    Emblem,
+    EncounterContextType,
+    Feat,
+    HookType,
+    JobType,
+)
 
 
 class CharacterTest(TestCase):
+    def setUp(self):
+        patcher = patch("picaro.engine.character.load_job")
+        self.load_job_mock = patcher.start()
+        self.addCleanup(patcher.stop)
+        self.load_job_mock.return_value = self._make_job()
+
     def test_get_skill_rank(self) -> None:
         ch = self._make_ch()
         self.assertEqual(ch.get_skill_rank("Foo"), 0)
@@ -55,10 +69,16 @@ class CharacterTest(TestCase):
             )
 
         ch.skill_xp["Foo"] = 70
-        emblem = Emblem(name="Foo Boost", feats=[Feat(hook=HookType.SKILL_RANK, param="Foo", value=2)])
+        emblem = Emblem(
+            name="Foo Boost",
+            feats=[Feat(hook=HookType.SKILL_RANK, param="Foo", value=2)],
+        )
         ch.emblems.append(emblem)
         self.assertEqual(ch.get_skill_rank("Foo"), 5)
-        emblem = Emblem(name="Generic Boost", feats=[Feat(hook=HookType.SKILL_RANK, param=None, value=2)])
+        emblem = Emblem(
+            name="Generic Boost",
+            feats=[Feat(hook=HookType.SKILL_RANK, param=None, value=2)],
+        )
         ch.emblems.append(emblem)
         self.assertEqual(ch.get_skill_rank("Foo"), 6)  # capped at 6
 
@@ -68,44 +88,51 @@ class CharacterTest(TestCase):
         ch.coins = 3
 
         effects = [Effect(type=EffectType.GAIN_COINS, rank=1, param=None)]
-        outcome = ch.apply_effects(effects, EncounterContextType.JOB, None, board)
+        outcome = ch.apply_effects(effects, EncounterContextType.JOB, board)
         self.assertEqual(ch.coins, 4)
         assert outcome.coins is not None
         self.assertEqual(outcome.coins.old_val, 3)
         self.assertEqual(outcome.coins.new_val, 4)
 
         effects = [Effect(type=EffectType.GAIN_COINS, rank=4, param=None)]
-        outcome = ch.apply_effects(effects, EncounterContextType.JOB, None, board)
+        outcome = ch.apply_effects(effects, EncounterContextType.JOB, board)
         self.assertEqual(ch.coins, 14)
         assert outcome.coins is not None
         self.assertEqual(outcome.coins.old_val, 4)
         self.assertEqual(outcome.coins.new_val, 14)
 
-    @patch("picaro.engine.character.load_job")
-    def test_speed_hook(self, load_job_mock: Mock) -> None:
+    def test_speed_hook(self) -> None:
         ch = self._make_ch()
-        load_job_mock.return_value = self._make_job()
-        self.assertEqual(ch.get_speed(), 3)
-        load_job_mock.assert_called()
+        self.assertEqual(ch.get_init_speed(), 3)
+        self.load_job_mock.assert_called()
 
-        emblem = Emblem(name="Speed Boost", feats=[Feat(hook=HookType.SPEED, param=None, value=2)])
+        emblem = Emblem(
+            name="Speed Boost",
+            feats=[Feat(hook=HookType.INIT_SPEED, param=None, value=2)],
+        )
         ch.emblems.append(emblem)
-        self.assertEqual(ch.get_speed(), 5)
+        self.assertEqual(ch.get_init_speed(), 5)
 
-        emblem = Emblem(name="Speed Penalty", feats=[Feat(hook=HookType.SPEED, param=None, value=-4)])
+        emblem = Emblem(
+            name="Speed Penalty",
+            feats=[Feat(hook=HookType.INIT_SPEED, param=None, value=-4)],
+        )
         ch.emblems.append(emblem)
-        self.assertEqual(ch.get_speed(), 1)
+        self.assertEqual(ch.get_init_speed(), 1)
 
-        emblem = Emblem(name="Speed Penalty", feats=[Feat(hook=HookType.SPEED, param=None, value=-3)])
+        emblem = Emblem(
+            name="Speed Penalty",
+            feats=[Feat(hook=HookType.INIT_SPEED, param=None, value=-3)],
+        )
         ch.emblems.append(emblem)
-        self.assertEqual(ch.get_speed(), 0)
+        self.assertEqual(ch.get_init_speed(), 0)
 
         ch.emblems.pop()
         ch.emblems.pop()
-        self.assertEqual(ch.get_speed(), 5)
+        self.assertEqual(ch.get_init_speed(), 5)
 
-        load_job_mock.return_value = self._make_job(type=JobType.LACKEY)
-        self.assertEqual(ch.get_speed(), 0)
+        self.load_job_mock.return_value = self._make_job(type=JobType.LACKEY)
+        self.assertEqual(ch.get_init_speed(), 0)
 
     def _make_ch(self) -> Character:
         return Character.create(name="Test", player_id=100, job_name="Tester")

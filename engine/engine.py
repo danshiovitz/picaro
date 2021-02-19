@@ -5,8 +5,9 @@ from .board import ActiveBoard
 from .character import Party
 from .exceptions import BadStateException, IllegalMoveException
 from .game import create_game
+from .snapshot import Board, Character
 from .storage import ConnectionManager
-from .types import Board, Character, EncounterActions, EncounterOutcome, Optional, Token
+from .types import EncounterActions, EncounterOutcome, Optional
 
 
 class Engine:
@@ -59,17 +60,17 @@ class Engine:
         with ConnectionManager(player_id=player_id, game_id=game_id):
             self._characters.do_job(character_name, card_id, self._board)
 
-    def do_travel(
-        self, player_id: int, game_id: int, character_name: str, route: Sequence[str]
+    def travel(
+        self, player_id: int, game_id: int, character_name: str, step: str
     ) -> None:
         with ConnectionManager(player_id=player_id, game_id=game_id):
-            self._characters.do_travel(character_name, route, self._board)
+            self._characters.travel(character_name, step, self._board)
 
-    def do_camp(self, player_id: int, game_id: int, character_name: str) -> None:
+    def camp(self, player_id: int, game_id: int, character_name: str) -> None:
         with ConnectionManager(player_id=player_id, game_id=game_id):
-            self._characters.do_camp(character_name, self._board)
+            self._characters.camp(character_name, self._board)
 
-    def do_resolve_encounter(
+    def resolve_encounter(
         self,
         player_id: int,
         game_id: int,
@@ -80,3 +81,7 @@ class Engine:
             return self._characters.resolve_encounter(
                 character_name, actions, self._board
             )
+
+    def end_turn(self, player_id: int, game_id: int, character_name: str) -> None:
+        with ConnectionManager(player_id=player_id, game_id=game_id):
+            self._characters.end_turn(character_name, self._board)
