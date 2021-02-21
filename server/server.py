@@ -19,6 +19,8 @@ from .api_types import (
     ResolveEncounterResponse,
     JobRequest,
     JobResponse,
+    TokenActionRequest,
+    TokenActionResponse,
     TravelRequest,
     TravelResponse,
 )
@@ -59,9 +61,9 @@ class Server:
         self._engine = engine
 
     @wrap_errors()
-    def get_board(self, game_id: int) -> Any:
+    def get_board(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
-        return self._engine.get_board(player_id, game_id)
+        return self._engine.get_board(player_id, game_id, character_name)
 
     @wrap_errors()
     def get_character(self, game_id: int, character_name: str) -> Any:
@@ -69,21 +71,28 @@ class Server:
         return self._engine.get_character(player_id, game_id, character_name)
 
     @wrap_errors()
-    def job_action(self, game_id: int, character_name: str) -> Any:
+    def do_job(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(JobRequest)
         self._engine.do_job(player_id, game_id, character_name, req.card_id)
         return JobResponse()
 
     @wrap_errors()
-    def travel_action(self, game_id: int, character_name: str) -> Any:
+    def token_action(self, game_id: int, character_name: str) -> Any:
+        player_id = self._extract_player_id()
+        req = self._read_body(TokenActionRequest)
+        self._engine.token_action(player_id, game_id, character_name, req.token, req.action)
+        return TokenActionResponse()
+
+    @wrap_errors()
+    def travel(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(TravelRequest)
         self._engine.travel(player_id, game_id, character_name, req.step)
         return TravelResponse()
 
     @wrap_errors()
-    def camp_action(self, game_id: int, character_name: str) -> Any:
+    def camp(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(CampRequest)
         self._engine.camp(player_id, game_id, character_name)
@@ -93,7 +102,7 @@ class Server:
             return CampResponse()
 
     @wrap_errors()
-    def resolve_encounter_action(self, game_id: int, character_name: str) -> Any:
+    def resolve_encounter(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(ResolveEncounterRequest)
         outcome = self._engine.resolve_encounter(
@@ -102,14 +111,14 @@ class Server:
         return ResolveEncounterResponse(outcome=outcome)
 
     @wrap_errors()
-    def end_turn_action(self, game_id: int, character_name: str) -> Any:
+    def end_turn(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(EndTurnRequest)
         self._engine.end_turn(player_id, game_id, character_name)
         return EndTurnResponse()
 
     def run(self) -> None:
-        bottle.route(path="/game/<game_id>/board", callback=self.get_board)
+        bottle.route(path="/game/<game_id>/board/<character_name>", callback=self.get_board)
         bottle.route(
             path="/game/<game_id>/character/<character_name>",
             callback=self.get_character,
@@ -117,27 +126,32 @@ class Server:
         bottle.route(
             path="/game/<game_id>/play/<character_name>/job",
             method="POST",
-            callback=self.job_action,
+            callback=self.do_job,
+        )
+        bottle.route(
+            path="/game/<game_id>/play/<character_name>/token_action",
+            method="POST",
+            callback=self.token_action,
         )
         bottle.route(
             path="/game/<game_id>/play/<character_name>/travel",
             method="POST",
-            callback=self.travel_action,
+            callback=self.travel,
         )
         bottle.route(
             path="/game/<game_id>/play/<character_name>/camp",
             method="POST",
-            callback=self.camp_action,
+            callback=self.camp,
         )
         bottle.route(
             path="/game/<game_id>/play/<character_name>/resolve_encounter",
             method="POST",
-            callback=self.resolve_encounter_action,
+            callback=self.resolve_encounter,
         )
         bottle.route(
             path="/game/<game_id>/play/<character_name>/end_turn",
             method="POST",
-            callback=self.end_turn_action,
+            callback=self.end_turn,
         )
         bottle.run(host="localhost", port=8080, debug=True)  # type: ignore
 

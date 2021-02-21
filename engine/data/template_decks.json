@@ -342,16 +342,15 @@
         "choice_type": "REQUIRED",
         "choices": [
           [
-            {"type": "GAIN_HEALING", "rank": 1, "param": null}
+            {"type": "MODIFY_HEALTH", "value": 10, "param": null}
           ]
         ]
       }
     ]
   },
   {
-    "name": "Travel",
+    "name": "Custom",
     "base_skills": [],
-    "templates": [
-    ]
+    "templates": []
   }
 ]

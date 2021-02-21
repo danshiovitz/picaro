@@ -20,12 +20,12 @@ class Engine:
         with ConnectionManager(player_id=player_id, game_id=None):
             game = create_game(name, json_dir)
             # create_game fixes the game_id in the session, so we can just call this:
-            self._board.generate_hexes()
+            self._board.generate_map()
             return game.id
 
-    def get_board(self, player_id: int, game_id: int) -> Board:
+    def get_board(self, player_id: int, game_id: int, character_name: str) -> Board:
         with ConnectionManager(player_id=player_id, game_id=game_id):
-            return self._board.get_snapshot()
+            return self._board.get_snapshot(character_name)
 
     def add_character(
         self,
@@ -59,6 +59,12 @@ class Engine:
     ) -> None:
         with ConnectionManager(player_id=player_id, game_id=game_id):
             self._characters.do_job(character_name, card_id, self._board)
+
+    def token_action(
+        self, player_id: int, game_id: int, character_name: str, token_name: str, action_name: str
+    ) -> None:
+        with ConnectionManager(player_id=player_id, game_id=game_id):
+            self._characters.token_action(character_name, token_name, action_name, self._board)
 
     def travel(
         self, player_id: int, game_id: int, character_name: str, step: str

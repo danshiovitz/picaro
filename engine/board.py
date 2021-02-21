@@ -1,40 +1,58 @@
 import dataclasses
 import random
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from picaro.common.hexmap.types import CubeCoordinate
 
 from .deck import load_deck
 from .exceptions import BadStateException, IllegalMoveException
 from .generate import generate_from_mini
-from .snapshot import Board as snapshot_Board
+from .snapshot import Board as snapshot_Board, Hex as snapshot_Hex, Token as snapshot_Token
 from .storage import ObjectStorageBase
 from .types import (
+    Action,
+    Effect,
+    EffectType,
     EncounterContextType,
     FullCard,
-    Hex as HexSnapshot,
     TemplateCard,
     Terrains,
-    Token,
 )
+
+
+TokenTypes = ["Character", "City", "Other"]
 
 
 # This one isn't serialized at all, it owns no data directly
 class ActiveBoard:
     NOWHERE = "Nowhere"
 
-    def get_snapshot(self) -> snapshot_Board:
-        hexes = tuple(self._translate_hex(hx) for hx in HexStorage.load())
-        tokens = tuple(TokenStorage.load())
-        return snapshot_Board(hexes=hexes, tokens=tokens)
+    def get_snapshot(self, token_name: str) -> snapshot_Board:
+        start_hex = self.get_token_location(token_name)
+        hexes = HexStorage.load()
+        snap_hexes = tuple(self._translate_hex(hx) for hx in hexes)
+        tokens = TokenStorage.load()
+        routes = self.best_routes(start_hex, [t.location for t in tokens], hexes=hexes)
+        snap_tokens = tuple(self._translate_token(tok, routes[tok.location]) for tok in tokens)
+        return snapshot_Board(hexes=snap_hexes, tokens=snap_tokens)
 
-    def add_token(self, token: Token) -> None:
-        names = {t.name for t in TokenStorage.load()}
-        if token.name in names:
-            raise IllegalMoveException(f"Token name {token.name} already in use")
-        TokenStorage.create(token)
-        self.move_token(token.name, token.location)
+    def add_token(self, name: str, type: str, location: str, actions: Optional[Sequence[Action]] = None) -> None:
+        found = False
+        try:
+            TokenStorage.load_by_name(name)
+            found = True
+        except IllegalMoveException:
+            pass
+        if found:
+            raise IllegalMoveException(f"Token name {name} already in use")
+        if type not in TokenTypes:
+            raise Exception(f"Unknown token type {type}")
+        if actions is None:
+            actions = []
+        TokenStorage.create(Token(name=name, type=type, location=location, actions=actions))
+        # this validates location so we don't have to:
+        self.move_token(name, location)
 
     def move_token(self, token_name: str, to: str, adjacent: bool = False) -> None:
         token = TokenStorage.load_by_name(token_name)
@@ -60,10 +78,22 @@ class ActiveBoard:
         token = dataclasses.replace(token, location=to)
         TokenStorage.update(token)
 
-    def get_token(self, token_name: str) -> Token:
-        return TokenStorage.load_by_name(token_name)
+    def get_token(self, token_name: str) -> snapshot_Token:
+        return self._translate_token(TokenStorage.load_by_name(token_name), ["bogus"])
 
-    def get_hex(self, location: str) -> HexSnapshot:
+    def get_token_location(self, token_name: str) -> str:
+        return TokenStorage.load_by_name(token_name).location
+
+    def _translate_token(self, token: "Token", route: Sequence[str]) -> snapshot_Token:
+        return snapshot_Token(
+            name=token.name,
+            type=token.type,
+            location=token.location,
+            actions=tuple(token.actions),
+            route=route,
+        )
+
+    def get_hex(self, location: str) -> snapshot_Hex:
         return self._translate_hex(HexStorage.load_by_name(location))
 
     def find_hexes_near_token(
@@ -78,26 +108,46 @@ class ActiveBoard:
         )
         return [hx.name for hx in nearby]
 
-    def best_route(self, start_hex: str, finish_hex: str) -> List[str]:
-        start_hx = HexStorage.load_by_name(start_hex)
-        finish_hx = HexStorage.load_by_name(finish_hex)
+    def best_routes(self, start_hex: str, finish_hexes: List[str], hexes: Optional[List["Hex"]] = None) -> Dict[str, List[str]]:
+        names = {hx.name: hx for hx in (hexes if hexes else HexStorage.load())}
+        assert start_hex in names
+        assert all(hxn in names for hxn in finish_hexes)
+        ngh_map = self._calc_neighbors(names.values())
 
-        seen: Set[Tuple[int, int, int]] = set()
-        pool = [(start_hx, [])]
+        targets = {hxn for hxn in finish_hexes}
+        seen: Set[str] = set()
+        pool = [(start_hex, [])]
+        ret = {}
         while pool:
             cur, route = pool.pop(0)
-            if cur == finish_hx:
-                return route
-            if (cur.x, cur.y, cur.z) in seen:
+            if cur in seen:
                 continue
-            seen.add((cur.x, cur.y, cur.z))
-            nghs = HexStorage.load_by_distance(cur.x, cur.y, cur.z, 1, 1)
-            for ngh in nghs:
-                pool.append((ngh, route + [ngh.name]))
-        raise Exception(f"Couldn't find route from {start_hx} to {finish_hx}")
+            seen.add(cur)
+            if cur in targets:
+                ret[cur] = route
+                if len(ret) == len(targets):
+                    return ret
+            for ngh in ngh_map[cur]:
+                pool.append((ngh, route + [ngh]))
+        raise Exception(f"Couldn't find routes from {start_hex} to {finish_hexes} - {ret}")
 
-    def _translate_hex(self, hx: "Hex") -> HexSnapshot:
-        return HexSnapshot(
+    def _calc_neighbors(self, hexes: Sequence["Hex"]) -> Dict[str, List[str]]:
+        reverse = {(hx.x, hx.y, hx.z): hx.name for hx in hexes}
+        ret = {}
+        for hx in hexes:
+            ngh_vals = [
+                (hx.x + 1, hx.y - 1, hx.z + 0),
+                (hx.x + 1, hx.y + 0, hx.z - 1),
+                (hx.x + 0, hx.y + 1, hx.z - 1),
+                (hx.x - 1, hx.y + 1, hx.z + 0),
+                (hx.x - 1, hx.y + 0, hx.z + 1),
+                (hx.x + 0, hx.y - 1, hx.z + 1),
+            ]
+            ret[hx.name] = [reverse[ngh] for ngh in ngh_vals if ngh in reverse]
+        return ret
+
+    def _translate_hex(self, hx: "Hex") -> snapshot_Hex:
+        return snapshot_Hex(
             name=hx.name,
             terrain=hx.terrain,
             country=hx.country,
@@ -119,7 +169,7 @@ class ActiveBoard:
         BoardDeckStorage.update(board_deck)
         return card
 
-    def generate_hexes(self) -> None:
+    def generate_map(self) -> None:
         all_hexes = HexStorage.load()
         if all_hexes:
             raise Exception("Can't generate, hexes already exist")
@@ -137,7 +187,7 @@ class ActiveBoard:
         hexes = generate_from_mini(50, 50, minimap)
 
         # translate these into storage format:
-        def trans(hx: HexSnapshot) -> Hex:
+        def trans(hx: snapshot_Hex) -> Hex:
             cube = CubeCoordinate.from_row_col(
                 row=hx.coordinate.row, col=hx.coordinate.column
             )
@@ -154,6 +204,29 @@ class ActiveBoard:
 
         HexStorage.insert([trans(hx) for hx in hexes])
 
+        # using http://www.dungeoneering.net/d100-list-fantasy-town-names/ as a placeholder
+        # for now
+        city_names = [
+            "Aerilon", "Aquarin", "Aramoor", "Azmar", "Beggar's Hole", "Black Hollow",
+            "Blue Field", "Briar Glen", "Brickelwhyte", "Broken Shield", "Boatwright", "Bullmar",
+            "Carran", "City of Fire", "Coalfell", "Cullfield", "Darkwell", "Deathfall", "Doonatel",
+            "Dry Gulch", "Easthaven", "Ecrin", "Erast", "Far Water", "Firebend", "Fool's March",
+            "Frostford", "Goldcrest", "Goldenleaf", "Greenflower", "Garen's Well", "Haran",
+            "Hillfar", "Hogsfeet", "Hollyhead", "Hull", "Hwen", "Icemeet", "Ironforge", "Irragin",
+        ]
+        random.shuffle(city_names)
+
+        for hx in hexes:
+            if hx.terrain == "City":
+                actions = [
+                    Action(
+                        name="Trade",
+                        cost=[Effect(type=EffectType.MODIFY_RESOURCES, value=-1)],
+                        benefit=[Effect(type=EffectType.MODIFY_COINS, value=5)],
+                    ),
+                ]
+                token = Token(name=city_names.pop(0), type="City", location=hx.name, actions=actions)
+                TokenStorage.create(token)
 
 # this one is not frozen and not exposed externally
 @dataclass
@@ -177,6 +250,14 @@ class Hex:
 class BoardDeck:
     name: str  # note this name is assumed to match the template deck
     deck: List[TemplateCard]
+
+
+@dataclass
+class Token:
+    name: str
+    type: str
+    location: str
+    actions: List[Action]
 
 
 class HexStorage(ObjectStorageBase[Hex]):

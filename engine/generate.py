@@ -9,7 +9,8 @@ from typing import Callable, Dict, List, Set
 from picaro.common.hexmap.types import CubeCoordinate, OffsetCoordinate
 from picaro.common.hexmap.utils import calc_offset_neighbor_map
 
-from .types import Hex, Terrains
+from .snapshot import Hex
+from .types import Terrains
 
 # generation code from https://welshpiper.com/hex-based-campaign-design-part-1/
 @dataclass(frozen=True)

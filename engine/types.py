@@ -2,8 +2,6 @@ from dataclasses import dataclass
 from enum import Enum, auto as enum_auto
 from typing import Any, Dict, Generic, List, Optional, Sequence, Tuple, TypeVar
 
-from picaro.common.hexmap.types import OffsetCoordinate
-
 
 Terrains = [
     "Forest",
@@ -20,27 +18,7 @@ Terrains = [
 ]
 
 
-@dataclass(frozen=True)
-class Hex:
-    name: str
-    coordinate: OffsetCoordinate
-    terrain: str
-    country: str
-    region: str
-    danger: int
-
-
-TokenTypes = ["Character", "Other"]
-
-
-@dataclass(frozen=True)
-class Token:
-    name: str
-    type: str
-    location: str
-
-
-class EffectType(Enum):
+class EncounterEffect(Enum):
     NOTHING = enum_auto()
     GAIN_COINS = enum_auto()
     GAIN_XP = enum_auto()
@@ -49,7 +27,6 @@ class EffectType(Enum):
     GAIN_RESOURCES = enum_auto()
     GAIN_QUEST = enum_auto()
     GAIN_TURNS = enum_auto()
-    CHECK_FAILURE = enum_auto()
     LOSE_COINS = enum_auto()
     LOSE_REPUTATION = enum_auto()
     DAMAGE = enum_auto()
@@ -60,11 +37,25 @@ class EffectType(Enum):
     LOSE_SPEED = enum_auto()
 
 
+class EffectType(Enum):
+    MODIFY_COINS = enum_auto()
+    MODIFY_XP = enum_auto()
+    MODIFY_REPUTATION = enum_auto()
+    MODIFY_HEALTH = enum_auto()
+    MODIFY_RESOURCES = enum_auto()
+    MODIFY_QUEST = enum_auto()
+    MODIFY_TURNS = enum_auto()
+    MODIFY_SPEED = enum_auto()
+    DISRUPT_JOB = enum_auto()
+    TRANSPORT = enum_auto()
+
+
 @dataclass(frozen=True)
 class Effect:
     type: EffectType
-    rank: int
+    value: int
     param: Optional[Any] = None
+    is_cost: bool = False
 
 
 class JobType(Enum):
@@ -78,8 +69,8 @@ class JobType(Enum):
 class EncounterCheck:
     skill: str
     target_number: int
-    reward: EffectType
-    penalty: EffectType
+    reward: EncounterEffect
+    penalty: EncounterEffect
 
 
 class ChoiceType(Enum):
@@ -95,8 +86,8 @@ class TemplateCard:
     name: str
     desc: str
     skills: Sequence[str] = ()
-    rewards: Sequence[EffectType] = ()
-    penalties: Sequence[EffectType] = ()
+    rewards: Sequence[EncounterEffect] = ()
+    penalties: Sequence[EncounterEffect] = ()
     choice_type: ChoiceType = ChoiceType.NONE
     choices: Sequence[Sequence[Effect]] = ()
 
@@ -123,6 +114,7 @@ class EncounterContextType(Enum):
     JOB = enum_auto()
     TRAVEL = enum_auto()
     CAMP = enum_auto()
+    ACTION = enum_auto()
 
 
 @dataclass(frozen=True)
@@ -164,6 +156,13 @@ class EncounterOutcome:
     speed: Optional[EncounterSingleOutcome[int]]
     transport_location: Optional[EncounterSingleOutcome[str]]
     new_job: Optional[EncounterSingleOutcome[str]]
+
+
+@dataclass(frozen=True)
+class Action:
+    name: str
+    cost: List[Effect]
+    benefit: List[Effect]
 
 
 class HookType(Enum):

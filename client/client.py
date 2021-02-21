@@ -1,9 +1,10 @@
 import re
+import sys
 from argparse import ArgumentParser, Namespace
 from collections import defaultdict
 from http.client import HTTPResponse
 from string import ascii_lowercase
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Type, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Type, TypeVar
 from urllib.request import HTTPErrorProcessor, Request, build_opener, urlopen
 
 from picaro.client.colors import colors
@@ -16,6 +17,7 @@ from picaro.common.hexmap.display import (
 )
 from picaro.common.serializer import deserialize, serialize
 from picaro.server.api_types import (
+    Action,
     Board,
     CampRequest,
     CampResponse,
@@ -23,6 +25,7 @@ from picaro.server.api_types import (
     ChoiceType,
     Effect,
     EffectType,
+    EncounterEffect,
     Emblem,
     EncounterCheck,
     EncounterActions,
@@ -40,6 +43,8 @@ from picaro.server.api_types import (
     ResolveEncounterResponse,
     TableauCard,
     Token,
+    TokenActionRequest,
+    TokenActionResponse,
     TravelRequest,
     TravelResponse,
 )
@@ -79,6 +84,7 @@ class Client:
 
         get_board_parser = subparsers.add_parser("board")
         get_board_parser.set_defaults(cmd=lambda cli: cli.get_board())
+        get_board_parser.add_argument("name", type=str)
         get_board_parser.add_argument("--country", "--countries", action="store_true")
         get_board_parser.add_argument("--region", "--regions", action="store_true")
         get_board_parser.add_argument("--large", action="store_true")
@@ -117,7 +123,8 @@ class Client:
         self.opener = build_opener(NonThrowingHTTPErrorProcessor)
 
     def get_board(self) -> None:
-        board = self._get("/board", Board)
+        ch = self._get(f"/character/{self.args.name}", Character)
+        board = self._get(f"/board/{ch.name}", Board)
         coords = {hx.coordinate: hx for hx in board.hexes}
 
         tokens: Dict[str, List[Token]] = defaultdict(list)
@@ -162,7 +169,8 @@ class Client:
         if board.tokens:
             print()
             for tok in board.tokens:
-                print(tok)
+                if tok.type != "City" or len(tok.route) <= 5:
+                    print(tok)
 
         if self.args.country:
             ccount: Dict[str, int] = defaultdict(int)
@@ -196,7 +204,12 @@ class Client:
             hx = coords[coord]
 
             if hx.name in tokens:
-                return colors.bold + "@" + colors.reset
+                if tokens[hx.name][0].type == "Character":
+                    return colors.bold + "@" + colors.reset
+                elif tokens[hx.name][0].type == "City":
+                    return colors.fg.red + "#" + colors.reset
+                else:
+                    return colors.bold + colors.green + "?" + colors.reset
             elif encounters is not None and hx.name in encounters:
                 return colors.bold + colors.bg.red + "!" + colors.reset
 
@@ -265,7 +278,6 @@ class Client:
                 print()
 
     def _play_turn(self) -> None:
-        acted = False
         while True:
             ch = self._get(f"/character/{self.args.name}", Character)
             if ch.encounters:
@@ -273,15 +285,14 @@ class Client:
                 self._encounter(ch)
                 print()
                 continue
-            if not acted and ch.remaining_turns > 0:
+            if not ch.acted_this_turn and ch.remaining_turns > 0:
                 self._display_play(ch)
-                if self._input_play_action():
-                    acted = True
+                self._input_play_action()
                 continue
             return
 
     def _display_play(self, ch: Character) -> None:
-        board = self._get("/board", Board)
+        board = self._get(f"/board/{ch.name}", Board)
         encounters = {card.location for card in ch.tableau}
 
         ch_hex = [hx for hx in board.hexes if hx.name == ch.location][0]
@@ -302,14 +313,27 @@ class Client:
                 f" Turns: {ch.remaining_turns:2}    Luck: {ch.luck:2}        Speed: {ch.speed:2}"
             )
             display.append("")
+
+            def dist(route) -> str:
+                ret = f"- {len(route)} away"
+                if len(route) > ch.speed:
+                    ret += " (too far)"
+                return ret
+
             for idx, card in enumerate(ch.tableau):
-                card_dist = f"- {len(card.route)} away"
-                if len(card.route) > ch.speed:
-                    card_dist += " (too far)"
                 display.append(
-                    f"{ascii_lowercase[idx]}. ({card.age}) {card.name} [{card.location} {card_dist}]:"
+                    f"{ascii_lowercase[idx]}. ({card.age}) {card.name} [{card.location} {dist(card.route)}]:"
                 )
                 display.append(f"       {self._check_str(card.checks[0], ch)}")
+
+            actions = self._available_actions(board)
+            for idx, token_action in enumerate(actions):
+                token, action = token_action
+                display.append(
+                    f"{ascii_lowercase[idx + 9]}. {action.name} [{token.location} {dist(token.route)}]"
+                )
+
+            display.append("q. Quit")
             display.append("t. Travel (uio.jkl)")
             display.append("x. Camp")
             display.append("z. End Turn (if you don't want to do a job or camp)")
@@ -330,9 +354,14 @@ class Client:
             print(line)
         print()
 
+    def _available_actions(self, board: Board) -> List[Tuple[Token, Action]]:
+        actions = [(t, a) for t in board.tokens for a in t.actions if len(t.route) <= 5]
+        actions.sort(key=lambda v: (v[0].location, len(v[0].route), v[1].name))
+        return actions
+
     def _check_str(self, check: EncounterCheck, ch: Character) -> str:
-        reward_name = self._render_effect_type(check.reward)
-        penalty_name = self._render_effect_type(check.penalty)
+        reward_name = self._render_encounter_effect(check.reward)
+        penalty_name = self._render_encounter_effect(check.penalty)
         return (
             f"{check.skill} (1d8{ch.skills[check.skill]:+}) vs {check.target_number} "
             f"({reward_name} / {penalty_name})"
@@ -347,8 +376,8 @@ class Client:
             line = input().lower().strip()
             if not line:
                 continue
-            if line[0] in "abcde":
-                c_idx = "abcde".index(line[0])
+            if line[0] in "abcdefg":
+                c_idx = "abcdefg".index(line[0])
                 if c_idx < len(ch.tableau):
                     if self._job(ch.tableau[c_idx], ch):
                         return True
@@ -356,6 +385,21 @@ class Client:
                     print("No such encounter card!")
                     print()
                     continue
+            elif line[0] in "jklmnop":
+                c_idx = "jklmnop".index(line[0])
+                board = self._get(f"/board/{ch.name}", Board)
+                actions = self._available_actions(board)
+                if c_idx < len(actions):
+                    token, action = actions[c_idx]
+                    if self._token_action(token, action, ch):
+                        return True
+                else:
+                    print("No such action!")
+                    print()
+                    continue
+            elif line[0] == "q":
+                print("Bye!")
+                sys.exit(0)
             elif line[0] == "t":
                 ww = re.split(r"\s+", line, 2)
                 dirs = "" if len(ww) == 1 else ww[1]
@@ -379,7 +423,8 @@ class Client:
         # then exit to let the player deal with the encounter and
         # perhaps then make another choice for their main action
         if ch.location != card.location or ch.encounters:
-            return False
+            # return true to force input play method to exit also
+            return True
 
         # otherwise start the main job
         try:
@@ -387,6 +432,30 @@ class Client:
                 f"/play/{ch.name}/job",
                 JobRequest(card_id=card.id),
                 JobResponse,
+            )
+        except IllegalMoveException as e:
+            print(e)
+            print()
+            return False
+
+        return True
+
+    def _token_action(self, token: Token, action: Action, ch: Character) -> bool:
+        self._travel_route(token.route, ch)
+        ch = self._get(f"/character/{self.args.name}", Character)
+        # if we didn't make it to the token's location uneventfully,
+        # then exit to let the player deal with the encounter and
+        # perhaps then make another choice for their main action
+        if ch.location != token.location or ch.encounters:
+            # return true to force input play method to exit also
+            return True
+
+        # otherwise start the action
+        try:
+            resp = self._post(
+                f"/play/{ch.name}/token_action",
+                TokenActionRequest(token=token.name, action=action.name),
+                TokenActionResponse,
             )
         except IllegalMoveException as e:
             print(e)
@@ -484,7 +553,7 @@ class Client:
             can_choose = (
                 len(all_choices) > 1
                 and ch.encounters[0].choice_type != ChoiceType.RANDOM
-            )
+            ) or ch.encounters[0].choice_type == ChoiceType.OPTIONAL
             for idx, choices in enumerate(all_choices):
                 pfx = (" " + ascii_lowercase[idx] + ". ") if can_choose else " * "
                 line = pfx + ", ".join(self._render_effect(eff) for eff in choices)
@@ -495,11 +564,20 @@ class Client:
                     line = colors.bold + line + colors.reset
                 print(line)
             if can_choose:
+                if ch.encounters[0].choice_type == ChoiceType.OPTIONAL:
+                    print(" q. Do none")
                 while True:
                     print("Make your choice: ", end="")
                     line = input().lower().strip()
                     if not line:
                         continue
+                    if line[0] == "q":
+                        if ch.encounters[0].choice_type == ChoiceType.OPTIONAL:
+                            choice = None
+                            break
+                        else:
+                            print("You must make a selection.")
+                            continue
                     c_idx = ascii_lowercase.index(line[0])
                     if c_idx >= len(all_choices):
                         print("Not a valid choice?")
@@ -569,33 +647,58 @@ class Client:
 
         return True
 
-    def _render_effect_type(self, eff: EffectType) -> str:
+    def _render_encounter_effect(self, eff: EncounterEffect) -> str:
         names = {
-            EffectType.NOTHING: "nothing",
-            EffectType.GAIN_COINS: "+coins",
-            EffectType.GAIN_XP: "+xp",
-            EffectType.GAIN_REPUTATION: "+reputation",
-            EffectType.GAIN_HEALING: "+healing",
-            EffectType.GAIN_RESOURCES: "+resources",
-            EffectType.GAIN_QUEST: "+quest",
-            EffectType.GAIN_TURNS: "+turns",
-            EffectType.CHECK_FAILURE: "+failure",  # this generally results in xp, so +
-            EffectType.LOSE_COINS: "-coins",
-            EffectType.LOSE_REPUTATION: "-reputation",
-            EffectType.DAMAGE: "-damage",
-            EffectType.LOSE_RESOURCES: "-resources",
-            EffectType.LOSE_TURNS: "-turns",
-            EffectType.LOSE_SPEED: "-speed",
-            EffectType.DISRUPT_JOB: "-job",
-            EffectType.TRANSPORT: "-transport",
+            EncounterEffect.NOTHING: "nothing",
+            EncounterEffect.GAIN_COINS: "+coins",
+            EncounterEffect.GAIN_XP: "+xp",
+            EncounterEffect.GAIN_REPUTATION: "+reputation",
+            EncounterEffect.GAIN_HEALING: "+healing",
+            EncounterEffect.GAIN_RESOURCES: "+resources",
+            EncounterEffect.GAIN_QUEST: "+quest",
+            EncounterEffect.GAIN_TURNS: "+turns",
+            EncounterEffect.LOSE_COINS: "-coins",
+            EncounterEffect.LOSE_REPUTATION: "-reputation",
+            EncounterEffect.DAMAGE: "-damage",
+            EncounterEffect.LOSE_RESOURCES: "-resources",
+            EncounterEffect.LOSE_TURNS: "-turns",
+            EncounterEffect.LOSE_SPEED: "-speed",
+            EncounterEffect.DISRUPT_JOB: "-job",
+            EncounterEffect.TRANSPORT: "-transport",
         }
         return names.get(eff, eff.name)
 
     def _render_effect(self, eff: Effect) -> str:
-        ret = self._render_effect_type(eff.type) + "-" + str(eff.rank)
-        if eff.param:
-            ret += " " + str(eff.param)
-        return ret
+        def _with_s(word: str, word_s: Optional[str] = None) -> str:
+            if eff.value == 1 or eff.value == -1:
+                return f"{eff.value:+} {word}"
+            elif word_s is None:
+                return f"{eff.value:+} {word}s"
+            else:
+                return f"{eff.value:+} {word_s}"
+
+        if eff.type == EffectType.MODIFY_COINS:
+            return _with_s("coin")
+        elif eff.type == EffectType.MODIFY_XP:
+            return f"{eff.value:+} {eff.param} xp"
+        elif eff.type == EffectType.MODIFY_REPUTATION:
+            return f"{eff.value:+} reputation"
+        elif eff.type == EffectType.MODIFY_HEALTH:
+            return f"{eff.value:+} health"
+        elif eff.type == EffectType.MODIFY_RESOURCES:
+            return _with_s("resource")
+        elif eff.type == EffectType.MODIFY_QUEST:
+            return f"{eff.value:+} quest"
+        elif eff.type == EffectType.MODIFY_TURNS:
+            return _with_s("turn")
+        elif eff.type == EffectType.MODIFY_SPEED:
+            return f"{eff.value:+} speed"
+        elif eff.type == EffectType.DISRUPT_JOB:
+            return f"rank-{eff.value:+} job turmoil"
+        elif eff.type == EffectType.TRANSPORT:
+            return f"rank-{eff.value:+} random transport"
+        else:
+            return eff
 
     def _travel(self, dirs: str, ch: Character) -> bool:
         if not dirs:
@@ -603,7 +706,7 @@ class Client:
             print()
             return False
 
-        board = self._get("/board", Board)
+        board = self._get(f"/board/{ch.name}", Board)
 
         cubes = {
             CubeCoordinate.from_row_col(hx.coordinate.row, hx.coordinate.column): hx

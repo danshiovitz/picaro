@@ -3,23 +3,22 @@ from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from picaro.common.hexmap.types import OffsetCoordinate
-from picaro.engine.snapshot import Board, Character, Encounter
+from picaro.engine.snapshot import Board, Character, Encounter, Hex, Token
 from picaro.engine.types import (
+    Action,
     ChoiceType,
     TableauCard,
     Effect,
     EffectType,
     Emblem,
-    EncounterCheck,
     EncounterActions,
+    EncounterCheck,
+    EncounterEffect,
     EncounterOutcome,
     EncounterSingleOutcome,
     Feat,
-    Hex,
     HookType,
     Terrains,
-    Token,
-    TokenTypes,
 )
 
 
@@ -36,6 +35,17 @@ class JobRequest:
 
 @dataclass(frozen=True)
 class JobResponse:
+    pass
+
+
+@dataclass(frozen=True)
+class TokenActionRequest:
+    token: str
+    action: str
+
+
+@dataclass(frozen=True)
+class TokenActionResponse:
     pass
 
 

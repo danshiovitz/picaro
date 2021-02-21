@@ -2,15 +2,35 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, Optional, Sequence
 
+from picaro.common.hexmap.types import OffsetCoordinate
+
 from picaro.engine.types import (
+    Action,
     ChoiceType,
     TableauCard,
     Effect,
     Emblem,
     EncounterCheck,
-    Hex,
-    Token,
 )
+
+
+@dataclass(frozen=True)
+class Hex:
+    name: str
+    coordinate: OffsetCoordinate
+    terrain: str
+    country: str
+    region: str
+    danger: int
+
+
+@dataclass(frozen=True)
+class Token:
+    name: str
+    type: str
+    location: str
+    actions: Sequence[Action]
+    route: Sequence[str]
 
 
 @dataclass(frozen=True)
@@ -56,6 +76,7 @@ class Character:
     quest: int
     location: str
     remaining_turns: int
+    acted_this_turn: bool
     luck: int
     speed: int
     tableau: Sequence[TableauCard]

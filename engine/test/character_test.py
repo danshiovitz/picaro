@@ -87,14 +87,14 @@ class CharacterTest(TestCase):
         board = self._make_board()
         ch.coins = 3
 
-        effects = [Effect(type=EffectType.GAIN_COINS, rank=1, param=None)]
+        effects = [Effect(type=EffectType.MODIFY_COINS, value=1)]
         outcome = ch.apply_effects(effects, EncounterContextType.JOB, board)
         self.assertEqual(ch.coins, 4)
         assert outcome.coins is not None
         self.assertEqual(outcome.coins.old_val, 3)
         self.assertEqual(outcome.coins.new_val, 4)
 
-        effects = [Effect(type=EffectType.GAIN_COINS, rank=4, param=None)]
+        effects = [Effect(type=EffectType.MODIFY_COINS, value=10)]
         outcome = ch.apply_effects(effects, EncounterContextType.JOB, board)
         self.assertEqual(ch.coins, 14)
         assert outcome.coins is not None

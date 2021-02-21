@@ -1,7 +1,6 @@
 - Add one time password / session cookie stuff
 - support multiple resource types (perhaps each hex has a resource type and a resource deck)
 - projects
-- emblems + feats
 - events + actions
 - regional, country, and arch villains, and their moves
 - proposals/adjustments/whatever
@@ -11,8 +10,11 @@
 - rumor phase
 - other things like tags (terrain features, powers, villains) + zodiacs
 - better engine unit testing
+- different mechanics for captain and king play ("tool" exhaustion?)
+- record all encounters + outcome + commentary and command to view history
 - meters?
 - fill in stuff:
+  - more feat hooks
   - terrain decks
   - job decks
   - camp deck
@@ -97,3 +99,21 @@ Where danger-2 is like "you have an encounter if the hex is at least this danger
 Slow is -1 speed, fast is +1 speed, loot is random loot
 
 Do we support (a) as a shortcut to walk to encounter a's hex and then have that encounter? will it confuse things if the encounter is more than your speed away and/or you have an encounter on the way there? do we have any guarantees you don't have more than one encounter per turn?
+
+
+Actions are something you can do via tokens or hexes. What I expect is the display is like
+
+b. (3) Scouting Mission [AI05 - 1 away]:                                        i / @ :
+       Observation (1d8+0) vs 2 (+reputation / -damage)                         I/ ! ^ :
+c. (3) Caravan Raid [AI06 - 0 away]:                                            j n / :
+       Speed (1d8+0) vs 5 (+coins / -damage)                                    J/ / / :
+j. Trade (via Waterdeep) [AI07]                                                 k / n /
+k. Search Area [AI09]                                                           K  n ~
+t. Travel (uio.jkl)
+x. Camp
+
+Trade is an action exposed by the Waterdeep token, and Search Area is an action from the hex itself. These actions have some associated radius in which they're displayed, since otherwise you'd show a zillion search area actions. For all these actions, you always have to move to the hex they're in and then execute them.
+
+Trade is also something like:
+  * Pay 1 resource (any type), receive 5 coins
+This is different from a -resource-1 penalty, since you can't choose this option if you don't have the payment

@@ -5,8 +5,9 @@ from typing import Any, Dict, List, Sequence, Tuple
 
 from .deck import load_deck
 from .exceptions import IllegalMoveException
+from .snapshot import Hex
 from .storage import ObjectStorageBase
-from .types import EncounterContextType, Hex, FullCard, JobType, TemplateCard
+from .types import EncounterContextType, FullCard, JobType, TemplateCard
 
 
 @dataclass(frozen=True)
