@@ -4,7 +4,18 @@ from argparse import ArgumentParser, Namespace
 from collections import defaultdict
 from http.client import HTTPResponse
 from string import ascii_lowercase
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Type, TypeVar
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Type,
+    TypeVar,
+)
 from urllib.request import HTTPErrorProcessor, Request, build_opener, urlopen
 
 from picaro.client.colors import colors

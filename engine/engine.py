@@ -61,10 +61,17 @@ class Engine:
             self._characters.do_job(character_name, card_id, self._board)
 
     def token_action(
-        self, player_id: int, game_id: int, character_name: str, token_name: str, action_name: str
+        self,
+        player_id: int,
+        game_id: int,
+        character_name: str,
+        token_name: str,
+        action_name: str,
     ) -> None:
         with ConnectionManager(player_id=player_id, game_id=game_id):
-            self._characters.token_action(character_name, token_name, action_name, self._board)
+            self._characters.token_action(
+                character_name, token_name, action_name, self._board
+            )
 
     def travel(
         self, player_id: int, game_id: int, character_name: str, step: str

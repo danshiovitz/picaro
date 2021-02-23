@@ -81,7 +81,9 @@ class Server:
     def token_action(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(TokenActionRequest)
-        self._engine.token_action(player_id, game_id, character_name, req.token, req.action)
+        self._engine.token_action(
+            player_id, game_id, character_name, req.token, req.action
+        )
         return TokenActionResponse()
 
     @wrap_errors()
@@ -118,7 +120,9 @@ class Server:
         return EndTurnResponse()
 
     def run(self) -> None:
-        bottle.route(path="/game/<game_id>/board/<character_name>", callback=self.get_board)
+        bottle.route(
+            path="/game/<game_id>/board/<character_name>", callback=self.get_board
+        )
         bottle.route(
             path="/game/<game_id>/character/<character_name>",
             callback=self.get_character,

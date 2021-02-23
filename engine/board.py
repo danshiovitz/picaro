@@ -8,7 +8,11 @@ from picaro.common.hexmap.types import CubeCoordinate
 from .deck import load_deck
 from .exceptions import BadStateException, IllegalMoveException
 from .generate import generate_from_mini
-from .snapshot import Board as snapshot_Board, Hex as snapshot_Hex, Token as snapshot_Token
+from .snapshot import (
+    Board as snapshot_Board,
+    Hex as snapshot_Hex,
+    Token as snapshot_Token,
+)
 from .storage import ObjectStorageBase
 from .types import (
     Action,
@@ -34,10 +38,18 @@ class ActiveBoard:
         snap_hexes = tuple(self._translate_hex(hx) for hx in hexes)
         tokens = TokenStorage.load()
         routes = self.best_routes(start_hex, [t.location for t in tokens], hexes=hexes)
-        snap_tokens = tuple(self._translate_token(tok, routes[tok.location]) for tok in tokens)
+        snap_tokens = tuple(
+            self._translate_token(tok, routes[tok.location]) for tok in tokens
+        )
         return snapshot_Board(hexes=snap_hexes, tokens=snap_tokens)
 
-    def add_token(self, name: str, type: str, location: str, actions: Optional[Sequence[Action]] = None) -> None:
+    def add_token(
+        self,
+        name: str,
+        type: str,
+        location: str,
+        actions: Optional[Sequence[Action]] = None,
+    ) -> None:
         found = False
         try:
             TokenStorage.load_by_name(name)
@@ -50,7 +62,9 @@ class ActiveBoard:
             raise Exception(f"Unknown token type {type}")
         if actions is None:
             actions = []
-        TokenStorage.create(Token(name=name, type=type, location=location, actions=actions))
+        TokenStorage.create(
+            Token(name=name, type=type, location=location, actions=actions)
+        )
         # this validates location so we don't have to:
         self.move_token(name, location)
 
@@ -108,7 +122,12 @@ class ActiveBoard:
         )
         return [hx.name for hx in nearby]
 
-    def best_routes(self, start_hex: str, finish_hexes: List[str], hexes: Optional[List["Hex"]] = None) -> Dict[str, List[str]]:
+    def best_routes(
+        self,
+        start_hex: str,
+        finish_hexes: List[str],
+        hexes: Optional[List["Hex"]] = None,
+    ) -> Dict[str, List[str]]:
         names = {hx.name: hx for hx in (hexes if hexes else HexStorage.load())}
         assert start_hex in names
         assert all(hxn in names for hxn in finish_hexes)
@@ -129,7 +148,9 @@ class ActiveBoard:
                     return ret
             for ngh in ngh_map[cur]:
                 pool.append((ngh, route + [ngh]))
-        raise Exception(f"Couldn't find routes from {start_hex} to {finish_hexes} - {ret}")
+        raise Exception(
+            f"Couldn't find routes from {start_hex} to {finish_hexes} - {ret}"
+        )
 
     def _calc_neighbors(self, hexes: Sequence["Hex"]) -> Dict[str, List[str]]:
         reverse = {(hx.x, hx.y, hx.z): hx.name for hx in hexes}
@@ -207,12 +228,46 @@ class ActiveBoard:
         # using http://www.dungeoneering.net/d100-list-fantasy-town-names/ as a placeholder
         # for now
         city_names = [
-            "Aerilon", "Aquarin", "Aramoor", "Azmar", "Beggar's Hole", "Black Hollow",
-            "Blue Field", "Briar Glen", "Brickelwhyte", "Broken Shield", "Boatwright", "Bullmar",
-            "Carran", "City of Fire", "Coalfell", "Cullfield", "Darkwell", "Deathfall", "Doonatel",
-            "Dry Gulch", "Easthaven", "Ecrin", "Erast", "Far Water", "Firebend", "Fool's March",
-            "Frostford", "Goldcrest", "Goldenleaf", "Greenflower", "Garen's Well", "Haran",
-            "Hillfar", "Hogsfeet", "Hollyhead", "Hull", "Hwen", "Icemeet", "Ironforge", "Irragin",
+            "Aerilon",
+            "Aquarin",
+            "Aramoor",
+            "Azmar",
+            "Beggar's Hole",
+            "Black Hollow",
+            "Blue Field",
+            "Briar Glen",
+            "Brickelwhyte",
+            "Broken Shield",
+            "Boatwright",
+            "Bullmar",
+            "Carran",
+            "City of Fire",
+            "Coalfell",
+            "Cullfield",
+            "Darkwell",
+            "Deathfall",
+            "Doonatel",
+            "Dry Gulch",
+            "Easthaven",
+            "Ecrin",
+            "Erast",
+            "Far Water",
+            "Firebend",
+            "Fool's March",
+            "Frostford",
+            "Goldcrest",
+            "Goldenleaf",
+            "Greenflower",
+            "Garen's Well",
+            "Haran",
+            "Hillfar",
+            "Hogsfeet",
+            "Hollyhead",
+            "Hull",
+            "Hwen",
+            "Icemeet",
+            "Ironforge",
+            "Irragin",
         ]
         random.shuffle(city_names)
 
@@ -225,8 +280,14 @@ class ActiveBoard:
                         benefit=[Effect(type=EffectType.MODIFY_COINS, value=5)],
                     ),
                 ]
-                token = Token(name=city_names.pop(0), type="City", location=hx.name, actions=actions)
+                token = Token(
+                    name=city_names.pop(0),
+                    type="City",
+                    location=hx.name,
+                    actions=actions,
+                )
                 TokenStorage.create(token)
+
 
 # this one is not frozen and not exposed externally
 @dataclass

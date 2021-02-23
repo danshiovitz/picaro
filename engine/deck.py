@@ -127,7 +127,9 @@ class TemplateDeck:
         self, template_card: TemplateCard, context: EncounterContextType
     ) -> List[EncounterEffect]:
         reward_bag = []
-        reward_bag.extend([EncounterEffect.GAIN_COINS, EncounterEffect.GAIN_REPUTATION] * 4)
+        reward_bag.extend(
+            [EncounterEffect.GAIN_COINS, EncounterEffect.GAIN_REPUTATION] * 4
+        )
         reward_bag.extend(template_card.rewards * 4)
         reward_bag.extend(
             [

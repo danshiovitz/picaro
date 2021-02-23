@@ -3,7 +3,6 @@ from enum import Enum
 from typing import Dict, Optional, Sequence
 
 from picaro.common.hexmap.types import OffsetCoordinate
-
 from picaro.engine.types import (
     Action,
     ChoiceType,

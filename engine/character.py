@@ -79,8 +79,7 @@ class Party:
             luck=ch.luck,
             speed=ch.speed,
             tableau=tuple(
-                self._tableau_snapshot(c, routes[c.location])
-                for c in ch.tableau
+                self._tableau_snapshot(c, routes[c.location]) for c in ch.tableau
             ),
             encounters=tuple(self._encounter_snapshot(e) for e in ch.encounters),
             emblems=tuple(ch.emblems),
@@ -137,7 +136,9 @@ class Party:
         ch.queue_encounter(card.card, context_type=EncounterContextType.JOB)
         CharacterStorage.update(ch)
 
-    def token_action(self, name: str, token_name: str, action_name: str, board: Board) -> None:
+    def token_action(
+        self, name: str, token_name: str, action_name: str, board: Board
+    ) -> None:
         ch = CharacterStorage.load_by_name(name)
         if ch.encounters:
             raise BadStateException("An encounter is currently active.")
@@ -145,7 +146,9 @@ class Party:
         token = board.get_token(token_name)
         actions = [a for a in token.actions if a.name == action_name]
         if not actions:
-            raise BadStateException(f"No such action {action_name} on token {token_name}.")
+            raise BadStateException(
+                f"No such action {action_name} on token {token_name}."
+            )
         action = actions[0]
 
         action_template = TemplateCard(
@@ -154,7 +157,8 @@ class Party:
             desc="...",
             choice_type=ChoiceType.OPTIONAL,
             choices=[
-                action.benefit + [dataclasses.replace(a, is_cost=True) for a in action.cost],
+                action.benefit
+                + [dataclasses.replace(a, is_cost=True) for a in action.cost],
             ],
         )
         custom_deck = load_deck("Custom")
@@ -443,17 +447,27 @@ class Character:
                 elif enc_eff == EncounterEffect.LOSE_COINS:
                     ret.append(Effect(type=EffectType.MODIFY_COINS, value=-cnt))
                 elif enc_eff == EncounterEffect.GAIN_REPUTATION:
-                    ret.append(Effect(type=EffectType.MODIFY_REPUTATION, value=sum_til(cnt)))
+                    ret.append(
+                        Effect(type=EffectType.MODIFY_REPUTATION, value=sum_til(cnt))
+                    )
                 elif enc_eff == EncounterEffect.LOSE_REPUTATION:
                     ret.append(Effect(type=EffectType.MODIFY_REPUTATION, value=-cnt))
                 elif enc_eff == EncounterEffect.GAIN_HEALING:
                     ret.append(Effect(type=EffectType.MODIFY_HEALTH, value=cnt * 3))
                 elif enc_eff == EncounterEffect.DAMAGE:
-                    ret.append(Effect(type=EffectType.MODIFY_HEALTH, value=-sum_til(cnt)))
+                    ret.append(
+                        Effect(type=EffectType.MODIFY_HEALTH, value=-sum_til(cnt))
+                    )
                 elif enc_eff == EncounterEffect.GAIN_QUEST:
                     ret.append(Effect(type=EffectType.MODIFY_QUEST, value=cnt))
                 elif enc_eff == EncounterEffect.GAIN_XP:
-                    ret.append(Effect(type=EffectType.MODIFY_XP, param=encounter.card.checks[0].skill, value=cnt * 5))
+                    ret.append(
+                        Effect(
+                            type=EffectType.MODIFY_XP,
+                            param=encounter.card.checks[0].skill,
+                            value=cnt * 5,
+                        )
+                    )
                 elif enc_eff == EncounterEffect.GAIN_RESOURCES:
                     ret.append(Effect(type=EffectType.MODIFY_RESOURCES, value=cnt - 1))
                 elif enc_eff == EncounterEffect.LOSE_RESOURCES:
@@ -473,7 +487,13 @@ class Character:
                 else:
                     raise Exception(f"Unknown effect: {enc_eff}")
             if failures > 0:
-                ret.append(Effect(type=EffectType.MODIFY_XP, param=encounter.card.checks[0].skill, value=failures))
+                ret.append(
+                    Effect(
+                        type=EffectType.MODIFY_XP,
+                        param=encounter.card.checks[0].skill,
+                        value=failures,
+                    )
+                )
 
         if actions.choice is not None:
             ret.extend(encounter.card.choices[actions.choice])
@@ -544,10 +564,14 @@ class Character:
         # we do it this way because we want, eg, to be able to overwrite reputation changes with
         # reputation set via job change (note that any 'set' overwrites previous comments, as well)
 
-        def simple(name: str, effect_type: EffectType, max_val: Optional[int] = None) -> UpdateHolder:
+        def simple(
+            name: str, effect_type: EffectType, max_val: Optional[int] = None
+        ) -> UpdateHolder:
             get_f = lambda: getattr(self, name)
             set_f = lambda val: setattr(self, name, val)
-            holder = UpdateHolder(name, effect_type, None, context_type, max_val, get_f=get_f, set_f=set_f)
+            holder = UpdateHolder(
+                name, effect_type, None, context_type, max_val, get_f=get_f, set_f=set_f
+            )
             holder.apply_effects(effects)
             return holder
 
@@ -557,7 +581,15 @@ class Character:
             for param in params:
                 get_f = lambda: getattr(self, name).get(param, 0)
                 set_f = lambda val: getattr(self, name).update({param: val})
-                holder = UpdateHolder(name, effect_type, param, context_type, None, get_f=get_f, set_f=set_f)
+                holder = UpdateHolder(
+                    name,
+                    effect_type,
+                    param,
+                    context_type,
+                    None,
+                    get_f=get_f,
+                    set_f=set_f,
+                )
                 holder.apply_effects(effects)
                 ret[param] = holder
             return ret
@@ -565,13 +597,17 @@ class Character:
         def const_val(name: str, effect_type: EffectType, val: int) -> UpdateHolder:
             get_f = lambda: val
             set_f = lambda val: val
-            holder = UpdateHolder(name, effect_type, None, context_type, None, get_f=get_f, set_f=set_f)
+            holder = UpdateHolder(
+                name, effect_type, None, context_type, None, get_f=get_f, set_f=set_f
+            )
             holder.apply_effects(effects)
             return holder
 
         coins_holder = simple("coins", EffectType.MODIFY_COINS)
         reputation_holder = simple("reputation", EffectType.MODIFY_REPUTATION)
-        health_holder = simple("health", EffectType.MODIFY_HEALTH, max_val=self.get_max_health())
+        health_holder = simple(
+            "health", EffectType.MODIFY_HEALTH, max_val=self.get_max_health()
+        )
         quest_holder = simple("quest", EffectType.MODIFY_QUEST)
         turn_holder = simple("remaining_turns", EffectType.MODIFY_TURNS)
         resources_holder = simple("resources", EffectType.MODIFY_RESOURCES)
@@ -589,7 +625,9 @@ class Character:
                 self.tableau = []
                 self.job_deck = []
                 self.refill_tableau(board)
-                job_outcome = EncounterSingleOutcome[str](old_val=old_job, new_val=new_job, comments=[job_msg])
+                job_outcome = EncounterSingleOutcome[str](
+                    old_val=old_job, new_val=new_job, comments=[job_msg]
+                )
                 # also move some (more)
                 transport_val_holder.add(3)
                 # blow away earlier rep mods:
@@ -605,12 +643,20 @@ class Character:
                 board.find_hexes_near_token(self.name, tp - 2, tp + 2)
             )
             board.move_token(self.name, new_location)
-            transport_outcome = EncounterSingleOutcome[str](old_val=old_location, new_val=new_location, comments=transport_val_holder._comments)
+            transport_outcome = EncounterSingleOutcome[str](
+                old_val=old_location,
+                new_val=new_location,
+                comments=transport_val_holder._comments,
+            )
 
         return EncounterOutcome(
             coins=coins_holder.to_outcome(),
             reputation=reputation_holder.to_outcome(),
-            xp={k: v for k, v in [(sk, h.to_outcome()) for sk, h in xp_holder.items()] if v is not None},
+            xp={
+                k: v
+                for k, v in [(sk, h.to_outcome()) for sk, h in xp_holder.items()]
+                if v is not None
+            },
             health=health_holder.to_outcome(),
             resources=resources_holder.to_outcome(),
             quest=quest_holder.to_outcome(),
@@ -832,7 +878,9 @@ class Character:
                 ],
             )
             custom_deck = load_deck("Custom")
-            return custom_deck.make_card(trinket_template, 1, EncounterContextType.TRAVEL)
+            return custom_deck.make_card(
+                trinket_template, 1, EncounterContextType.TRAVEL
+            )
         else:
             raise Exception(f"Unknown card type: {card.type}")
 
