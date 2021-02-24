@@ -41,7 +41,7 @@ class UpdateHolder:
         self._cur_value += value
         if self._cur_value < 0 and is_cost:
             raise IllegalMoveException(
-                f"You do not have enough {self._name} to do this"
+                f"You do not have enough {self._name} to do this."
             )
         self._comments.append(msg or f"{value:+}")
 
