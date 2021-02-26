@@ -69,8 +69,10 @@ class Character:
     skill_xp: Dict[str, int]
     job: str
     health: int
+    max_health: int
     coins: int
-    resources: int
+    resources: Dict[str, int]
+    max_resources: int
     reputation: int
     quest: int
     location: str
@@ -78,6 +80,7 @@ class Character:
     acted_this_turn: bool
     luck: int
     speed: int
+    max_speed: int
     tableau: Sequence[TableauCard]
     encounters: Sequence[Encounter]
     emblems: Sequence[Emblem]

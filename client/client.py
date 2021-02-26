@@ -164,7 +164,8 @@ class Client:
                     body2=body2,
                 )
 
-            center_name = self.args.center or board.tokens[0].location
+            char_token = [t for t in board.tokens if t.name == self.args.name][0]
+            center_name = self.args.center or char_token.location
             center_hx = [hx for hx in board.hexes if hx.name == center_name][0]
             for line in render_large(
                 set(coords), display, center=center_hx.coordinate, radius=2
@@ -237,8 +238,10 @@ class Client:
         ch = self._get(f"/character/{self.args.name}", Character)
         print(f"{ch.name} ({ch.player_id}) - a {ch.job} [{ch.location}]")
         print(
-            f"Health: {ch.health}   Coins: {ch.coins}  Reputation: {ch.reputation} Resources: {ch.resources}   Quest: {ch.quest}"
+            f"Health: {ch.health}   Coins: {ch.coins}   Reputation: {ch.reputation}   Quest: {ch.quest}"
         )
+        resources = ", ".join(f"{v} {n}" for n, v in ch.resources.items())
+        print(f"Resources: {resources}")
         print("Skills:")
         for sk, v in sorted(ch.skills.items()):
             if self.args.all or v > 0 or ch.skill_xp[sk] > 0:
@@ -317,11 +320,11 @@ class Client:
         )
         display.append("")
         display.append(
-            f"Health: {ch.health:2}   Coins: {ch.coins:2}   Reputation: {ch.reputation:2}   Resources: {ch.resources:2}   Quest: {ch.quest:2}"
+            f"Health: {ch.health}/{ch.max_health}   Coins: {ch.coins}   Reputation: {ch.reputation}   Resources: {sum(ch.resources.values(), 0)}/{ch.max_resources}   Quest: {ch.quest}"
         )
         if ch.remaining_turns:
             display.append(
-                f" Turns: {ch.remaining_turns:2}    Luck: {ch.luck:2}        Speed: {ch.speed:2}"
+                f" Turns: {ch.remaining_turns}    Luck: {ch.luck}        Speed: {ch.speed}/{ch.max_speed}"
             )
             display.append("")
 
@@ -645,7 +648,11 @@ class Client:
         render_single_int("Your reputation has", resp.outcome.reputation)
         for sk, val in resp.outcome.xp.items():
             render_single_int(f"Your {sk} xp has", val)
-        render_single_int("Your resources have", resp.outcome.resources)
+        if resp.outcome.resource_draws is not None:
+            rd = resp.outcome.resource_draws
+            print(f"* You gained {rd.new_val} resource draws ({', '.join(rd.comments)}).")
+        for name, val in resp.outcome.resources.items():
+            render_single_int(f"Your {name} resources have", val)
         render_single_int("Your quest points have", resp.outcome.quest)
         render_single_int("Your remaining turns have", resp.outcome.turns)
         render_single_int("Your speed has", resp.outcome.speed)

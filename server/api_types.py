@@ -18,7 +18,6 @@ from picaro.engine.types import (
     EncounterSingleOutcome,
     Feat,
     HookType,
-    Terrains,
 )
 
 

@@ -150,7 +150,8 @@ class EncounterOutcome:
     xp: Dict[str, EncounterSingleOutcome[int]]
     reputation: Optional[EncounterSingleOutcome[int]]
     health: Optional[EncounterSingleOutcome[int]]
-    resources: Optional[EncounterSingleOutcome[int]]
+    resource_draws: Optional[EncounterSingleOutcome[int]]
+    resources: Dict[str, EncounterSingleOutcome[int]]
     quest: Optional[EncounterSingleOutcome[int]]
     turns: Optional[EncounterSingleOutcome[int]]
     speed: Optional[EncounterSingleOutcome[int]]
@@ -173,6 +174,7 @@ class HookType(Enum):
     MAX_TABLEAU_SIZE = enum_auto()
     SKILL_RANK = enum_auto()
     INIT_SPEED = enum_auto()
+    MAX_RESOURCES = enum_auto()
 
 
 @dataclass(frozen=True)
@@ -189,27 +191,20 @@ class Emblem:
 
 
 @dataclass(frozen=True)
-class Character:
-    name: str
-    player_id: int
-    skills: Dict[str, int]
-    skill_xp: Dict[str, int]
-    job: str
-    health: int
-    coins: int
-    resources: int
-    reputation: int
-    quest: int
-    location: str
-    remaining_turns: int
-    luck: int
-    speed: int
-    tableau: Sequence[TableauCard]
-    encounters: Sequence[Encounter]
-    emblems: Sequence[Emblem]
-
-
-@dataclass(frozen=True)
 class Game:
     id: int
     name: str
+
+
+@dataclass(frozen=True)
+class ResourceCard:
+    name: str
+    type: str
+    value: int
+
+
+@dataclass(frozen=True)
+class Country:
+    name: str
+    capitol_hex: str
+    resources: List[str]

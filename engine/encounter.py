@@ -11,6 +11,7 @@ class UpdateHolder:
         effect_type: EffectType,
         param: Optional[str],
         context_type: EncounterContextType,
+        min_val: Optional[int],
         max_val: Optional[int],
         get_f: Callable[[], int],
         set_f: Callable[[int], None],
@@ -19,6 +20,7 @@ class UpdateHolder:
         self._effect_type = effect_type
         self._param = param
         self._context_type = context_type
+        self._min_val = min_val
         self._max_val = max_val
         self._set_f = set_f
         self._init_value = get_f()
@@ -35,9 +37,9 @@ class UpdateHolder:
         for effect in effects:
             if effect.type != self._effect_type or effect.param != self._param:
                 continue
-            self.add(effect.value, effect.param, effect.is_cost)
+            self.add(effect.value, effect.is_cost)
 
-    def add(self, value: int, msg: Optional[str], is_cost: bool = False) -> None:
+    def add(self, value: int, msg: Optional[str] = None, is_cost: bool = False) -> None:
         self._cur_value += value
         if self._cur_value < 0 and is_cost:
             raise IllegalMoveException(
@@ -58,6 +60,8 @@ class UpdateHolder:
         return self._cur_value
 
     def to_outcome(self) -> Optional[EncounterSingleOutcome[int]]:
+        if self._min_val is not None and self._cur_value < self._min_val:
+            self._cur_value = self._min_val
         if self._max_val is not None and self._cur_value > self._max_val:
             self._cur_value = self._max_val
         if self._cur_value == self._init_value and not self._comments:

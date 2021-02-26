@@ -1,5 +1,4 @@
 - Add one time password / session cookie stuff
-- support multiple resource types (perhaps each hex has a resource type and a resource deck)
 - projects
 - events + actions
 - regional, country, and arch villains, and their moves
@@ -12,7 +11,8 @@
 - better engine unit testing
 - different mechanics for captain and king play ("tool" exhaustion?)
 - record all encounters + outcome + commentary and command to view history
-- meters?
+- spend coins on stuff (xp? reputation?)
+- effects to do specific things that are usually done randomly (switch to job X, transport to hex X, gain X units of resource Y)
 - fill in stuff:
   - more feat hooks
   - terrain decks
@@ -117,3 +117,13 @@ Trade is an action exposed by the Waterdeep token, and Search Area is an action 
 Trade is also something like:
   * Pay 1 resource (any type), receive 5 coins
 This is different from a -resource-1 penalty, since you can't choose this option if you don't have the payment
+
+Kinda feeling like countries get assigned two resources, and then regions populate a deck with like 6x primary, 3x secondary, 1x everything else, and when you draw, you draw from that region's deck. I guess I did have the idea that instead of gaining count - 1 resources, you draw count times, and we add like 8x nothing to the deck. Then we could also add 2x 2 of primary item, although this does mean you might randomly get 10 coins worth of stuff on a single draw, which is pretty good (not really game-breaking, though, especially since nothing is useful for anything yet). Resource loss I guess is just a random pick from your existing resources, it seems the easiest.
+
+The outcome of your encounter:
+* Your health has decreased to 17 (-3).
+* Your Observation xp has increased to 7 (+2, +5).
+* You gain 3 resource draws (Nothing, Steel x2, Gold)
+  * Your Steel resources have increased to 3 (+2).
+  * Your Gold resources have increased to 1 (+1).
+* Your Command xp has increased to 3 (+3).

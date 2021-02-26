@@ -4,13 +4,13 @@ from dataclasses import dataclass
 from functools import reduce
 from math import floor
 from string import ascii_uppercase
-from typing import Callable, Dict, List, Set
+from typing import Callable, Dict, List, Set, Tuple
 
 from picaro.common.hexmap.types import CubeCoordinate, OffsetCoordinate
 from picaro.common.hexmap.utils import calc_offset_neighbor_map
 
 from .snapshot import Hex
-from .types import Terrains
+from .types import Country, Terrains
 
 # generation code from https://welshpiper.com/hex-based-campaign-design-part-1/
 @dataclass(frozen=True)
@@ -79,6 +79,18 @@ Countries = [
 ]
 
 
+Resources = [
+    "Steel",
+    "Silks",
+    "Jewels",
+    "Glass",
+    "Timber",
+    "Herbs",
+    "Stone",
+    "Wine",
+]
+
+
 def generate(
     num_rows: int, num_columns: int, starting_terrain: Dict[OffsetCoordinate, str]
 ) -> List[Hex]:
@@ -120,7 +132,7 @@ def generate(
 
 def generate_from_mini(
     num_rows: int, num_columns: int, minimap: List[str]
-) -> List[Hex]:
+) -> Tuple[List[Hex], List[Country]]:
     row_project = _calc_axis_projection(len(minimap), num_rows)
     col_project = _calc_axis_projection(len(minimap[0]), num_columns)
 
@@ -146,13 +158,17 @@ def generate_from_mini(
 
     neighbors_map = calc_offset_neighbor_map(num_rows, num_columns)
     _adjust_terrain(terrain, neighbors_map)
-    country_map = _make_country_map(terrain, neighbors_map)
+    country_map, capitol_coords = _make_country_map(terrain, neighbors_map)
     region_map = _make_region_map(country_map, neighbors_map)
+    cap_set = {c for c in capitol_coords}
+    country_data = {}
 
     def make_hex(coord: OffsetCoordinate) -> Hex:
         row, column = (coord.row, coord.column)
         rn = ascii_uppercase[row // 26] + ascii_uppercase[row % 26]
         nm = f"{rn}{column+1:02}"
+        if coord in cap_set:
+            country_data[country_map[coord]] = nm
         return Hex(
             name=nm,
             coordinate=coord,
@@ -162,7 +178,15 @@ def generate_from_mini(
             danger=2,
         )
 
-    return [make_hex(k) for k in terrain]
+    hexes = [make_hex(k) for k in terrain]
+    rs = Resources[:]
+    random.shuffle(rs)
+    countries = [
+        Country(name=c, capitol_hex=country_data[c], resources=[rs.pop(0), random.choice(Resources)])
+        for c in country_data.keys()
+    ]
+
+    return hexes, countries
 
 
 def _calc_axis_projection(small: int, big: int) -> Dict[int, int]:
@@ -252,7 +276,7 @@ def _adjust_terrain(
 def _make_country_map(
     terrain_map: Dict[OffsetCoordinate, str],
     neighbors_map: Dict[OffsetCoordinate, Set[OffsetCoordinate]],
-) -> Dict[OffsetCoordinate, str]:
+) -> Tuple[Dict[OffsetCoordinate, str], List[OffsetCoordinate]]:
     ret = {c: "Unassigned" for c in terrain_map}
 
     # first identify all wild areas
@@ -264,6 +288,7 @@ def _make_country_map(
 
     best_score = -9999
     best_assignment = None
+    best_capitols = None
 
     for _ in range(10):
         unassigned = {c for c, n in ret.items() if n == "Unassigned"}
@@ -278,6 +303,7 @@ def _make_country_map(
         if best_assignment is None or score > best_score:
             best_score = score
             best_assignment = assignment
+            best_capitols = list(capitols.keys())
 
     assert best_assignment is not None
     for c, n in best_assignment.items():
@@ -287,7 +313,7 @@ def _make_country_map(
         if ret[c] == "Unassigned":
             ret[c] = "Wild"
 
-    return ret
+    return ret, best_capitols
 
 
 def _make_region_map(

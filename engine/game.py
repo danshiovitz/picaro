@@ -18,7 +18,7 @@ def create_game(name: str, json_dir: Path) -> Game:
 class GameStorage(ObjectStorageBase[Game]):
     TABLE_NAME = "game"
     TYPE = Game
-    PRIMARY_KEY = "id"
+    PRIMARY_KEYS = {"id"}
 
     @classmethod
     def load(cls) -> List[Game]:

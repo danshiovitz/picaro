@@ -16,10 +16,12 @@ from .snapshot import (
 from .storage import ObjectStorageBase
 from .types import (
     Action,
+    Country,
     Effect,
     EffectType,
     EncounterContextType,
     FullCard,
+    ResourceCard,
     TemplateCard,
     Terrains,
 )
@@ -181,14 +183,53 @@ class ActiveBoard:
         hx = HexStorage.load_by_name(hex_name)
         deck_name = "Desert"
         difficulty = hx.danger + 1
-        board_deck = BoardDeckStorage.load_by_name(deck_name)
+        hex_deck = HexDeckStorage.load_by_name(deck_name)
         template_deck = load_deck(deck_name)
-        if not board_deck.deck:
-            board_deck.deck = template_deck.semi_actualize(additional=[])
-        template_card = board_deck.deck.pop(0)
+        if not hex_deck.deck:
+            hex_deck.deck = template_deck.semi_actualize(additional=[])
+        template_card = hex_deck.deck.pop(0)
         card = template_deck.make_card(template_card, difficulty, context)
-        BoardDeckStorage.update(board_deck)
+        HexDeckStorage.update(hex_deck)
         return card
+
+    def draw_resource_card(self, hex_name: str) -> ResourceCard:
+        hx = HexStorage.load_by_name(hex_name)
+        resource_deck = ResourceDeckStorage.maybe_load_by_country_region(hx.country, hx.region)
+        if resource_deck is None:
+            resource_deck = ResourceDeck(country=hx.country, region=hx.region, deck=[])
+            ResourceDeckStorage.insert(resource_deck)
+        if not resource_deck.deck:
+            resource_deck.deck = self._make_resource_deck(hx.country, hx.region)
+        card = resource_deck.deck.pop(0)
+        ResourceDeckStorage.update(resource_deck)
+        return card
+
+    def _make_resource_deck(self, country: str, region: str) -> List[ResourceCard]:
+        countries = CountryStorage.load()
+        resources = set()
+        for c in countries:
+            resources |= set(c.resources)
+
+
+        if country == "Wild":
+            cards = [ResourceCard(name="Nothing", type="nothing", value=0)] * 20
+            for rs in resources:
+                cards.extend([ResourceCard(name=f"{rs}", type=rs, value=1)] * 1)
+        else:
+            cur = [c for c in countries if c.name == country][0]
+            cards = [ResourceCard(name="Nothing", type="nothing", value=0)] * 8
+            for rs in resources:
+                if rs == cur.resources[0]:
+                    cards.extend([ResourceCard(name=f"{rs} x2", type=rs, value=2)] * 2)
+                    cards.extend([ResourceCard(name=f"{rs}", type=rs, value=1)] * 4)
+                elif rs == cur.resources[1]:
+                    cards.extend([ResourceCard(name=f"{rs}", type=rs, value=1)] * 3)
+                else:
+                    cards.extend([ResourceCard(name=f"{rs}", type=rs, value=1)] * 1)
+        random.shuffle(cards)
+        for _ in range((len(cards) // 10) + 1):
+            cards.pop()
+        return cards
 
     def generate_map(self) -> None:
         all_hexes = HexStorage.load()
@@ -205,7 +246,9 @@ class ActiveBoard:
             '""""^::n',
             '&&"^n:::',
         ]
-        hexes = generate_from_mini(50, 50, minimap)
+        hexes, countries = generate_from_mini(50, 50, minimap)
+
+        CountryStorage.insert_all(countries)
 
         # translate these into storage format:
         def trans(hx: snapshot_Hex) -> Hex:
@@ -308,9 +351,16 @@ class Hex:
 # until drawn (because we don't know whether the hex is a more or less dangerous one, or
 # whether this is being drawn in the context of a job or travel)
 @dataclass
-class BoardDeck:
+class HexDeck:
     name: str  # note this name is assumed to match the template deck
     deck: List[TemplateCard]
+
+
+@dataclass
+class ResourceDeck:
+    country: str
+    region: str
+    deck: List[ResourceCard]
 
 
 @dataclass
@@ -324,7 +374,7 @@ class Token:
 class HexStorage(ObjectStorageBase[Hex]):
     TABLE_NAME = "hex"
     TYPE = Hex
-    PRIMARY_KEY = "name"
+    PRIMARY_KEYS = {"name"}
 
     @classmethod
     def load(cls) -> List[Hex]:
@@ -372,40 +422,69 @@ class HexStorage(ObjectStorageBase[Hex]):
         return hx
 
 
-class BoardDeckStorage(ObjectStorageBase[BoardDeck]):
-    TABLE_NAME = "board_deck"
-    TYPE = BoardDeck
-    PRIMARY_KEY = "name"
+class HexDeckStorage(ObjectStorageBase[HexDeck]):
+    TABLE_NAME = "hex_deck"
+    TYPE = HexDeck
+    PRIMARY_KEYS = {"name"}
 
     @classmethod
-    def load(cls) -> List[BoardDeck]:
+    def load(cls) -> List[HexDeck]:
         return cls._select_helper([], {})
 
     @classmethod
-    def load_by_name(cls, name: str) -> BoardDeck:
+    def load_by_name(cls, name: str) -> HexDeck:
         decks = cls._select_helper(["name = :name"], {"name": name})
         if not decks:
             raise IllegalMoveException(f"No such deck: {name}")
         return decks[0]
 
     @classmethod
-    def insert(cls, deck: BoardDeck) -> None:
+    def insert(cls, deck: HexDeck) -> None:
         cls._insert_helper([deck])
 
     @classmethod
-    def update(cls, deck: BoardDeck) -> None:
+    def update(cls, deck: HexDeck) -> None:
         cls._update_helper(deck)
 
     @classmethod
-    def insert_initial_data(cls, _json_dir: str) -> List[BoardDeck]:
-        vals = [BoardDeck(name=t, deck=[]) for t in Terrains]
+    def insert_initial_data(cls, _json_dir: str) -> List[HexDeck]:
+        vals = [HexDeck(name=t, deck=[]) for t in Terrains]
         cls._insert_helper(vals)
+
+
+class ResourceDeckStorage(ObjectStorageBase[ResourceDeck]):
+    TABLE_NAME = "resource_deck"
+    TYPE = ResourceDeck
+    PRIMARY_KEYS = {"country", "region"}
+
+    @classmethod
+    def load(cls) -> List[ResourceDeck]:
+        return cls._select_helper([], {})
+
+    @classmethod
+    def maybe_load_by_country_region(cls, country: str, region: str) -> Optional[ResourceDeck]:
+        decks = cls._select_helper(["country = :country", "region = :region"], {"country": country, "region": region})
+        if not decks:
+            return None
+        return decks[0]
+
+    @classmethod
+    def insert(cls, deck: ResourceDeck) -> None:
+        cls._insert_helper([deck])
+
+    @classmethod
+    def update(cls, deck: ResourceDeck) -> None:
+        cls._update_helper(deck)
+
+    @classmethod
+    def insert_initial_data(cls, _json_dir: str) -> List[ResourceDeck]:
+        return []
 
 
 class TokenStorage(ObjectStorageBase[Token]):
     TABLE_NAME = "token"
     TYPE = Token
-    PRIMARY_KEY = "name"
+    PRIMARY_KEYS = {"name"}
 
     @classmethod
     def load(cls) -> List[Token]:
@@ -431,3 +510,24 @@ class TokenStorage(ObjectStorageBase[Token]):
     def update(cls, token: Token) -> Token:
         cls._update_helper(token)
         return token
+
+
+class CountryStorage(ObjectStorageBase[Country]):
+    TABLE_NAME = "country"
+    TYPE = Country
+    PRIMARY_KEYS = {"name"}
+
+    @classmethod
+    def load(cls) -> List[Country]:
+        return cls._select_helper([], {})
+
+    @classmethod
+    def load_by_name(cls, name: str) -> Country:
+        countries = cls._select_helper(["name = :name"], {"name": name})
+        if not countries:
+            raise IllegalMoveException(f"No such country: {name}")
+        return countries[0]
+
+    @classmethod
+    def insert_all(cls, countries: List[Country]) -> None:
+        cls._insert_helper(countries)

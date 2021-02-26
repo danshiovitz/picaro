@@ -323,7 +323,7 @@ class ValueStorageBase(StorageBase[str]):
 
 class ObjectStorageBase(StorageBase[T]):
     TYPE: Type[T]
-    PRIMARY_KEY: str
+    PRIMARY_KEYS: Set[str]
 
     @classmethod
     def _table_schema(cls) -> List[Tuple[str, str, bool]]:
@@ -346,7 +346,7 @@ class ObjectStorageBase(StorageBase[T]):
             else:
                 col_type = "text" + nn
 
-            cols.append((col_name, col_type, col_name == cls.PRIMARY_KEY))
+            cols.append((col_name, col_type, col_name in cls.PRIMARY_KEYS))
 
         return cols
 

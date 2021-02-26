@@ -176,7 +176,7 @@ def load_deck(deck_name: str) -> TemplateDeck:
 class TemplateCardStorage(ObjectStorageBase[TemplateCard]):
     TABLE_NAME = "template_card"
     TYPE = TemplateCard
-    PRIMARY_KEY = "name"
+    PRIMARY_KEYS = {"name"}
 
     @classmethod
     def load(cls) -> List[TemplateCard]:
@@ -193,7 +193,7 @@ class TemplateCardStorage(ObjectStorageBase[TemplateCard]):
 class TemplateDeckStorage(ObjectStorageBase[TemplateDeck]):
     TABLE_NAME = "template_deck"
     TYPE = TemplateDeck
-    PRIMARY_KEY = "name"
+    PRIMARY_KEYS = {"name"}
     SUBCLASSES = {"template_cards": TemplateCardStorage}
 
     @classmethod

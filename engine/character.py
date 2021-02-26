@@ -69,8 +69,10 @@ class Party:
             skill_xp={sk: ch.skill_xp.get(sk, 0) for sk in all_skills},
             job=ch.job_name,
             health=ch.health,
+            max_health=ch.get_max_health(),
             coins=ch.coins,
             resources=ch.resources,
+            max_resources=ch.get_max_resources(),
             reputation=ch.reputation,
             quest=ch.quest,
             location=location,
@@ -78,6 +80,7 @@ class Party:
             acted_this_turn=ch.acted_this_turn,
             luck=ch.luck,
             speed=ch.speed,
+            max_speed=ch.get_init_speed(),
             tableau=tuple(
                 self._tableau_snapshot(c, routes[c.location]) for c in ch.tableau
             ),
@@ -254,7 +257,7 @@ class Character:
     skill_xp: Dict[str, int]
     health: int
     coins: int
-    resources: int
+    resources: Dict[str, int]
     reputation: int
     quest: int
     remaining_turns: int
@@ -278,7 +281,7 @@ class Character:
             skill_xp={},
             health=0,
             coins=0,
-            resources=0,
+            resources={},
             reputation=5,
             quest=0,
             remaining_turns=0,
@@ -311,6 +314,20 @@ class Character:
 
     def get_max_health(self) -> int:
         return clamp(20 + self._calc_hook(HookType.MAX_HEALTH), min=1)
+
+    def get_max_resources(self) -> int:
+        job = load_job(self.job_name)
+        if job.type == JobType.LACKEY:
+            base_limit = 1
+        elif job.type == JobType.SOLO:
+            base_limit = 3
+        elif job.type == JobType.CAPTAIN:
+            base_limit = 10
+        elif job.type == JobType.KING:
+            base_limit = 100
+        else:
+            raise Exception(f"Unknown job type: {job.type}")
+        return clamp(base_limit + self._calc_hook(HookType.MAX_RESOURCES), min=0)
 
     def get_skill_rank(self, skill_name: str) -> int:
         # 20 xp for rank 1, 30 xp for rank 5, 25 xp for all others
@@ -469,7 +486,7 @@ class Character:
                         )
                     )
                 elif enc_eff == EncounterEffect.GAIN_RESOURCES:
-                    ret.append(Effect(type=EffectType.MODIFY_RESOURCES, value=cnt - 1))
+                    ret.append(Effect(type=EffectType.MODIFY_RESOURCES, value=cnt))
                 elif enc_eff == EncounterEffect.LOSE_RESOURCES:
                     ret.append(Effect(type=EffectType.MODIFY_RESOURCES, value=-cnt))
                 elif enc_eff == EncounterEffect.GAIN_TURNS:
@@ -570,35 +587,41 @@ class Character:
             get_f = lambda: getattr(self, name)
             set_f = lambda val: setattr(self, name, val)
             holder = UpdateHolder(
-                name, effect_type, None, context_type, max_val, get_f=get_f, set_f=set_f
+                name, effect_type, None, context_type, 0, max_val, get_f=get_f, set_f=set_f
             )
             holder.apply_effects(effects)
             return holder
 
         def dict_holder(name: str, effect_type: EffectType) -> Dict[str, UpdateHolder]:
-            params = [e.param for e in effects if e.type == effect_type and e.param]
-            ret = {}
+            char_self = self
+            class HolderDict(dict):
+                def __missing__(self, param):
+                    get_f = lambda: getattr(char_self, name).get(param, 0)
+                    set_f = lambda val: getattr(char_self, name).update({param: val})
+                    holder = UpdateHolder(
+                        name,
+                        effect_type,
+                        param,
+                        context_type,
+                        0,
+                        None,
+                        get_f=get_f,
+                        set_f=set_f,
+                    )
+                    self[param] = holder
+                    return holder
+
+            params = {e.param for e in effects if e.type == effect_type and e.param}
+            ret = HolderDict()
             for param in params:
-                get_f = lambda: getattr(self, name).get(param, 0)
-                set_f = lambda val: getattr(self, name).update({param: val})
-                holder = UpdateHolder(
-                    name,
-                    effect_type,
-                    param,
-                    context_type,
-                    None,
-                    get_f=get_f,
-                    set_f=set_f,
-                )
-                holder.apply_effects(effects)
-                ret[param] = holder
+                ret[param].apply_effects(effects)
             return ret
 
         def const_val(name: str, effect_type: EffectType, val: int) -> UpdateHolder:
             get_f = lambda: val
             set_f = lambda val: val
             holder = UpdateHolder(
-                name, effect_type, None, context_type, None, get_f=get_f, set_f=set_f
+                name, effect_type, None, context_type, 0, None, get_f=get_f, set_f=set_f
             )
             holder.apply_effects(effects)
             return holder
@@ -610,7 +633,9 @@ class Character:
         )
         quest_holder = simple("quest", EffectType.MODIFY_QUEST)
         turn_holder = simple("remaining_turns", EffectType.MODIFY_TURNS)
-        resources_holder = simple("resources", EffectType.MODIFY_RESOURCES)
+        resource_draw_holder = const_val("resources_draw", EffectType.MODIFY_RESOURCES, 0)
+        # this mostly won't match because the typical effect has param=None
+        resources_holder = dict_holder("resources", EffectType.MODIFY_RESOURCES)
         speed_holder = simple("speed", EffectType.MODIFY_SPEED)
         xp_holder = dict_holder("skill_xp", EffectType.MODIFY_XP)
         transport_val_holder = const_val("transport", EffectType.TRANSPORT, 0)
@@ -635,6 +660,28 @@ class Character:
             else:
                 reputation_holder.add(-2, "-2 from job challenge: " + job_msg)
 
+        resource_draws_outcome: Optional[EncounterSingleOutcome[int]] = None
+        draw_cnt = resource_draw_holder.get_cur_value()
+        if draw_cnt < 0:
+            cur_rs = []
+            for rt, h in resources_holder:
+                cur_rs.extend([rt] * h.get_cur_value())
+            to_rm = random.sample(cur_rs, draw_cnt * -1)
+            rcs = defaultdict(int)
+            for rt in to_rm:
+                rcs[rt] += 1
+            for rt, cnt in rcs.items():
+                resources_holder[rt].add(-cnt)
+        elif draw_cnt > 0:
+            loc = board.get_token_location(self.name)
+            comments = []
+            for _ in range(draw_cnt):
+                draw = board.draw_resource_card(loc)
+                if draw.value != 0:
+                    resources_holder[draw.type].add(draw.value)
+                comments.append(draw.name)
+            resource_draws_outcome = EncounterSingleOutcome[int](old_val=0, new_val=draw_cnt, comments=comments)
+
         transport_outcome: Optional[EncounterSingleOutcome[str]] = None
         if transport_val_holder.get_cur_value() > 0:
             tp = transport_val_holder.get_cur_value()
@@ -649,16 +696,20 @@ class Character:
                 comments=transport_val_holder._comments,
             )
 
+        def dict_outcomes(dholder):
+            return {
+                k: v
+                for k, v in [(ik, iv.to_outcome()) for ik, iv in dholder.items()]
+                if v is not None
+            }
+
         return EncounterOutcome(
             coins=coins_holder.to_outcome(),
             reputation=reputation_holder.to_outcome(),
-            xp={
-                k: v
-                for k, v in [(sk, h.to_outcome()) for sk, h in xp_holder.items()]
-                if v is not None
-            },
+            xp=dict_outcomes(xp_holder),
             health=health_holder.to_outcome(),
-            resources=resources_holder.to_outcome(),
+            resource_draws=resource_draws_outcome,
+            resources=dict_outcomes(resources_holder),
             quest=quest_holder.to_outcome(),
             turns=turn_holder.to_outcome(),
             speed=speed_holder.to_outcome(),
@@ -671,6 +722,16 @@ class Character:
         self.acted_this_turn = False
         self.speed = self.get_init_speed()
         self.had_travel_encounter = False
+
+        # discard down to correct number of resources
+        # (in the future should let player pick which to discard)
+        all_rs = [nm for rs, cnt in self.resources.items() for nm in [rs] * cnt]
+        if len(all_rs) > self.get_max_resources():
+            overage = random.sample(all_rs, len(all_rs) - self.get_max_resources())
+            for rs in overage:
+                self.resources[rs] -= 1
+                if not self.resources[rs]:
+                    del self.resources[rs]
 
         # filter to encounters near the PC (since they may have been transported, or just moved)
         near: Set[str] = {hx for hx in board.find_hexes_near_token(self.name, 0, 5)}
@@ -774,7 +835,7 @@ class Character:
 class CharacterStorage(ObjectStorageBase[Character]):
     TABLE_NAME = "character"
     TYPE = Character
-    PRIMARY_KEY = "name"
+    PRIMARY_KEYS = {"name"}
 
     @classmethod
     def load(cls) -> List[Character]:
