@@ -181,7 +181,7 @@ class Client:
         if board.tokens:
             print()
             for tok in board.tokens:
-                if tok.type != "City" or len(tok.route) <= 5:
+                if tok.type == "Character" or len(tok.route) <= 5:
                     print(tok)
 
         if self.args.country:
@@ -220,8 +220,10 @@ class Client:
                     return colors.bold + "@" + colors.reset
                 elif tokens[hx.name][0].type == "City":
                     return colors.fg.red + "#" + colors.reset
+                elif tokens[hx.name][0].type == "Mine":
+                    return colors.bg.magenta + colors.fg.black + "*" + colors.reset
                 else:
-                    return colors.bold + colors.green + "?" + colors.reset
+                    return colors.bold + colors.fg.green + "?" + colors.reset
             elif encounters is not None and hx.name in encounters:
                 return colors.bold + colors.bg.red + "!" + colors.reset
 
@@ -643,6 +645,14 @@ class Client:
                     f"* {pfx} remained at {single.new_val} ({', '.join(single.comments)})."
                 )
 
+        if resp.outcome.action_flag is not None:
+            au = resp.outcome.action_flag
+            if au.new_val <= 0 and au.old_val > 0:
+                print(f"* Your action was used ({', '.join(au.comments)}).")
+            elif au.new_val > 0 and au.old_val <= 0:
+                print(f"* Your action was refreshed ({', '.join(au.comments)}).")
+            else:
+                print(f"* Your action is unchanged ({', '.join(au.comments)}).")
         render_single_int("Your health has", resp.outcome.health)
         render_single_int("Your coins have", resp.outcome.coins)
         render_single_int("Your reputation has", resp.outcome.reputation)
@@ -650,7 +660,9 @@ class Client:
             render_single_int(f"Your {sk} xp has", val)
         if resp.outcome.resource_draws is not None:
             rd = resp.outcome.resource_draws
-            print(f"* You gained {rd.new_val} resource draws ({', '.join(rd.comments)}).")
+            print(
+                f"* You gained {rd.new_val} resource draws ({', '.join(rd.comments)})."
+            )
         for name, val in resp.outcome.resources.items():
             render_single_int(f"Your {name} resources have", val)
         render_single_int("Your quest points have", resp.outcome.quest)
@@ -704,7 +716,11 @@ class Client:
         elif eff.type == EffectType.MODIFY_HEALTH:
             return f"{eff.value:+} health"
         elif eff.type == EffectType.MODIFY_RESOURCES:
-            return _with_s("resource")
+            return (
+                _with_s("resource")
+                if eff.param is None
+                else _with_s(f"{eff.param} resource")
+            )
         elif eff.type == EffectType.MODIFY_QUEST:
             return f"{eff.value:+} quest"
         elif eff.type == EffectType.MODIFY_TURNS:
@@ -715,6 +731,8 @@ class Client:
             return f"rank-{eff.value:+} job turmoil"
         elif eff.type == EffectType.TRANSPORT:
             return f"rank-{eff.value:+} random transport"
+        elif eff.type == EffectType.MODIFY_ACTION:
+            return "use action" if eff.value <= 0 else "refresh action"
         else:
             return eff
 

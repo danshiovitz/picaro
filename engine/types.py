@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum, auto as enum_auto
-from typing import Any, Dict, Generic, List, Optional, Sequence, Tuple, TypeVar
+from typing import Dict, Generic, List, Optional, Sequence, Tuple, TypeVar
 
 
 Terrains = [
@@ -48,13 +48,14 @@ class EffectType(Enum):
     MODIFY_SPEED = enum_auto()
     DISRUPT_JOB = enum_auto()
     TRANSPORT = enum_auto()
+    MODIFY_ACTION = enum_auto()
 
 
 @dataclass(frozen=True)
 class Effect:
     type: EffectType
     value: int
-    param: Optional[Any] = None
+    param: Optional[str] = None
     is_cost: bool = False
 
 
@@ -146,6 +147,7 @@ class EncounterSingleOutcome(Generic[T]):
 
 @dataclass(frozen=True)
 class EncounterOutcome:
+    action_flag: Optional[EncounterSingleOutcome[int]]
     coins: Optional[EncounterSingleOutcome[int]]
     xp: Dict[str, EncounterSingleOutcome[int]]
     reputation: Optional[EncounterSingleOutcome[int]]

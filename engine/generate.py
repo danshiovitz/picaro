@@ -132,7 +132,7 @@ def generate(
 
 def generate_from_mini(
     num_rows: int, num_columns: int, minimap: List[str]
-) -> Tuple[List[Hex], List[Country]]:
+) -> Tuple[List[Hex], List[Country], List[str]]:
     row_project = _calc_axis_projection(len(minimap), num_rows)
     col_project = _calc_axis_projection(len(minimap[0]), num_columns)
 
@@ -182,11 +182,24 @@ def generate_from_mini(
     rs = Resources[:]
     random.shuffle(rs)
     countries = [
-        Country(name=c, capitol_hex=country_data[c], resources=[rs.pop(0), random.choice(Resources)])
+        Country(
+            name=c,
+            capitol_hex=country_data[c],
+            resources=[rs.pop(0), random.choice(Resources)],
+        )
         for c in country_data.keys()
     ]
 
-    return hexes, countries
+    mines = []
+    for ctry in countries:
+        hxs = [
+            hx
+            for hx in hexes
+            if hx.country == ctry.name and hx.name != country_data[ctry.name]
+        ]
+        mines.append(random.choice(hxs).name)
+
+    return hexes, countries, mines
 
 
 def _calc_axis_projection(small: int, big: int) -> Dict[int, int]:

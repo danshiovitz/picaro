@@ -94,7 +94,10 @@ class CharacterTest(TestCase):
         self.assertEqual(outcome.coins.old_val, 3)
         self.assertEqual(outcome.coins.new_val, 4)
 
-        effects = [Effect(type=EffectType.MODIFY_COINS, value=6), Effect(type=EffectType.MODIFY_COINS, value=4)]
+        effects = [
+            Effect(type=EffectType.MODIFY_COINS, value=6),
+            Effect(type=EffectType.MODIFY_COINS, value=4),
+        ]
         outcome = ch.apply_effects(effects, EncounterContextType.JOB, board)
         self.assertEqual(ch.coins, 14)
         assert outcome.coins is not None
@@ -105,7 +108,10 @@ class CharacterTest(TestCase):
         ch = self._make_ch()
         board = self._make_board()
 
-        effects = [Effect(type=EffectType.MODIFY_XP, param="Fishing", value=3), Effect(type=EffectType.MODIFY_XP, param="Fishing", value=1)]
+        effects = [
+            Effect(type=EffectType.MODIFY_XP, param="Fishing", value=3),
+            Effect(type=EffectType.MODIFY_XP, param="Fishing", value=1),
+        ]
         outcome = ch.apply_effects(effects, EncounterContextType.JOB, board)
         self.assertEqual(ch.skill_xp["Fishing"], 4)
         self.assertEqual(outcome.xp["Fishing"].old_val, 0)

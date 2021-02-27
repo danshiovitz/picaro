@@ -37,7 +37,7 @@ class UpdateHolder:
         for effect in effects:
             if effect.type != self._effect_type or effect.param != self._param:
                 continue
-            self.add(effect.value, effect.is_cost)
+            self.add(effect.value, is_cost=effect.is_cost)
 
     def add(self, value: int, msg: Optional[str] = None, is_cost: bool = False) -> None:
         self._cur_value += value

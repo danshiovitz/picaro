@@ -587,13 +587,21 @@ class Character:
             get_f = lambda: getattr(self, name)
             set_f = lambda val: setattr(self, name, val)
             holder = UpdateHolder(
-                name, effect_type, None, context_type, 0, max_val, get_f=get_f, set_f=set_f
+                name,
+                effect_type,
+                None,
+                context_type,
+                0,
+                max_val,
+                get_f=get_f,
+                set_f=set_f,
             )
             holder.apply_effects(effects)
             return holder
 
         def dict_holder(name: str, effect_type: EffectType) -> Dict[str, UpdateHolder]:
             char_self = self
+
             class HolderDict(dict):
                 def __missing__(self, param):
                     get_f = lambda: getattr(char_self, name).get(param, 0)
@@ -617,15 +625,20 @@ class Character:
                 ret[param].apply_effects(effects)
             return ret
 
-        def const_val(name: str, effect_type: EffectType, val: int) -> UpdateHolder:
-            get_f = lambda: val
-            set_f = lambda val: val
+        def const_val(
+            name: str, effect_type: EffectType, init_val: int
+        ) -> UpdateHolder:
+            get_f = lambda: init_val
+            set_f = lambda _val: None
             holder = UpdateHolder(
                 name, effect_type, None, context_type, 0, None, get_f=get_f, set_f=set_f
             )
             holder.apply_effects(effects)
             return holder
 
+        action_holder = const_val(
+            "action_flag", EffectType.MODIFY_ACTION, 0 if self.acted_this_turn else 1
+        )
         coins_holder = simple("coins", EffectType.MODIFY_COINS)
         reputation_holder = simple("reputation", EffectType.MODIFY_REPUTATION)
         health_holder = simple(
@@ -633,7 +646,9 @@ class Character:
         )
         quest_holder = simple("quest", EffectType.MODIFY_QUEST)
         turn_holder = simple("remaining_turns", EffectType.MODIFY_TURNS)
-        resource_draw_holder = const_val("resources_draw", EffectType.MODIFY_RESOURCES, 0)
+        resource_draw_holder = const_val(
+            "resources_draw", EffectType.MODIFY_RESOURCES, 0
+        )
         # this mostly won't match because the typical effect has param=None
         resources_holder = dict_holder("resources", EffectType.MODIFY_RESOURCES)
         speed_holder = simple("speed", EffectType.MODIFY_SPEED)
@@ -663,10 +678,12 @@ class Character:
         resource_draws_outcome: Optional[EncounterSingleOutcome[int]] = None
         draw_cnt = resource_draw_holder.get_cur_value()
         if draw_cnt < 0:
-            cur_rs = []
-            for rt, h in resources_holder:
-                cur_rs.extend([rt] * h.get_cur_value())
-            to_rm = random.sample(cur_rs, draw_cnt * -1)
+            cur_rs = [nm for rs, cnt in self.resources.items() for nm in [rs] * cnt]
+            to_rm = (
+                random.sample(cur_rs, draw_cnt * -1)
+                if len(cur_rs) > draw_cnt * -1
+                else cur_rs
+            )
             rcs = defaultdict(int)
             for rt in to_rm:
                 rcs[rt] += 1
@@ -680,7 +697,12 @@ class Character:
                 if draw.value != 0:
                     resources_holder[draw.type].add(draw.value)
                 comments.append(draw.name)
-            resource_draws_outcome = EncounterSingleOutcome[int](old_val=0, new_val=draw_cnt, comments=comments)
+            resource_draws_outcome = EncounterSingleOutcome[int](
+                old_val=0, new_val=draw_cnt, comments=comments
+            )
+
+        action_cnt = action_holder.get_cur_value()
+        self.acted_this_turn = action_cnt <= 0
 
         transport_outcome: Optional[EncounterSingleOutcome[str]] = None
         if transport_val_holder.get_cur_value() > 0:
@@ -704,6 +726,7 @@ class Character:
             }
 
         return EncounterOutcome(
+            action_flag=action_holder.to_outcome(),
             coins=coins_holder.to_outcome(),
             reputation=reputation_holder.to_outcome(),
             xp=dict_outcomes(xp_holder),

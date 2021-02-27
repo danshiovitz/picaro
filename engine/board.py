@@ -27,7 +27,7 @@ from .types import (
 )
 
 
-TokenTypes = ["Character", "City", "Other"]
+TokenTypes = ["Character", "City", "Mine", "Other"]
 
 
 # This one isn't serialized at all, it owns no data directly
@@ -194,7 +194,9 @@ class ActiveBoard:
 
     def draw_resource_card(self, hex_name: str) -> ResourceCard:
         hx = HexStorage.load_by_name(hex_name)
-        resource_deck = ResourceDeckStorage.maybe_load_by_country_region(hx.country, hx.region)
+        resource_deck = ResourceDeckStorage.maybe_load_by_country_region(
+            hx.country, hx.region
+        )
         if resource_deck is None:
             resource_deck = ResourceDeck(country=hx.country, region=hx.region, deck=[])
             ResourceDeckStorage.insert(resource_deck)
@@ -209,7 +211,6 @@ class ActiveBoard:
         resources = set()
         for c in countries:
             resources |= set(c.resources)
-
 
         if country == "Wild":
             cards = [ResourceCard(name="Nothing", type="nothing", value=0)] * 20
@@ -246,7 +247,7 @@ class ActiveBoard:
             '""""^::n',
             '&&"^n:::',
         ]
-        hexes, countries = generate_from_mini(50, 50, minimap)
+        hexes, countries, mines = generate_from_mini(50, 50, minimap)
 
         CountryStorage.insert_all(countries)
 
@@ -314,6 +315,9 @@ class ActiveBoard:
         ]
         random.shuffle(city_names)
 
+        mine_set = {m for m in mines}
+        mine_rs = {c.name: c.resources[0] for c in countries}
+
         for hx in hexes:
             if hx.terrain == "City":
                 actions = [
@@ -326,6 +330,28 @@ class ActiveBoard:
                 token = Token(
                     name=city_names.pop(0),
                     type="City",
+                    location=hx.name,
+                    actions=actions,
+                )
+                TokenStorage.create(token)
+
+            if hx.name in mine_set:
+                actions = [
+                    Action(
+                        name=f"Gather {mine_rs[hx.country]}",
+                        cost=[Effect(type=EffectType.MODIFY_ACTION, value=-1)],
+                        benefit=[
+                            Effect(
+                                type=EffectType.MODIFY_RESOURCES,
+                                param=mine_rs[hx.country],
+                                value=1,
+                            )
+                        ],
+                    ),
+                ]
+                token = Token(
+                    name=f"{mine_rs[hx.country]} Source",
+                    type="Mine",
                     location=hx.name,
                     actions=actions,
                 )
@@ -462,8 +488,13 @@ class ResourceDeckStorage(ObjectStorageBase[ResourceDeck]):
         return cls._select_helper([], {})
 
     @classmethod
-    def maybe_load_by_country_region(cls, country: str, region: str) -> Optional[ResourceDeck]:
-        decks = cls._select_helper(["country = :country", "region = :region"], {"country": country, "region": region})
+    def maybe_load_by_country_region(
+        cls, country: str, region: str
+    ) -> Optional[ResourceDeck]:
+        decks = cls._select_helper(
+            ["country = :country", "region = :region"],
+            {"country": country, "region": region},
+        )
         if not decks:
             return None
         return decks[0]
