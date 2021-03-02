@@ -13,6 +13,9 @@
 - record all encounters + outcome + commentary and command to view history
 - spend coins on stuff (xp? reputation?)
 - effects to do specific things that are usually done randomly (switch to job X, transport to hex X, gain X units of resource Y)
+- being able to undo outcomes
+- rewards (emblems) for getting promoted from jobs
+- being able to get "free" (assignable) xp and assign it
 - fill in stuff:
   - more feat hooks
   - terrain decks
@@ -75,55 +78,14 @@ finish season:
 # not have those rumors take effect? or, like, you say 3 days for play, 1 day for rumors;
 # at the end of three days we finish play and cancel events (or sooner if everyone's done with play);
 # then after 1 day or when everyone's done with rumors, we publish rumors
-- while the encounter queue is non-empty:
-  - pop the first encounter and resolve it with default
 
-
-I guess the better flow is like
-  while speed > 0:
-     travel or
-     action in current hex (including any tableau cards and camp)
-Some actions will reduce speed to zero
-
-How does the travel deck work in this model?
-Do you just draw on every move, so sometimes you will indeed have a travel encounter on the way to your job encounter? Do you draw only when ending your turn without doing a job or camping? That feels a little gameable.
-
-Can kind of imagine a travel deck that's like
-  4x danger-1
-  4x danger-2
-  4x danger-3
-  4x slow
-  2x fast
-  2x loot
-Where danger-2 is like "you have an encounter if the hex is at least this danger level"
-Slow is -1 speed, fast is +1 speed, loot is random loot
-
-Do we support (a) as a shortcut to walk to encounter a's hex and then have that encounter? will it confuse things if the encounter is more than your speed away and/or you have an encounter on the way there? do we have any guarantees you don't have more than one encounter per turn?
-
-
-Actions are something you can do via tokens or hexes. What I expect is the display is like
-
-b. (3) Scouting Mission [AI05 - 1 away]:                                        i / @ :
-       Observation (1d8+0) vs 2 (+reputation / -damage)                         I/ ! ^ :
-c. (3) Caravan Raid [AI06 - 0 away]:                                            j n / :
-       Speed (1d8+0) vs 5 (+coins / -damage)                                    J/ / / :
-j. Trade (via Waterdeep) [AI07]                                                 k / n /
-k. Search Area [AI09]                                                           K  n ~
-t. Travel (uio.jkl)
-x. Camp
-
-Trade is an action exposed by the Waterdeep token, and Search Area is an action from the hex itself. These actions have some associated radius in which they're displayed, since otherwise you'd show a zillion search area actions. For all these actions, you always have to move to the hex they're in and then execute them.
-
-Trade is also something like:
-  * Pay 1 resource (any type), receive 5 coins
-This is different from a -resource-1 penalty, since you can't choose this option if you don't have the payment
-
-Kinda feeling like countries get assigned two resources, and then regions populate a deck with like 6x primary, 3x secondary, 1x everything else, and when you draw, you draw from that region's deck. I guess I did have the idea that instead of gaining count - 1 resources, you draw count times, and we add like 8x nothing to the deck. Then we could also add 2x 2 of primary item, although this does mean you might randomly get 10 coins worth of stuff on a single draw, which is pretty good (not really game-breaking, though, especially since nothing is useful for anything yet). Resource loss I guess is just a random pick from your existing resources, it seems the easiest.
-
-The outcome of your encounter:
-* Your health has decreased to 17 (-3).
-* Your Observation xp has increased to 7 (+2, +5).
-* You gain 3 resource draws (Nothing, Steel x2, Gold)
-  * Your Steel resources have increased to 3 (+2).
-  * Your Gold resources have increased to 1 (+1).
-* Your Command xp has increased to 3 (+3).
+Projects:
+- projects have a type, a target hex, and a list of stages
+   - types are like Large Structure, Elaborate Device, Mystic Ritual, Deception, Popular Movement, Rebellion
+- stages have a status (active, finished, future) and an xp bar (say max 25xp) and a type
+  - search types pick a secret hex and give you clues about its location; when you do a search action in the secret hex, you get 25xp (on consideration, we pick a hex 15-25 hexes away from the target (~7 turns) and give you a radius of 4 to look in (37 hexes, so ~12 turns) but you search a hex just by entering it and it doesn't consume an action, so you can do 3/turn; further, after you search ~18 hexes unsuccessfully we give you a hint - note that this-all makes it so you can continue doing encounters as normal while working on the project, which makes it similar to other stage types)
+  - challenge types put encounter cards in your deck that let you earn ~5 xp per
+  - gather types require ~5 resources be delivered to the hex, and give you 5 xp per
+  - time types give you 1xp per turn the stage is active
+  - in addition, you can get the project encounter effect when a stage is active, which gives +1 xp to a random project's active stage
+- how long do we expect projects to take? it feels like a short project should take about a season, hence the 25 xp number

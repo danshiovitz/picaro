@@ -33,7 +33,6 @@ from picaro.server.api_types import (
     CampRequest,
     CampResponse,
     Character,
-    ChoiceType,
     Effect,
     EffectType,
     EncounterEffect,
@@ -305,6 +304,8 @@ class Client:
                 self._display_play(ch)
                 self._input_play_action()
                 continue
+            if ch.remaining_turns <= 0:
+                self._display_play(ch)
             return
 
     def _display_play(self, ch: Character) -> None:
@@ -313,7 +314,7 @@ class Client:
 
         ch_hex = [hx for hx in board.hexes if hx.name == ch.location][0]
         minimap = self._make_small_map(
-            board, center=ch_hex.coordinate, radius=3, encounters=encounters
+            board, center=ch_hex.coordinate, radius=4, encounters=encounters
         )
 
         display = []
@@ -324,12 +325,12 @@ class Client:
         display.append(
             f"Health: {ch.health}/{ch.max_health}   Coins: {ch.coins}   Reputation: {ch.reputation}   Resources: {sum(ch.resources.values(), 0)}/{ch.max_resources}   Quest: {ch.quest}"
         )
-        if ch.remaining_turns:
-            display.append(
-                f" Turns: {ch.remaining_turns}    Luck: {ch.luck}        Speed: {ch.speed}/{ch.max_speed}"
-            )
-            display.append("")
+        display.append(
+            f" Turns: {ch.remaining_turns}       Luck: {ch.luck}        Speed: {ch.speed}/{ch.max_speed}"
+        )
+        display.append("")
 
+        if ch.remaining_turns:
             def dist(route) -> str:
                 ret = f"- {len(route)} away"
                 if len(route) > ch.speed:
@@ -353,7 +354,7 @@ class Client:
             display.append("t. Travel (uio.jkl)")
             display.append("x. Camp")
             display.append("z. End Turn (if you don't want to do a job or camp)")
-        while len(display) < 14:
+        while len(display) < len(minimap):
             display.append("")
 
         pad: Callable[[str, int], str] = lambda val, width: val + " " * (
@@ -492,9 +493,13 @@ class Client:
         return True
 
     def _encounter(self, ch: Character) -> bool:
-        signs = ", ".join(ch.encounters[0].signs)
-        print(f"{ch.encounters[0].name} [signs: {signs}]")
-        print(ch.encounters[0].desc)
+        line = ch.encounters[0].name
+        if ch.encounters[0].signs:
+            signs = ", ".join(ch.encounters[0].signs)
+            line += f" [signs: {signs}]"
+        print(line)
+        if ch.encounters[0].desc:
+            print(ch.encounters[0].desc)
 
         return self._input_encounter_action(ch)
 
@@ -504,7 +509,7 @@ class Client:
         transfers = []
         adjusts = []
         flee = False
-        choice = None
+        choices = set()
 
         while True and ch.encounters[0].checks:
             print()
@@ -564,47 +569,51 @@ class Client:
                 print("Unknown command!")
                 continue
 
-        if not flee and ch.encounters[0].choice_type != ChoiceType.NONE:
-            all_choices = ch.encounters[0].choices
-            can_choose = (
-                len(all_choices) > 1
-                and ch.encounters[0].choice_type != ChoiceType.RANDOM
-            ) or ch.encounters[0].choice_type == ChoiceType.OPTIONAL
-            for idx, choices in enumerate(all_choices):
+        if not flee and ch.encounters[0].choices:
+            enc_choices = ch.encounters[0].choices
+            can_choose = (not enc_choices.is_random) and (
+                len(enc_choices.choice_list) > 1 or enc_choices.min_choices == 0
+            )
+            for idx, choice in enumerate(enc_choices.choice_list):
                 pfx = (" " + ascii_lowercase[idx] + ". ") if can_choose else " * "
-                line = pfx + ", ".join(self._render_effect(eff) for eff in choices)
-                if (
-                    ch.encounters[0].choice_type == ChoiceType.RANDOM
-                    and ch.encounters[0].rolls[-1] == idx + 1
-                ):
+                line = pfx + ", ".join(self._render_effect(eff) for eff in choice)
+                if enc_choices.is_random and (idx + 1) in ch.encounters[0].rolls:
                     line = colors.bold + line + colors.reset
                 print(line)
             if can_choose:
-                if ch.encounters[0].choice_type == ChoiceType.OPTIONAL:
-                    print(" q. Do none")
+                if enc_choices.min_choices < enc_choices.max_choices:
+                    print(" z. Finish")
                 while True:
-                    print("Make your choice: ", end="")
+                    mi = enc_choices.min_choices - len(choices)
+                    mx = enc_choices.max_choices - len(choices)
+                    inline = f"Make your choice ({mi} - {mx} items): "
+                    print(inline, end="")
                     line = input().lower().strip()
                     if not line:
                         continue
-                    if line[0] == "q":
-                        if ch.encounters[0].choice_type == ChoiceType.OPTIONAL:
-                            choice = None
+                    if line[0] == "z":
+                        if len(choices) >= enc_choices.min_choices:
                             break
                         else:
-                            print("You must make a selection.")
+                            print("You must make another selection.")
                             continue
                     c_idx = ascii_lowercase.index(line[0])
-                    if c_idx >= len(all_choices):
+                    if c_idx >= len(enc_choices.choice_list):
                         print("Not a valid choice?")
                         continue
-                    choice = c_idx
-                    break
+                    if c_idx in choices:
+                        print(f"Undoing choice {line[0]}")
+                        choices.remove(c_idx)
+                    else:
+                        choices.add(c_idx)
+
+                    if len(choices) >= enc_choices.max_choices:
+                        break
             else:
-                if ch.encounters[0].choice_type == ChoiceType.RANDOM:
-                    choice = ch.encounters[0].rolls[-1] - 1
-                elif len(ch.encounters[0].choices) == 1:
-                    choice = 0
+                if enc_choices.is_random:
+                    choices.extend(r - 1 for r in ch.encounters[0].rolls)
+                elif len(enc_choices.choice_list) == 1:
+                    choices.add(0)
 
         actions = EncounterActions(
             flee=flee,
@@ -612,7 +621,7 @@ class Client:
             adjusts=adjusts,
             luck=luck,
             rolls=rolls,
-            choice=choice,
+            choices=list(choices),
         )
         try:
             resp = self._post(

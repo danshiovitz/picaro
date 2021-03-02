@@ -7,7 +7,7 @@ from .exceptions import IllegalMoveException
 from .skills import load_skills
 from .storage import ObjectStorageBase
 from .types import (
-    ChoiceType,
+    Choices,
     EncounterCheck,
     EncounterContextType,
     EncounterEffect,
@@ -51,11 +51,9 @@ class TemplateDeck:
     ) -> FullCard:
         if not val.skills:
             checks = []
-            choice_type = val.choice_type
             choices = val.choices
         else:
-            choice_type = ChoiceType.NONE
-            choices = []
+            choices = None
             skill_bag = []
             # the number of copies of the core skills only matters on the third check,
             # where we add in all the skills (let's assume there are 36) and want to
@@ -76,7 +74,7 @@ class TemplateDeck:
             ]
 
         all_zodiacs = load_zodiacs()
-        signs = random.sample(all_zodiacs, 2)
+        signs = random.sample(all_zodiacs, 2) if not val.unsigned else []
 
         card_id = "".join(random.choice(ascii_lowercase) for _ in range(12))
         return FullCard(
@@ -84,7 +82,6 @@ class TemplateDeck:
             name=val.name,
             desc=val.desc,
             checks=checks,
-            choice_type=choice_type,
             choices=choices,
             signs=signs,
         )

@@ -76,7 +76,7 @@ def recursive_from_dict(val: Any, cls: Type[T], frozen: Optional[bool] = None) -
             ut = field.type
             bt = getattr(ut, "__origin__", ut)
             if bt == Union:  # ie, it was an optional
-                if val[field.name] is None:
+                if field.name not in val or val[field.name] is None:
                     dt[field.name] = None
                     continue
                 # pull out the first type which is assumed to be the non-none type

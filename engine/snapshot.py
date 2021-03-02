@@ -5,7 +5,7 @@ from typing import Dict, Optional, Sequence
 from picaro.common.hexmap.types import OffsetCoordinate
 from picaro.engine.types import (
     Action,
-    ChoiceType,
+    Choices,
     TableauCard,
     Effect,
     Emblem,
@@ -43,8 +43,7 @@ class TableauCard:
     id: str
     name: str
     checks: Sequence[EncounterCheck]
-    choice_type: ChoiceType
-    choices: Sequence[Sequence[Effect]]
+    choices: Optional[Choices]
     age: int
     location: str
     route: Sequence[str]
@@ -55,8 +54,7 @@ class Encounter:
     name: str
     desc: str
     checks: Sequence[EncounterCheck]
-    choice_type: ChoiceType
-    choices: Sequence[Sequence[Effect]]
+    choices: Optional[Choices]
     signs: Sequence[str]
     rolls: Sequence[int]
 

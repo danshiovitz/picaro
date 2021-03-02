@@ -339,12 +339,16 @@
         "copies": 4,
         "name": "Rest and Relaxation",
         "desc": "...",
-        "choice_type": "REQUIRED",
-        "choices": [
-          [
-            {"type": "MODIFY_HEALTH", "value": 10, "param": null}
+        "choices": {
+          "min_choices": 1,
+          "max_choices": 1,
+          "is_random": "False",
+          "choice_list": [
+            [
+              {"type": "MODIFY_HEALTH", "value": 10, "param": null}
+            ]
           ]
-        ]
+        }
       }
     ]
   },

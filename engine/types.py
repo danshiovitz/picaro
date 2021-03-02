@@ -74,11 +74,12 @@ class EncounterCheck:
     penalty: EncounterEffect
 
 
-class ChoiceType(Enum):
-    NONE = enum_auto()
-    REQUIRED = enum_auto()
-    OPTIONAL = enum_auto()
-    RANDOM = enum_auto()
+@dataclass(frozen=True)
+class Choices:
+    min_choices: int
+    max_choices: int
+    is_random: bool
+    choice_list: Sequence[Sequence[Effect]]
 
 
 @dataclass(frozen=True)
@@ -89,8 +90,8 @@ class TemplateCard:
     skills: Sequence[str] = ()
     rewards: Sequence[EncounterEffect] = ()
     penalties: Sequence[EncounterEffect] = ()
-    choice_type: ChoiceType = ChoiceType.NONE
-    choices: Sequence[Sequence[Effect]] = ()
+    choices: Optional[Choices] = None
+    unsigned: bool = False
 
 
 @dataclass(frozen=True)
@@ -99,8 +100,7 @@ class FullCard:
     name: str
     desc: str
     checks: Sequence[EncounterCheck]
-    choice_type: ChoiceType
-    choices: Sequence[Sequence[Effect]]
+    choices: Optional[Choices]
     signs: Sequence[str]
 
 
@@ -116,6 +116,7 @@ class EncounterContextType(Enum):
     TRAVEL = enum_auto()
     CAMP = enum_auto()
     ACTION = enum_auto()
+    SYSTEM = enum_auto()
 
 
 @dataclass(frozen=True)
@@ -132,7 +133,7 @@ class EncounterActions:
     flee: bool
     luck: int
     rolls: Sequence[int]
-    choice: Optional[int]
+    choices: Sequence[int]
 
 
 T = TypeVar("T")

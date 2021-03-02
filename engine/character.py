@@ -30,8 +30,7 @@ from .snapshot import (
 )
 from .storage import ObjectStorageBase
 from .types import (
-    ChoiceType,
-    TableauCard,
+    Choices,
     Effect,
     EffectType,
     Emblem,
@@ -45,6 +44,7 @@ from .types import (
     FullCard,
     HookType,
     JobType,
+    TableauCard,
     TemplateCard,
 )
 
@@ -96,8 +96,7 @@ class Party:
             id=card.card.id,
             name=card.card.name,
             checks=card.card.checks[0:1],
-            choice_type=card.card.choice_type,
-            choices=card.card.choices[0:1],
+            choices=card.card.choices,
             age=card.age,
             location=card.location,
             route=tuple(route),
@@ -108,7 +107,6 @@ class Party:
             name=encounter.card.name,
             desc=encounter.card.desc,
             checks=encounter.card.checks,
-            choice_type=encounter.card.choice_type,
             choices=encounter.card.choices,
             signs=encounter.card.signs,
             rolls=encounter.rolls,
@@ -158,11 +156,15 @@ class Party:
             copies=1,
             name=action.name,
             desc="...",
-            choice_type=ChoiceType.OPTIONAL,
-            choices=[
-                action.benefit
-                + [dataclasses.replace(a, is_cost=True) for a in action.cost],
-            ],
+            choices=Choices(
+                min_choices=0,
+                max_choices=1,
+                is_random=False,
+                choice_list=[
+                    action.benefit
+                    + [dataclasses.replace(a, is_cost=True) for a in action.cost],
+                ],
+            ),
         )
         custom_deck = load_deck("Custom")
         card = custom_deck.make_card(action_template, 1, EncounterContextType.ACTION)
@@ -282,7 +284,7 @@ class Character:
             health=0,
             coins=0,
             resources={},
-            reputation=5,
+            reputation=3,
             quest=0,
             remaining_turns=0,
             luck=0,
@@ -418,8 +420,11 @@ class Character:
         for chk in card.checks:
             bonus = self.get_skill_rank(chk.skill)
             rolls.append(random.randint(1, 8) + bonus)
-        if card.choice_type == ChoiceType.RANDOM:
-            rolls.append(random.randint(1, len(card.choices)))
+        if card.choices and card.choices.is_random:
+            rolls.extend(
+                random.randint(1, len(card.choices.choice_list))
+                for _ in range(card.choices.max_choices)
+            )
         self.encounters.append(
             Encounter(
                 card=card,
@@ -512,8 +517,8 @@ class Character:
                     )
                 )
 
-        if actions.choice is not None:
-            ret.extend(encounter.card.choices[actions.choice])
+        for c in actions.choices:
+            ret.extend(encounter.card.choices.choice_list[c])
 
         return ret
 
@@ -549,25 +554,25 @@ class Character:
 
             self.luck = luck
 
-        if encounter.card.choice_type != ChoiceType.NONE:
-            if (
-                actions.choice is None
-                and encounter.card.choice_type == ChoiceType.REQUIRED
-            ):
-                if encounter.card.choices:
-                    raise BadStateException("Choice must be supplied")
-            if encounter.card.choice_type == ChoiceType.RANDOM:
-                if actions.choice != encounter.rolls[-1] - 1:
+        if encounter.card.choices:
+            choices = encounter.card.choices
+            if len(actions.choices) < choices.min_choices:
+                with_s = f"{choices.min_choices} choice"
+                if choices.min_choices != 1:
+                    with_s += "s"
+                raise IllegalMoveException(f"Must supply at least {with_s}.")
+            if len(actions.choices) > choices.max_choices:
+                with_s = f"{choices.min_choices} choice"
+                if choices.min_choices != 1:
+                    with_s += "s"
+                raise IllegalMoveException(f"Must supply at most {with_s}.")
+            for idx, cur in enumerate(actions.choices):
+                if choices.is_random and cur != encounter.rolls[idx] - 1:
                     raise BadStateException("Choice should match roll for random")
-            if actions.choice is not None and (
-                actions.choice < 0 or actions.choice >= len(encounter.card.choices)
-            ):
-                raise BadStateException(
-                    f"Choice out of range ({actions.choice}, max {len(encounter.card.choices)})"
-                )
-        else:
-            if actions.choice is not None:
-                raise BadStateException("Choice not allowed here")
+                elif cur < 0 or cur >= len(choices.choice_list):
+                    raise BadStateException(f"Choice out of range: {cur}")
+        elif actions.choices:
+            raise BadStateException("Choices not allowed here.")
 
     def apply_effects(
         self,
@@ -656,6 +661,9 @@ class Character:
         transport_val_holder = const_val("transport", EffectType.TRANSPORT, 0)
         job_val_holder = const_val("job", EffectType.DISRUPT_JOB, 0)
 
+        if reputation_holder.get_cur_value() < 0:
+            job_val_holder.add(1, "negative reputation")
+
         job_outcome: Optional[EncounterSingleOutcome[str]] = None
         if job_val_holder.get_cur_value() > 0:
             job_msg, new_job = self._job_check(job_val_holder.get_cur_value())
@@ -741,20 +749,13 @@ class Character:
         )
 
     def finish_turn(self, board: Board) -> None:
+        if self._discard_resources():
+            return
+
         self.remaining_turns -= 1
         self.acted_this_turn = False
         self.speed = self.get_init_speed()
         self.had_travel_encounter = False
-
-        # discard down to correct number of resources
-        # (in the future should let player pick which to discard)
-        all_rs = [nm for rs, cnt in self.resources.items() for nm in [rs] * cnt]
-        if len(all_rs) > self.get_max_resources():
-            overage = random.sample(all_rs, len(all_rs) - self.get_max_resources())
-            for rs in overage:
-                self.resources[rs] -= 1
-                if not self.resources[rs]:
-                    del self.resources[rs]
 
         # filter to encounters near the PC (since they may have been transported, or just moved)
         near: Set[str] = {hx for hx in board.find_hexes_near_token(self.name, 0, 5)}
@@ -766,6 +767,37 @@ class Character:
             dataclasses.replace(c, age=c.age - 1) for c in self.tableau if _is_valid(c)
         ]
         self.refill_tableau(board)
+
+    def _discard_resources(self) -> bool:
+        # discard down to correct number of resources
+        # (in the future should let player pick which to discard)
+        all_rs = [nm for rs, cnt in self.resources.items() for nm in [rs] * cnt]
+        overage = len(all_rs) - self.get_max_resources()
+        if overage <= 0:
+            return False
+
+        discard_template = TemplateCard(
+            copies=1,
+            name="Discard Resources",
+            desc=f"You must discard to {self.get_max_resources()} resources.",
+            unsigned=True,
+            choices=Choices(
+                min_choices=overage,
+                max_choices=overage,
+                is_random=False,
+                choice_list=[
+                    [Effect(type=EffectType.MODIFY_RESOURCES, param=rs, value=-1)]
+                    for rs in all_rs
+                ],
+            ),
+        )
+
+        custom_deck = load_deck("Custom")
+        card = custom_deck.make_card(
+            discard_template, 1, EncounterContextType.SYSTEM,
+        )
+        self.queue_encounter(card, context_type=EncounterContextType.SYSTEM)
+        return True
 
     def draw_travel_card(self, location: str, board: Board) -> Optional[FullCard]:
         if not self.travel_deck:
@@ -785,14 +817,18 @@ class Character:
                 copies=1,
                 name="A Find Along The Way",
                 desc="...",
-                choice_type=ChoiceType.RANDOM,
-                choices=[
-                    [Effect(type=EffectType.MODIFY_COINS, value=1)],
-                    [Effect(type=EffectType.MODIFY_COINS, value=6)],
-                    [Effect(type=EffectType.MODIFY_RESOURCES, value=1)],
-                    [Effect(type=EffectType.MODIFY_HEALTH, value=3)],
-                    [Effect(type=EffectType.MODIFY_QUEST, value=1)],
-                ],
+                choices=Choices(
+                    min_choices=1,
+                    max_choices=1,
+                    is_random=True,
+                    choice_list=[
+                        [Effect(type=EffectType.MODIFY_COINS, value=1)],
+                        [Effect(type=EffectType.MODIFY_COINS, value=6)],
+                        [Effect(type=EffectType.MODIFY_RESOURCES, value=1)],
+                        [Effect(type=EffectType.MODIFY_HEALTH, value=3)],
+                        [Effect(type=EffectType.MODIFY_QUEST, value=1)],
+                    ],
+                ),
             )
             custom_deck = load_deck("Custom")
             return custom_deck.make_card(

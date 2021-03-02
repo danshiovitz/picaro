@@ -6,7 +6,6 @@ from picaro.common.hexmap.types import OffsetCoordinate
 from picaro.engine.snapshot import Board, Character, Encounter, Hex, Token
 from picaro.engine.types import (
     Action,
-    ChoiceType,
     TableauCard,
     Effect,
     EffectType,
