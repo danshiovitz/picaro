@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum, auto as enum_auto
-from typing import Dict, Generic, List, Optional, Sequence, Tuple, TypeVar
+from typing import Any, Dict, Generic, List, Optional, Sequence, Tuple, TypeVar, Union
 
 
 Terrains = [
@@ -49,14 +49,26 @@ class EffectType(Enum):
     DISRUPT_JOB = enum_auto()
     TRANSPORT = enum_auto()
     MODIFY_ACTION = enum_auto()
+    ADD_EMBLEM = enum_auto()
 
 
 @dataclass(frozen=True)
 class Effect:
     type: EffectType
     value: int
-    param: Optional[str] = None
+    param: Optional[Any] = None
     is_cost: bool = False
+
+    @classmethod
+    def type_field(cls) -> str:
+        return "type"
+
+    @classmethod
+    def any_type(cls, type_val: Union[EffectType, str]) -> type:
+        if type_val in (EffectType.ADD_EMBLEM, EffectType.ADD_EMBLEM.name):
+            return Emblem
+        else:
+            return str
 
 
 class JobType(Enum):
@@ -64,6 +76,38 @@ class JobType(Enum):
     SOLO = enum_auto()
     CAPTAIN = enum_auto()
     KING = enum_auto()
+
+
+@dataclass(frozen=True)
+class Action:
+    name: str
+    cost: List[Effect]
+    benefit: List[Effect]
+
+
+class HookType(Enum):
+    INIT_CARD_AGE = enum_auto()
+    INIT_TURNS = enum_auto()
+    MAX_HEALTH = enum_auto()
+    MAX_LUCK = enum_auto()
+    MAX_TABLEAU_SIZE = enum_auto()
+    SKILL_RANK = enum_auto()
+    RELIABLE_SKILL = enum_auto()
+    INIT_SPEED = enum_auto()
+    MAX_RESOURCES = enum_auto()
+
+
+@dataclass(frozen=True)
+class Feat:
+    hook: HookType
+    value: int
+    param: Optional[str]
+
+
+@dataclass(frozen=True)
+class Emblem:
+    name: str
+    feats: List[Feat]
 
 
 @dataclass(frozen=True)
@@ -151,6 +195,7 @@ class EncounterOutcome:
     action_flag: Optional[EncounterSingleOutcome[int]]
     coins: Optional[EncounterSingleOutcome[int]]
     xp: Dict[str, EncounterSingleOutcome[int]]
+    free_xp: Optional[EncounterSingleOutcome[int]]
     reputation: Optional[EncounterSingleOutcome[int]]
     health: Optional[EncounterSingleOutcome[int]]
     resource_draws: Optional[EncounterSingleOutcome[int]]
@@ -160,37 +205,7 @@ class EncounterOutcome:
     speed: Optional[EncounterSingleOutcome[int]]
     transport_location: Optional[EncounterSingleOutcome[str]]
     new_job: Optional[EncounterSingleOutcome[str]]
-
-
-@dataclass(frozen=True)
-class Action:
-    name: str
-    cost: List[Effect]
-    benefit: List[Effect]
-
-
-class HookType(Enum):
-    INIT_CARD_AGE = enum_auto()
-    INIT_TURNS = enum_auto()
-    MAX_HEALTH = enum_auto()
-    MAX_LUCK = enum_auto()
-    MAX_TABLEAU_SIZE = enum_auto()
-    SKILL_RANK = enum_auto()
-    INIT_SPEED = enum_auto()
-    MAX_RESOURCES = enum_auto()
-
-
-@dataclass(frozen=True)
-class Feat:
-    hook: HookType
-    value: int
-    param: Optional[str]
-
-
-@dataclass(frozen=True)
-class Emblem:
-    name: str
-    feats: List[Feat]
+    emblems: List[EncounterSingleOutcome[Optional[Emblem]]]
 
 
 @dataclass(frozen=True)

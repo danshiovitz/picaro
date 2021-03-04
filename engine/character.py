@@ -419,7 +419,9 @@ class Character:
         rolls = []
         for chk in card.checks:
             bonus = self.get_skill_rank(chk.skill)
-            rolls.append(random.randint(1, 8) + bonus)
+            roll_min = 0 + self._calc_hook(HookType.RELIABLE_SKILL, chk.skill)
+            roll_val = clamp(random.randint(1, 8), min=roll_min, max=None)
+            rolls.append(roll_val + bonus)
         if card.choices and card.choices.is_random:
             rolls.extend(
                 random.randint(1, len(card.choices.choice_list))
@@ -503,7 +505,7 @@ class Character:
                 elif enc_eff == EncounterEffect.TRANSPORT:
                     ret.append(Effect(type=EffectType.TRANSPORT, value=cnt * 5))
                 elif enc_eff == EncounterEffect.DISRUPT_JOB:
-                    ret.append(Effect(type=EffectType.DISRUPT_JOB, value=cnt))
+                    ret.append(Effect(type=EffectType.DISRUPT_JOB, value=-cnt))
                 elif enc_eff == EncounterEffect.NOTHING:
                     pass
                 else:
@@ -585,6 +587,9 @@ class Character:
         # transport location if any
         # we do it this way because we want, eg, to be able to overwrite reputation changes with
         # reputation set via job change (note that any 'set' overwrites previous comments, as well)
+        effects_split = defaultdict(list)
+        for effect in effects:
+            effects_split[(effect.type, effect.param is None)].append(effect)
 
         def simple(
             name: str, effect_type: EffectType, max_val: Optional[int] = None
@@ -601,7 +606,7 @@ class Character:
                 get_f=get_f,
                 set_f=set_f,
             )
-            holder.apply_effects(effects)
+            holder.apply_effects(effects_split.pop((effect_type, True), []))
             return holder
 
         def dict_holder(name: str, effect_type: EffectType) -> Dict[str, UpdateHolder]:
@@ -627,7 +632,7 @@ class Character:
             params = {e.param for e in effects if e.type == effect_type and e.param}
             ret = HolderDict()
             for param in params:
-                ret[param].apply_effects(effects)
+                ret[param].apply_effects(effects_split.pop((effect_type, False), []))
             return ret
 
         def const_val(
@@ -638,7 +643,7 @@ class Character:
             holder = UpdateHolder(
                 name, effect_type, None, context_type, 0, None, get_f=get_f, set_f=set_f
             )
-            holder.apply_effects(effects)
+            holder.apply_effects(effects_split.pop((effect_type, True), []))
             return holder
 
         action_holder = const_val(
@@ -654,32 +659,60 @@ class Character:
         resource_draw_holder = const_val(
             "resources_draw", EffectType.MODIFY_RESOURCES, 0
         )
-        # this mostly won't match because the typical effect has param=None
         resources_holder = dict_holder("resources", EffectType.MODIFY_RESOURCES)
         speed_holder = simple("speed", EffectType.MODIFY_SPEED)
         xp_holder = dict_holder("skill_xp", EffectType.MODIFY_XP)
+        free_xp_holder = const_val("free_xp", EffectType.MODIFY_XP, 0)
         transport_val_holder = const_val("transport", EffectType.TRANSPORT, 0)
         job_val_holder = const_val("job", EffectType.DISRUPT_JOB, 0)
 
+        add_emblem_outcomes: List[EncounterSingleOutcome[Optional[Emblem]]] = []
+        for eff in effects_split.pop((EffectType.ADD_EMBLEM, False), []):
+            old_idxs = [
+                idx
+                for idx in range(len(self.emblems))
+                if self.emblems[idx].name == eff.param.name
+            ]
+            if old_idxs:
+                old_emblem = self.emblems.pop(old_idxs[0])
+                new_emblem = Emblem(
+                    name=eff.param.name, feats=old_emblem.feats + eff.param.feats
+                )
+            else:
+                old_emblem = None
+                new_emblem = eff.param
+            self.emblems.append(new_emblem)
+            add_emblem_outcomes.append(
+                EncounterSingleOutcome[Optional[Emblem]](
+                    old_val=old_emblem, new_val=new_emblem, comments=[]
+                )
+            )
+
+        if effects_split:
+            raise Exception(f"Effects remaining unprocessed: {effects_split}")
+
         if reputation_holder.get_cur_value() < 0:
-            job_val_holder.add(1, "negative reputation")
+            job_val_holder.add(-1, "negative reputation")
 
         job_outcome: Optional[EncounterSingleOutcome[str]] = None
-        if job_val_holder.get_cur_value() > 0:
-            job_msg, new_job = self._job_check(job_val_holder.get_cur_value())
+        if job_val_holder.get_cur_value() != 0:
+            job_msg, new_job, is_promo = self._job_check(job_val_holder.get_cur_value())
             if new_job:
                 old_job = self.job_name
                 self.job_name = new_job
                 self.tableau = []
                 self.job_deck = []
                 self.refill_tableau(board)
+                # blow away earlier rep mods:
+                reputation_holder.set_to(3, "set to 3 for job switch")
+                if is_promo:
+                    self._schedule_promotion(old_job)
+                else:
+                    # also move some (more)
+                    transport_val_holder.add(3)
                 job_outcome = EncounterSingleOutcome[str](
                     old_val=old_job, new_val=new_job, comments=[job_msg]
                 )
-                # also move some (more)
-                transport_val_holder.add(3)
-                # blow away earlier rep mods:
-                reputation_holder.set_to(3, "set to 3 for job switch")
             else:
                 reputation_holder.add(-2, "-2 from job challenge: " + job_msg)
 
@@ -712,6 +745,10 @@ class Character:
         action_cnt = action_holder.get_cur_value()
         self.acted_this_turn = action_cnt <= 0
 
+        free_xp = free_xp_holder.get_cur_value()
+        if free_xp > 0:
+            self._distribute_free_xp(free_xp)
+
         transport_outcome: Optional[EncounterSingleOutcome[str]] = None
         if transport_val_holder.get_cur_value() > 0:
             tp = transport_val_holder.get_cur_value()
@@ -738,6 +775,7 @@ class Character:
             coins=coins_holder.to_outcome(),
             reputation=reputation_holder.to_outcome(),
             xp=dict_outcomes(xp_holder),
+            free_xp=free_xp_holder.to_outcome(),
             health=health_holder.to_outcome(),
             resource_draws=resource_draws_outcome,
             resources=dict_outcomes(resources_holder),
@@ -746,7 +784,74 @@ class Character:
             speed=speed_holder.to_outcome(),
             transport_location=transport_outcome,
             new_job=job_outcome,
+            emblems=add_emblem_outcomes,
         )
+
+    def _schedule_promotion(self, job_name: str) -> None:
+        job = load_job(job_name)
+        deck = load_deck(job.deck_name)
+
+        # first emblem is empty (+xp), then others give reliable feat
+        emblem_effects = [[]]
+        for sk in deck.base_skills:
+            emblem_effects.append(
+                [Feat(hook=HookType.RELIABLE_SKILL, param=sk, value=1)]
+            )
+        emblems = [
+            Emblem(name=f"Veteran {job_name}", feats=ee) for ee in emblem_effects
+        ]
+        choice_list = [
+            [Effect(type=EffectType.ADD_EMBLEM, param=e, value=1)] for e in emblems
+        ]
+        choice_list[0].append(Effect(type=EffectType.MODIFY_XP, param=None, value=10))
+
+        promo_template = TemplateCard(
+            copies=1,
+            name="Job Promotion",
+            desc=f"Select a benefit for being promoted from {job_name}.",
+            unsigned=True,
+            choices=Choices(
+                min_choices=0,
+                max_choices=1,
+                is_random=False,
+                choice_list=choice_list,
+            ),
+        )
+        card = deck.make_card(
+            promo_template,
+            1,
+            EncounterContextType.SYSTEM,
+        )
+        self.queue_encounter(card, context_type=EncounterContextType.SYSTEM)
+        return True
+
+    def _distribute_free_xp(self, xp: int) -> None:
+        all_skills = load_skills()
+
+        assign_template = TemplateCard(
+            copies=1,
+            name="Assign XP",
+            desc=f"Assign {xp} xp",
+            unsigned=True,
+            choices=Choices(
+                min_choices=0,
+                max_choices=1,
+                is_random=False,
+                choice_list=[
+                    [Effect(type=EffectType.MODIFY_XP, param=sk, value=xp)]
+                    for sk in all_skills
+                ],
+            ),
+        )
+
+        custom_deck = load_deck("Custom")
+        card = custom_deck.make_card(
+            assign_template,
+            1,
+            EncounterContextType.SYSTEM,
+        )
+        self.queue_encounter(card, context_type=EncounterContextType.SYSTEM)
+        return True
 
     def finish_turn(self, board: Board) -> None:
         if self._discard_resources():
@@ -794,7 +899,9 @@ class Character:
 
         custom_deck = load_deck("Custom")
         card = custom_deck.make_card(
-            discard_template, 1, EncounterContextType.SYSTEM,
+            discard_template,
+            1,
+            EncounterContextType.SYSTEM,
         )
         self.queue_encounter(card, context_type=EncounterContextType.SYSTEM)
         return True
@@ -863,12 +970,13 @@ class Character:
 
         return self.camp_deck.pop(0)
 
-    def _job_check(self, modifier: int) -> Tuple[str, Optional[str]]:
-        target_number = 4 + modifier
+    def _job_check(self, modifier: int) -> Tuple[str, Optional[str], bool]:
+        target_number = 4 - modifier
         bonus = self.reputation // 4
         roll = random.randint(1, 8) + bonus
         jobs = load_jobs()
         next_job: Optional[str] = None
+        is_promo = False
         if roll < target_number - 4:
             bad_jobs = [j for j in jobs if j.rank == 0]
             next_job = (random.choice(bad_jobs)).name
@@ -886,9 +994,10 @@ class Character:
             promo_jobs = [j for j in jobs if j.name in cur_job.promotions]
             if promo_jobs:
                 next_job = (random.choice(promo_jobs)).name
+                is_promo = True
             else:
                 next_job = None
-        return (f"1d8+{bonus} vs {target_number}: {roll}", next_job)
+        return (f"1d8+{bonus} vs {target_number}: {roll}", next_job, is_promo)
 
 
 class CharacterStorage(ObjectStorageBase[Character]):

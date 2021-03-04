@@ -260,7 +260,7 @@ class Client:
     def _render_emblem(self, emblem: Emblem) -> str:
         ret = emblem.name
         if emblem.feats:
-            ret += f" ({','.join(self._render_feat(f) for f in emblem.feats)})"
+            ret += f" ({', '.join(self._render_feat(f) for f in emblem.feats)})"
         return ret
 
     def _render_feat(self, feat: Feat) -> str:
@@ -271,8 +271,12 @@ class Client:
             HookType.MAX_HEALTH: "health",
             HookType.MAX_LUCK: "luck",
             HookType.MAX_TABLEAU_SIZE: "tableau",
+            HookType.SKILL_RANK: "rank",
+            HookType.RELIABLE_SKILL: "reliability",
         }
-        name = feat.param if feat.param else names.get(feat.hook, feat.hook.name)
+        name = names.get(feat.hook, feat.hook.name)
+        if feat.param:
+            name = feat.param + " " + name
         return f"{feat.value:+} {name}"
 
     def play(self) -> None:
@@ -331,6 +335,7 @@ class Client:
         display.append("")
 
         if ch.remaining_turns:
+
             def dist(route) -> str:
                 ret = f"- {len(route)} away"
                 if len(route) > ch.speed:
@@ -572,10 +577,16 @@ class Client:
         if not flee and ch.encounters[0].choices:
             enc_choices = ch.encounters[0].choices
             can_choose = (not enc_choices.is_random) and (
-                len(enc_choices.choice_list) > 1 or enc_choices.min_choices == 0
+                len(enc_choices.choice_list) - enc_choices.min_choices > 0
             )
             for idx, choice in enumerate(enc_choices.choice_list):
-                pfx = (" " + ascii_lowercase[idx] + ". ") if can_choose else " * "
+                if can_choose:
+                    if len(enc_choices.choice_list) < 15:
+                        pfx = " " + ascii_lowercase[idx] + ". "
+                    else:
+                        pfx = " " + str(idx + 1) + ". "
+                else:
+                    pfx = " * "
                 line = pfx + ", ".join(self._render_effect(eff) for eff in choice)
                 if enc_choices.is_random and (idx + 1) in ch.encounters[0].rolls:
                     line = colors.bold + line + colors.reset
@@ -586,7 +597,10 @@ class Client:
                 while True:
                     mi = enc_choices.min_choices - len(choices)
                     mx = enc_choices.max_choices - len(choices)
-                    inline = f"Make your choice ({mi} - {mx} items): "
+                    inline = "Make your choice"
+                    if mi != 1 or mx != 1:
+                        inline += f" ({mi} - {mx} items)"
+                    inline += ": "
                     print(inline, end="")
                     line = input().lower().strip()
                     if not line:
@@ -597,7 +611,11 @@ class Client:
                         else:
                             print("You must make another selection.")
                             continue
-                    c_idx = ascii_lowercase.index(line[0])
+                    init_num_m = re.match(r"^([0-9]+)", line)
+                    if init_num_m:
+                        c_idx = int(init_num_m.group(1)) - 1
+                    else:
+                        c_idx = ascii_lowercase.index(line[0])
                     if c_idx >= len(enc_choices.choice_list):
                         print("Not a valid choice?")
                         continue
@@ -611,7 +629,7 @@ class Client:
                         break
             else:
                 if enc_choices.is_random:
-                    choices.extend(r - 1 for r in ch.encounters[0].rolls)
+                    choices |= {r - 1 for r in ch.encounters[0].rolls}
                 elif len(enc_choices.choice_list) == 1:
                     choices.add(0)
 
@@ -667,6 +685,7 @@ class Client:
         render_single_int("Your reputation has", resp.outcome.reputation)
         for sk, val in resp.outcome.xp.items():
             render_single_int(f"Your {sk} xp has", val)
+        render_single_int("Your unassigned xp has", resp.outcome.free_xp)
         if resp.outcome.resource_draws is not None:
             rd = resp.outcome.resource_draws
             print(
@@ -677,6 +696,13 @@ class Client:
         render_single_int("Your quest points have", resp.outcome.quest)
         render_single_int("Your remaining turns have", resp.outcome.turns)
         render_single_int("Your speed has", resp.outcome.speed)
+        for emblem in resp.outcome.emblems:
+            if emblem.old_val:
+                print(
+                    f"* Your emblem was updated to {self._render_emblem(emblem.new_val)}."
+                )
+            else:
+                print(f"* You gained the emblem {self._render_emblem(emblem.new_val)}.")
         if resp.outcome.transport_location is not None:
             tl = resp.outcome.transport_location
             print(f"* You are now in hex {tl.new_val} ({', '.join(tl.comments)}).")
@@ -719,7 +745,7 @@ class Client:
         if eff.type == EffectType.MODIFY_COINS:
             return _with_s("coin")
         elif eff.type == EffectType.MODIFY_XP:
-            return f"{eff.value:+} {eff.param} xp"
+            return f"{eff.value:+} {eff.param or 'unassigned'} xp"
         elif eff.type == EffectType.MODIFY_REPUTATION:
             return f"{eff.value:+} reputation"
         elif eff.type == EffectType.MODIFY_HEALTH:
@@ -742,6 +768,8 @@ class Client:
             return f"rank-{eff.value:+} random transport"
         elif eff.type == EffectType.MODIFY_ACTION:
             return "use action" if eff.value <= 0 else "refresh action"
+        elif eff.type == EffectType.ADD_EMBLEM:
+            return "add an emblem: " + self._render_emblem(eff.param)
         else:
             return eff
 

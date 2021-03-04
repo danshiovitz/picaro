@@ -4,7 +4,7 @@ import sys
 sys.path.append(str(pathlib.Path(__file__).absolute().parent.parent))
 
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 from unittest import TestCase, main
 
 from serializer import serialize, deserialize
@@ -24,7 +24,27 @@ class Complex:
     most: Dict[str, Foo]
 
 
+@dataclass(frozen=True)
+class Variant:
+    type: str
+    val: Optional[Any]
+
+    @classmethod
+    def type_field(cls) -> str:
+        return "type"
+
+    @classmethod
+    def any_type(cls, type_val: str) -> type:
+        if type_val == "a":
+            return Foo
+        else:
+            return str
+
+
 class SerializeTest(TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
     def test_roundtrip_simple(self):
         f = Foo(a="fish", b=3, c="bagels")
         txt = serialize(f)
@@ -36,7 +56,7 @@ class SerializeTest(TestCase):
         f1 = Foo(a="fish", b=3, c="bagels")
         f2 = Foo(a="cat", b=7, c="sandwiches")
         f3 = Foo(a="dog", b=5, c="hot dogs")
-        c = Complex(some=f1, more=[f2, f3], most={f1.a: f1, f3.a: f3})
+        c = Complex(some=f1, more=(f2, f3), most={f1.a: f1, f3.a: f3})
         txt = serialize(c)
         g = deserialize(txt, Complex)
         self.assertEqual(c, g)
@@ -44,6 +64,16 @@ class SerializeTest(TestCase):
             txt,
             '{"some": {"a": "fish", "b": 3, "c": "bagels"}, "more": [{"a": "cat", "b": 7, "c": "sandwiches"}, {"a": "dog", "b": 5, "c": "hot dogs"}], "most": {"fish": {"a": "fish", "b": 3, "c": "bagels"}, "dog": {"a": "dog", "b": 5, "c": "hot dogs"}}}',
         )
+
+    def test_roundtrip_variant(self):
+        v = Variant(type="b", val="hello")
+        self.assertEqual(v, deserialize(serialize(v), Variant))
+        v = Variant(type="b", val=None)
+        self.assertEqual(v, deserialize(serialize(v), Variant))
+        v = Variant(type="a", val=Foo(a="cat", b=4, c="dogs"))
+        self.assertEqual(v, deserialize(serialize(v), Variant))
+        v = Variant(type="a", val=None)
+        self.assertEqual(v, deserialize(serialize(v), Variant))
 
 
 if __name__ == "__main__":

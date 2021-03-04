@@ -21,6 +21,12 @@ def recursive_to_dict(val: T, cls: Type[T] = type(None)) -> Any:
     if cls == type(None):
         cls = type(val)
     cls_base = getattr(cls, "__origin__", cls)
+    if cls_base == Union:  # ie, it was an optional
+        if val is None:
+            return None
+        # pull out the first type which is assumed to be the non-none type
+        cls = cls.__args__[0]
+        cls_base = getattr(cls, "__origin__", cls)
 
     if is_dataclass(cls_base):
         ret = {}
@@ -28,7 +34,9 @@ def recursive_to_dict(val: T, cls: Type[T] = type(None)) -> Any:
             subv = getattr(val, field.name)
             ut = field.type
             bt = getattr(ut, "__origin__", ut)
-            if bt == Union:  # ie, it was an optional
+            # we do this optional check even though we also do it at the top of func
+            # because it makes stuff a little easier with the Any check later
+            if bt == Union:
                 if subv is None:
                     ret[field.name] = None
                     continue
@@ -38,6 +46,9 @@ def recursive_to_dict(val: T, cls: Type[T] = type(None)) -> Any:
             # hack, assumes this dataclass is templated on a single variable only
             if isinstance(ut, TypeVar):
                 ut = cls.__args__[0]
+            if ut is Any:
+                indicator = cls_base.type_field()
+                ut = cls_base.any_type(getattr(val, indicator))
             ret[field.name] = recursive_to_dict(subv, ut)
         return ret
     elif issubclass(cls_base, tuple):
@@ -60,6 +71,12 @@ def recursive_to_dict(val: T, cls: Type[T] = type(None)) -> Any:
 
 def recursive_from_dict(val: Any, cls: Type[T], frozen: Optional[bool] = None) -> T:
     cls_base = getattr(cls, "__origin__", cls)
+    if cls_base == Union:  # ie, it was an optional
+        if val is None:
+            return None
+        # pull out the first type which is assumed to be the non-none type
+        cls = cls.__args__[0]
+        cls_base = getattr(cls, "__origin__", cls)
 
     def logged_load(val: str) -> Any:
         try:
@@ -75,7 +92,9 @@ def recursive_from_dict(val: Any, cls: Type[T], frozen: Optional[bool] = None) -
         for field in dataclass_fields(cls_base):
             ut = field.type
             bt = getattr(ut, "__origin__", ut)
-            if bt == Union:  # ie, it was an optional
+            # we do this optional check even though we also do it at the top of func
+            # because it makes stuff a little easier with the Any check later
+            if bt == Union:
                 if field.name not in val or val[field.name] is None:
                     dt[field.name] = None
                     continue
@@ -85,6 +104,9 @@ def recursive_from_dict(val: Any, cls: Type[T], frozen: Optional[bool] = None) -
             # hack, assumes this dataclass is templated on a single variable only
             if isinstance(ut, TypeVar):
                 ut = cls.__args__[0]
+            if ut is Any:
+                indicator = cls_base.type_field()
+                ut = cls_base.any_type(val[indicator])
             if field.name not in val and not isinstance(field.default, _MISSING_TYPE):
                 dt[field.name] = field.default
             else:

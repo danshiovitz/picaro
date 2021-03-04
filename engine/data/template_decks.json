@@ -342,11 +342,10 @@
         "choices": {
           "min_choices": 1,
           "max_choices": 1,
-          "is_random": "False",
+          "is_random": false,
           "choice_list": [
-            [
-              {"type": "MODIFY_HEALTH", "value": 10, "param": null}
-            ]
+            [ {"type": "MODIFY_HEALTH", "value": 10, "param": null} ],
+            [ {"type": "DISRUPT_JOB", "value": 20, "param": null} ]
           ]
         }
       }
