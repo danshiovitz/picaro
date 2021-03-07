@@ -74,34 +74,34 @@ class Server:
     def do_job(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(JobRequest)
-        self._engine.do_job(player_id, game_id, character_name, req.card_id)
-        return JobResponse()
+        outcome = self._engine.do_job(player_id, game_id, character_name, req.card_id)
+        return JobResponse(outcome=outcome)
 
     @wrap_errors()
     def token_action(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(TokenActionRequest)
-        self._engine.token_action(
+        outcome = self._engine.token_action(
             player_id, game_id, character_name, req.token, req.action
         )
-        return TokenActionResponse()
+        return TokenActionResponse(outcome=outcome)
 
     @wrap_errors()
     def travel(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(TravelRequest)
-        self._engine.travel(player_id, game_id, character_name, req.step)
-        return TravelResponse()
+        outcome = self._engine.travel(player_id, game_id, character_name, req.step)
+        return TravelResponse(outcome=outcome)
 
     @wrap_errors()
     def camp(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(CampRequest)
-        self._engine.camp(player_id, game_id, character_name)
+        outcome = self._engine.camp(player_id, game_id, character_name)
         if not req.rest:
             raise BadStateException("Rest is false!")
         else:
-            return CampResponse()
+            return CampResponse(outcome=outcome)
 
     @wrap_errors()
     def resolve_encounter(self, game_id: int, character_name: str) -> Any:
@@ -116,8 +116,8 @@ class Server:
     def end_turn(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(EndTurnRequest)
-        self._engine.end_turn(player_id, game_id, character_name)
-        return EndTurnResponse()
+        outcome = self._engine.end_turn(player_id, game_id, character_name)
+        return EndTurnResponse(outcome=outcome)
 
     def run(self) -> None:
         bottle.route(

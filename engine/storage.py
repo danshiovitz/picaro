@@ -91,7 +91,6 @@ T = TypeVar("T")
 
 class StorageBase(ABC, Generic[T]):
     TABLE_NAME = "unset"
-    TYPE: Type[T]
     PARENT_STORE: Optional[Type["StorageBase[Any]"]] = None
     SUBTABLES: Dict[str, Type["StorageBase[Any]"]] = {}
 
@@ -135,7 +134,8 @@ class StorageBase(ABC, Generic[T]):
         if not json_path.exists():
             return
         with open(json_path) as f:
-            vals: List[T] = deserialize(f.read(), List[cls.TYPE])  # type: ignore
+            val_type = cls._get_val_type()
+            vals: List[T] = deserialize(f.read(), List[val_type])  # type: ignore
         if vals:
             cls._insert_helper(vals)
 
@@ -304,10 +304,14 @@ class StorageBase(ABC, Generic[T]):
                 sql += " AND ".join(f"{n} = :{n}" for n in pk_names)
                 current_session.get().connection.execute(sql, row)
 
+    @classmethod
+    def _get_val_type(cls) -> Type[T]:
+        # assume cls inherits only from the storage base (which is to say us) or
+        # object storage base, which is also specialized on T
+        return cls.__orig_bases__[0].__args__[0]
+
 
 class ValueStorageBase(StorageBase[str]):
-    TYPE = str
-
     @classmethod
     def _table_schema(cls) -> List[Tuple[str, str, bool]]:
         return [("value", "text not null", True)]
@@ -322,13 +326,13 @@ class ValueStorageBase(StorageBase[str]):
 
 
 class ObjectStorageBase(StorageBase[T]):
-    TYPE: Type[T]
     PRIMARY_KEYS: Set[str]
 
     @classmethod
     def _table_schema(cls) -> List[Tuple[str, str, bool]]:
         cols = []
-        for field_info in dataclass_fields(cls.TYPE):
+        val_type = cls._get_val_type()
+        for field_info in dataclass_fields(val_type):
             fname = field_info.name
             ftype = field_info.type
             if fname in cls.SUBTABLES:
@@ -352,12 +356,14 @@ class ObjectStorageBase(StorageBase[T]):
 
     @classmethod
     def _construct_val(cls, row: Dict[str, Any]) -> T:
-        return recursive_from_dict(row, cls.TYPE)
+        val_type = cls._get_val_type()
+        return recursive_from_dict(row, val_type)
 
     @classmethod
     def _project_val(cls, val: T) -> Dict[str, Any]:
         ret = {}
-        for field_info in dataclass_fields(cls.TYPE):
+        val_type = cls._get_val_type()
+        for field_info in dataclass_fields(val_type):
             fname = field_info.name
             ftype = field_info.type
             fval = getattr(val, fname)

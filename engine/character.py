@@ -17,7 +17,7 @@ from typing import (
     TypeVar,
 )
 
-from .board import ActiveBoard as Board
+from .board import load_board
 from .deck import load_deck
 from .encounter import UpdateHolder
 from .exceptions import BadStateException, IllegalMoveException
@@ -38,12 +38,12 @@ from .types import (
     EncounterActions,
     EncounterContextType,
     EncounterEffect,
-    EncounterOutcome,
-    EncounterSingleOutcome,
+    Event,
     Feat,
     FullCard,
     HookType,
     JobType,
+    Outcome,
     TableauCard,
     TemplateCard,
 )
@@ -51,15 +51,19 @@ from .types import (
 
 class Party:
     def create_character(
-        self, name: str, player_id: int, job_name: str, board: Board, location: str
+        self, name: str, player_id: int, job_name: str, location: str
     ) -> None:
         ch = Character.create(name, player_id, job_name)
-        board.add_token(name=name, type="Character", location=location)
-        return CharacterStorage.create(ch)
+        board = load_board()
+        board.add_token(
+            name=name, type="Character", location=location, actions=None, events=[]
+        )
+        CharacterStorage.create(ch)
 
-    def get_character(self, name: str, board: Board) -> snapshot_Character:
+    def get_character(self, name: str) -> snapshot_Character:
         ch = CharacterStorage.load_by_name(name)
         all_skills = load_skills()
+        board = load_board()
         location = board.get_token_location(ch.name)
         routes = board.best_routes(location, [c.location for c in ch.tableau])
         return snapshot_Character(
@@ -112,23 +116,24 @@ class Party:
             rolls=encounter.rolls,
         )
 
-    def start_season(self, board: Board) -> None:
+    def start_season(self) -> None:
         for ch in CharacterStorage.load():
-            ch.start_season(board)
+            ch.start_season()
             CharacterStorage.update(ch)
 
-    def finish_season(self, board: Board) -> None:
+    def finish_season(self) -> None:
         raise Exception("Not implemented yet")
 
-    def do_job(self, name: str, card_id: str, board: Board) -> None:
+    def do_job(self, name: str, card_id: str) -> Outcome:
+        events: List[Event] = []
         ch = CharacterStorage.load_by_name(name)
         if ch.encounters:
             raise BadStateException("An encounter is currently active.")
         if ch.acted_this_turn:
             raise BadStateException("You have already acted this turn.")
         ch.acted_this_turn = True
-        ch.speed = 0
         card = ch.remove_tableau_card(card_id)
+        board = load_board()
         location = board.get_token_location(ch.name)
         if card.location != location:
             raise IllegalMoveException(
@@ -136,13 +141,14 @@ class Party:
             )
         ch.queue_encounter(card.card, context_type=EncounterContextType.JOB)
         CharacterStorage.update(ch)
+        return Outcome(events=events)
 
-    def token_action(
-        self, name: str, token_name: str, action_name: str, board: Board
-    ) -> None:
+    def token_action(self, name: str, token_name: str, action_name: str) -> None:
+        events: List[Event] = []
         ch = CharacterStorage.load_by_name(name)
         if ch.encounters:
             raise BadStateException("An encounter is currently active.")
+        board = load_board()
         location = board.get_token_location(ch.name)
         token = board.get_token(token_name)
         actions = [a for a in token.actions if a.name == action_name]
@@ -171,25 +177,35 @@ class Party:
 
         ch.queue_encounter(card, context_type=EncounterContextType.ACTION)
         CharacterStorage.update(ch)
+        return Outcome(events=events)
 
-    def travel(self, name: str, step: str, board: Board) -> None:
+    def travel(self, name: str, step: str) -> None:
+        events: List[Event] = []
         ch = CharacterStorage.load_by_name(name)
         if ch.encounters:
             raise BadStateException("An encounter is currently active.")
         if ch.speed <= 0:
             raise IllegalMoveException(f"You have no remaining speed.")
+        if ch.acted_this_turn:
+            raise IllegalMoveException(f"You can't move in a turn after having acted.")
 
-        board.move_token(ch.name, step, adjacent=True)
+        board = load_board()
+        # moving and decreasing speed are normal effects, so we don't report them
+        # in events (this might be wrong, especially if we eventually want events
+        # to be a true undo log, but it makes the client easier for now)
+        board.move_token(ch.name, step, adjacent=True, comments=["Travel"], events=[])
         ch.speed -= 1
 
         if not ch.had_travel_encounter:
-            card = ch.draw_travel_card(board.get_token_location(ch.name), board)
+            card = ch.draw_travel_card(board.get_token_location(ch.name))
             if card:
                 ch.queue_encounter(card, context_type=EncounterContextType.TRAVEL)
                 ch.had_travel_encounter = True
         CharacterStorage.update(ch)
+        return Outcome(events=events)
 
-    def camp(self, name: str, board: Board) -> None:
+    def camp(self, name: str) -> None:
+        events: List[Event] = []
         ch = CharacterStorage.load_by_name(name)
         if ch.encounters:
             raise BadStateException("An encounter is currently active.")
@@ -197,32 +213,39 @@ class Party:
             raise BadStateException("You have already acted this turn.")
         ch.acted_this_turn = True
         ch.speed = 0
-        card = ch.draw_camp_card(board)
+        card = ch.draw_camp_card()
         ch.queue_encounter(card, context_type=EncounterContextType.CAMP)
         CharacterStorage.update(ch)
+        return Outcome(events=events)
 
-    def resolve_encounter(
-        self, name: str, actions: EncounterActions, board: Board
-    ) -> EncounterOutcome:
+    def resolve_encounter(self, name: str, actions: EncounterActions) -> Outcome:
+        events: List[Event] = []
         ch = CharacterStorage.load_by_name(name)
 
         encounter = ch.pop_encounter()
         effects = ch.calc_effects(encounter, actions)
-        outcome = ch.apply_effects(effects, encounter.context_type, board)
+        ch.apply_effects(effects, encounter.context_type, events)
         if ch.acted_this_turn and not ch.encounters:
-            ch.finish_turn(board)
+            ch.finish_turn(events)
 
         CharacterStorage.update(ch)
-        return outcome
+        return Outcome(events=events)
 
-    def end_turn(self, name: str, board: Board) -> None:
+    def end_turn(self, name: str) -> Outcome:
+        events: List[Event] = []
         ch = CharacterStorage.load_by_name(name)
         if ch.encounters:
             raise BadStateException("An encounter is currently active.")
         if ch.acted_this_turn:
             raise BadStateException("You have already acted this turn.")
-        ch.finish_turn(board)
+        ch.finish_turn(events)
         CharacterStorage.update(ch)
+        return Outcome(events=events)
+
+
+# no state so don't need to hit db
+def load_party() -> Party:
+    return Party()
 
 
 class TravelCardType(Enum):
@@ -271,6 +294,7 @@ class Character:
     travel_deck: List[TravelCard]
     camp_deck: List[FullCard]
     acted_this_turn: bool
+    bad_reputation_checked: bool
     speed: int
     had_travel_encounter: bool
 
@@ -297,6 +321,7 @@ class Character:
             acted_this_turn=False,
             speed=0,
             had_travel_encounter=False,
+            bad_reputation_checked=False,
         )
         ch.health = ch.get_max_health()
         ch.speed = ch.get_init_speed()
@@ -365,31 +390,34 @@ class Character:
             raise Exception(f"Unknown job type: {job.type}")
         return clamp(base_speed + self._calc_hook(HookType.INIT_SPEED), min=0)
 
-    def _calc_hook(self, hook_name: HookType, hook_param: Optional[str] = None) -> int:
+    def _calc_hook(
+        self, hook_name: HookType, hook_subtype: Optional[str] = None
+    ) -> int:
         tot = 0
         for emblem in self.emblems:
             for feat in emblem.feats:
                 if feat.hook == hook_name:
-                    param_match = (
-                        hook_param is None
-                        or feat.param is None
-                        or hook_param == feat.param
+                    subtype_match = (
+                        hook_subtype is None
+                        or feat.subtype is None
+                        or hook_subtype == feat.subtype
                     )
-                    if param_match:
+                    if subtype_match:
                         tot += feat.value
         return tot
 
-    def start_season(self, board: Board) -> None:
+    def start_season(self) -> None:
         # leave the encounters queue alone, since there
         # might be stuff from the rumors phase
         self.tableau = []
         self.remaining_turns = self.get_init_turns()
         self.acted_this_turn = False
         self.had_travel_encounter = False
+        self.bad_reputation_checked = False
         self.luck = self.get_max_luck()
-        self.refill_tableau(board)
+        self.refill_tableau()
 
-    def refill_tableau(self, board: Board) -> None:
+    def refill_tableau(self) -> None:
         job = load_job(self.job_name)
         while len(self.tableau) < self.get_max_tableau_size():
             if not self.job_deck:
@@ -397,6 +425,7 @@ class Character:
                 self.job_deck = job.make_deck(additional=additional)
             card = self.job_deck.pop(0)
             dst = random.choice(job.encounter_distances)
+            board = load_board()
             location = random.choice(board.find_hexes_near_token(self.name, dst, dst))
 
             self.tableau.append(
@@ -488,7 +517,7 @@ class Character:
                     ret.append(
                         Effect(
                             type=EffectType.MODIFY_XP,
-                            param=encounter.card.checks[0].skill,
+                            subtype=encounter.card.checks[0].skill,
                             value=cnt * 5,
                         )
                     )
@@ -514,7 +543,7 @@ class Character:
                 ret.append(
                     Effect(
                         type=EffectType.MODIFY_XP,
-                        param=encounter.card.checks[0].skill,
+                        subtype=encounter.card.checks[0].skill,
                         value=failures,
                     )
                 )
@@ -580,8 +609,8 @@ class Character:
         self,
         effects: List[Effect],
         context_type: EncounterContextType,
-        board: Board,
-    ) -> EncounterOutcome:
+        events: List[Event],
+    ) -> None:
         # want something like: first process gain coins, if any, then process lose coins, if any,
         # then gain resources, then lose resources, ... , then job change, then pick the actual
         # transport location if any
@@ -589,13 +618,21 @@ class Character:
         # reputation set via job change (note that any 'set' overwrites previous comments, as well)
         effects_split = defaultdict(list)
         for effect in effects:
-            effects_split[(effect.type, effect.param is None)].append(effect)
+            effects_split[(effect.type, effect.subtype is None)].append(effect)
 
         def simple(
             name: str, effect_type: EffectType, max_val: Optional[int] = None
         ) -> UpdateHolder:
             get_f = lambda: getattr(self, name)
-            set_f = lambda val: setattr(self, name, val)
+
+            def set_f(old_val, new_val, comments) -> None:
+                setattr(self, name, new_val)
+                events.append(
+                    Event.for_character(
+                        self.name, effect_type, None, old_val, new_val, comments
+                    )
+                )
+
             holder = UpdateHolder(
                 name,
                 effect_type,
@@ -613,33 +650,48 @@ class Character:
             char_self = self
 
             class HolderDict(dict):
-                def __missing__(self, param):
-                    get_f = lambda: getattr(char_self, name).get(param, 0)
-                    set_f = lambda val: getattr(char_self, name).update({param: val})
+                def __missing__(self, subtype):
+                    get_f = lambda: getattr(char_self, name).get(subtype, 0)
+
+                    def set_f(old_val, new_val, comments) -> None:
+                        getattr(char_self, name)[subtype] = new_val
+                        events.append(
+                            Event.for_character(
+                                char_self.name,
+                                effect_type,
+                                subtype,
+                                old_val,
+                                new_val,
+                                comments,
+                            )
+                        )
+
                     holder = UpdateHolder(
                         name,
                         effect_type,
-                        param,
+                        subtype,
                         context_type,
                         0,
                         None,
                         get_f=get_f,
                         set_f=set_f,
                     )
-                    self[param] = holder
+                    self[subtype] = holder
                     return holder
 
-            params = {e.param for e in effects if e.type == effect_type and e.param}
+            subtypes = {
+                e.subtype for e in effects if e.type == effect_type and e.subtype
+            }
             ret = HolderDict()
-            for param in params:
-                ret[param].apply_effects(effects_split.pop((effect_type, False), []))
+            for subtype in subtypes:
+                ret[subtype].apply_effects(effects_split.pop((effect_type, False), []))
             return ret
 
         def const_val(
             name: str, effect_type: EffectType, init_val: int
         ) -> UpdateHolder:
             get_f = lambda: init_val
-            set_f = lambda _val: None
+            set_f = lambda _old_val, _new_val, _comments: None
             holder = UpdateHolder(
                 name, effect_type, None, context_type, 0, None, get_f=get_f, set_f=set_f
             )
@@ -663,38 +715,29 @@ class Character:
         speed_holder = simple("speed", EffectType.MODIFY_SPEED)
         xp_holder = dict_holder("skill_xp", EffectType.MODIFY_XP)
         free_xp_holder = const_val("free_xp", EffectType.MODIFY_XP, 0)
-        transport_val_holder = const_val("transport", EffectType.TRANSPORT, 0)
         job_val_holder = const_val("job", EffectType.DISRUPT_JOB, 0)
 
-        add_emblem_outcomes: List[EncounterSingleOutcome[Optional[Emblem]]] = []
         for eff in effects_split.pop((EffectType.ADD_EMBLEM, False), []):
             old_idxs = [
                 idx
                 for idx in range(len(self.emblems))
-                if self.emblems[idx].name == eff.param.name
+                if self.emblems[idx].name == eff.value.name
             ]
             if old_idxs:
                 old_emblem = self.emblems.pop(old_idxs[0])
                 new_emblem = Emblem(
-                    name=eff.param.name, feats=old_emblem.feats + eff.param.feats
+                    name=eff.value.name, feats=old_emblem.feats + eff.value.feats
                 )
             else:
                 old_emblem = None
-                new_emblem = eff.param
+                new_emblem = eff.value
             self.emblems.append(new_emblem)
-            add_emblem_outcomes.append(
-                EncounterSingleOutcome[Optional[Emblem]](
-                    old_val=old_emblem, new_val=new_emblem, comments=[]
+            events.append(
+                Event.for_character(
+                    self.name, EffectType.ADD_EMBLEM, None, old_emblem, new_emblem, []
                 )
             )
 
-        if effects_split:
-            raise Exception(f"Effects remaining unprocessed: {effects_split}")
-
-        if reputation_holder.get_cur_value() < 0:
-            job_val_holder.add(-1, "negative reputation")
-
-        job_outcome: Optional[EncounterSingleOutcome[str]] = None
         if job_val_holder.get_cur_value() != 0:
             job_msg, new_job, is_promo = self._job_check(job_val_holder.get_cur_value())
             if new_job:
@@ -702,21 +745,32 @@ class Character:
                 self.job_name = new_job
                 self.tableau = []
                 self.job_deck = []
-                self.refill_tableau(board)
+                self.refill_tableau()
                 # blow away earlier rep mods:
                 reputation_holder.set_to(3, "set to 3 for job switch")
                 if is_promo:
                     self._schedule_promotion(old_job)
                 else:
                     # also move some (more)
-                    transport_val_holder.add(3)
-                job_outcome = EncounterSingleOutcome[str](
-                    old_val=old_job, new_val=new_job, comments=[job_msg]
+                    move_eff = Effect(
+                        type=EffectType.TRANSPORT, value=3, subtype=None, is_cost=False
+                    )
+                    effects_split[(move_eff.type, move_eff.subtype is None)].append(move_eff)
+                events.append(
+                    Event.for_character(
+                        self.name,
+                        EffectType.MODIFY_JOB,
+                        None,
+                        old_job,
+                        new_job,
+                        [job_msg],
+                    )
                 )
             else:
                 reputation_holder.add(-2, "-2 from job challenge: " + job_msg)
 
-        resource_draws_outcome: Optional[EncounterSingleOutcome[int]] = None
+        board = load_board()
+
         draw_cnt = resource_draw_holder.get_cur_value()
         if draw_cnt < 0:
             cur_rs = [nm for rs, cnt in self.resources.items() for nm in [rs] * cnt]
@@ -738,8 +792,10 @@ class Character:
                 if draw.value != 0:
                     resources_holder[draw.type].add(draw.value)
                 comments.append(draw.name)
-            resource_draws_outcome = EncounterSingleOutcome[int](
-                old_val=0, new_val=draw_cnt, comments=comments
+            events.append(
+                Event.for_character(
+                    self.name, EffectType.MODIFY_RESOURCES, None, 0, draw_cnt, comments
+                )
             )
 
         action_cnt = action_holder.get_cur_value()
@@ -749,43 +805,42 @@ class Character:
         if free_xp > 0:
             self._distribute_free_xp(free_xp)
 
-        transport_outcome: Optional[EncounterSingleOutcome[str]] = None
-        if transport_val_holder.get_cur_value() > 0:
-            tp = transport_val_holder.get_cur_value()
+        for eff in effects_split.pop((EffectType.TRANSPORT, True), []):
+            tp_mod = eff.value // 5 + 1
+            tp_min = clamp(eff.value - tp_mod, min=1)
+            tp_max = eff.value + tp_mod
             old_location = board.get_token_location(self.name)
             new_location = random.choice(
-                board.find_hexes_near_token(self.name, tp - 2, tp + 2)
+                board.find_hexes_near_token(self.name, tp_min, tp_max)
             )
-            board.move_token(self.name, new_location)
-            transport_outcome = EncounterSingleOutcome[str](
-                old_val=old_location,
-                new_val=new_location,
-                comments=transport_val_holder._comments,
+            board.move_token(
+                self.name,
+                new_location,
+                adjacent=False,
+                comments=[f"random {tp_min}-{tp_max} hex transport"],
+                events=events,
             )
 
-        def dict_outcomes(dholder):
-            return {
-                k: v
-                for k, v in [(ik, iv.to_outcome()) for ik, iv in dholder.items()]
-                if v is not None
-            }
+        for eff in effects_split.pop((EffectType.MODIFY_LOCATION, False), []):
+            board.move_token(
+                self.name, eff.value, adjacent=False, comments=[], events=events
+            )
 
-        return EncounterOutcome(
-            action_flag=action_holder.to_outcome(),
-            coins=coins_holder.to_outcome(),
-            reputation=reputation_holder.to_outcome(),
-            xp=dict_outcomes(xp_holder),
-            free_xp=free_xp_holder.to_outcome(),
-            health=health_holder.to_outcome(),
-            resource_draws=resource_draws_outcome,
-            resources=dict_outcomes(resources_holder),
-            quest=quest_holder.to_outcome(),
-            turns=turn_holder.to_outcome(),
-            speed=speed_holder.to_outcome(),
-            transport_location=transport_outcome,
-            new_job=job_outcome,
-            emblems=add_emblem_outcomes,
-        )
+        if effects_split:
+            raise Exception(f"Effects remaining unprocessed: {effects_split}")
+
+        action_holder.write(events)
+        coins_holder.write(events)
+        reputation_holder.write(events)
+        for v in xp_holder.values():
+            v.write(events)
+        free_xp_holder.write(events)
+        health_holder.write(events)
+        for v in resources_holder.values():
+            v.write(events)
+        quest_holder.write(events)
+        turn_holder.write(events)
+        speed_holder.write(events)
 
     def _schedule_promotion(self, job_name: str) -> None:
         job = load_job(job_name)
@@ -795,15 +850,13 @@ class Character:
         emblem_effects = [[]]
         for sk in deck.base_skills:
             emblem_effects.append(
-                [Feat(hook=HookType.RELIABLE_SKILL, param=sk, value=1)]
+                [Feat(hook=HookType.RELIABLE_SKILL, subtype=sk, value=1)]
             )
         emblems = [
             Emblem(name=f"Veteran {job_name}", feats=ee) for ee in emblem_effects
         ]
-        choice_list = [
-            [Effect(type=EffectType.ADD_EMBLEM, param=e, value=1)] for e in emblems
-        ]
-        choice_list[0].append(Effect(type=EffectType.MODIFY_XP, param=None, value=10))
+        choice_list = [[Effect(type=EffectType.ADD_EMBLEM, value=e)] for e in emblems]
+        choice_list[0].append(Effect(type=EffectType.MODIFY_XP, subtype=None, value=10))
 
         promo_template = TemplateCard(
             copies=1,
@@ -838,7 +891,7 @@ class Character:
                 max_choices=1,
                 is_random=False,
                 choice_list=[
-                    [Effect(type=EffectType.MODIFY_XP, param=sk, value=xp)]
+                    [Effect(type=EffectType.MODIFY_XP, subtype=sk, value=xp)]
                     for sk in all_skills
                 ],
             ),
@@ -853,16 +906,24 @@ class Character:
         self.queue_encounter(card, context_type=EncounterContextType.SYSTEM)
         return True
 
-    def finish_turn(self, board: Board) -> None:
-        if self._discard_resources():
+    def finish_turn(self, events: List[Event]) -> None:
+        self._bad_reputation_check()
+        if self.encounters:
             return
 
+        self._discard_resources()
+        if self.encounters:
+            return
+
+        # these are all expected, so not reporting them in events yet
         self.remaining_turns -= 1
         self.acted_this_turn = False
         self.speed = self.get_init_speed()
         self.had_travel_encounter = False
+        self.bad_reputation_checked = False
 
         # filter to encounters near the PC (since they may have been transported, or just moved)
+        board = load_board()
         near: Set[str] = {hx for hx in board.find_hexes_near_token(self.name, 0, 5)}
 
         def _is_valid(card: TableauCard) -> bool:
@@ -871,15 +932,47 @@ class Character:
         self.tableau = [
             dataclasses.replace(c, age=c.age - 1) for c in self.tableau if _is_valid(c)
         ]
-        self.refill_tableau(board)
+        self.refill_tableau()
 
-    def _discard_resources(self) -> bool:
+    def _bad_reputation_check(self) -> None:
+        if self.reputation > 0:
+            return
+
+        if self.bad_reputation_checked:
+            return
+
+        self.bad_reputation_checked = True
+
+        job_template = TemplateCard(
+            copies=1,
+            name="Bad Reputation",
+            desc=f"Automatic job check at zero reputation.",
+            unsigned=True,
+            choices=Choices(
+                min_choices=1,
+                max_choices=1,
+                is_random=False,
+                choice_list=[
+                    [Effect(type=EffectType.DISRUPT_JOB, subtype=None, value=-1)]
+                ],
+            ),
+        )
+
+        custom_deck = load_deck("Custom")
+        card = custom_deck.make_card(
+            job_template,
+            1,
+            EncounterContextType.SYSTEM,
+        )
+        self.queue_encounter(card, context_type=EncounterContextType.SYSTEM)
+
+    def _discard_resources(self) -> None:
         # discard down to correct number of resources
         # (in the future should let player pick which to discard)
         all_rs = [nm for rs, cnt in self.resources.items() for nm in [rs] * cnt]
         overage = len(all_rs) - self.get_max_resources()
         if overage <= 0:
-            return False
+            return
 
         discard_template = TemplateCard(
             copies=1,
@@ -891,7 +984,7 @@ class Character:
                 max_choices=overage,
                 is_random=False,
                 choice_list=[
-                    [Effect(type=EffectType.MODIFY_RESOURCES, param=rs, value=-1)]
+                    [Effect(type=EffectType.MODIFY_RESOURCES, subtype=rs, value=-1)]
                     for rs in all_rs
                 ],
             ),
@@ -904,9 +997,8 @@ class Character:
             EncounterContextType.SYSTEM,
         )
         self.queue_encounter(card, context_type=EncounterContextType.SYSTEM)
-        return True
 
-    def draw_travel_card(self, location: str, board: Board) -> Optional[FullCard]:
+    def draw_travel_card(self, location: str) -> Optional[FullCard]:
         if not self.travel_deck:
             self.travel_deck = self._make_travel_deck()
 
@@ -914,6 +1006,7 @@ class Character:
         if card.type == TravelCardType.NOTHING:
             return None
         elif card.type == TravelCardType.DANGER:
+            board = load_board()
             hx = board.get_hex(location)
             if hx.danger >= card.value:
                 return board.draw_hex_card(location, EncounterContextType.TRAVEL)
@@ -959,7 +1052,7 @@ class Character:
             cards.pop()
         return cards
 
-    def draw_camp_card(self, board: Board) -> FullCard:
+    def draw_camp_card(self) -> FullCard:
         if not self.camp_deck:
             template_deck = load_deck("Camp")
             additional: List[TemplateCard] = []
@@ -1002,7 +1095,6 @@ class Character:
 
 class CharacterStorage(ObjectStorageBase[Character]):
     TABLE_NAME = "character"
-    TYPE = Character
     PRIMARY_KEYS = {"name"}
 
     @classmethod

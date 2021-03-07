@@ -71,13 +71,13 @@ class CharacterTest(TestCase):
         ch.skill_xp["Foo"] = 70
         emblem = Emblem(
             name="Foo Boost",
-            feats=[Feat(hook=HookType.SKILL_RANK, param="Foo", value=2)],
+            feats=[Feat(hook=HookType.SKILL_RANK, subtype="Foo", value=2)],
         )
         ch.emblems.append(emblem)
         self.assertEqual(ch.get_skill_rank("Foo"), 5)
         emblem = Emblem(
             name="Generic Boost",
-            feats=[Feat(hook=HookType.SKILL_RANK, param=None, value=2)],
+            feats=[Feat(hook=HookType.SKILL_RANK, subtype=None, value=2)],
         )
         ch.emblems.append(emblem)
         self.assertEqual(ch.get_skill_rank("Foo"), 6)  # capped at 6
@@ -109,8 +109,8 @@ class CharacterTest(TestCase):
         board = self._make_board()
 
         effects = [
-            Effect(type=EffectType.MODIFY_XP, param="Fishing", value=3),
-            Effect(type=EffectType.MODIFY_XP, param="Fishing", value=1),
+            Effect(type=EffectType.MODIFY_XP, subtype="Fishing", value=3),
+            Effect(type=EffectType.MODIFY_XP, subtype="Fishing", value=1),
         ]
         outcome = ch.apply_effects(effects, EncounterContextType.JOB, board)
         self.assertEqual(ch.skill_xp["Fishing"], 4)
@@ -124,21 +124,21 @@ class CharacterTest(TestCase):
 
         emblem = Emblem(
             name="Speed Boost",
-            feats=[Feat(hook=HookType.INIT_SPEED, param=None, value=2)],
+            feats=[Feat(hook=HookType.INIT_SPEED, subtype=None, value=2)],
         )
         ch.emblems.append(emblem)
         self.assertEqual(ch.get_init_speed(), 5)
 
         emblem = Emblem(
             name="Speed Penalty",
-            feats=[Feat(hook=HookType.INIT_SPEED, param=None, value=-4)],
+            feats=[Feat(hook=HookType.INIT_SPEED, subtype=None, value=-4)],
         )
         ch.emblems.append(emblem)
         self.assertEqual(ch.get_init_speed(), 1)
 
         emblem = Emblem(
             name="Speed Penalty",
-            feats=[Feat(hook=HookType.INIT_SPEED, param=None, value=-3)],
+            feats=[Feat(hook=HookType.INIT_SPEED, subtype=None, value=-3)],
         )
         ch.emblems.append(emblem)
         self.assertEqual(ch.get_init_speed(), 0)

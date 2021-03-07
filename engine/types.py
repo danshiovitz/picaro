@@ -1,5 +1,7 @@
+import random
 from dataclasses import dataclass
 from enum import Enum, auto as enum_auto
+from string import ascii_lowercase
 from typing import Any, Dict, Generic, List, Optional, Sequence, Tuple, TypeVar, Union
 
 
@@ -16,6 +18,9 @@ Terrains = [
     "Coastal",
     "Arctic",
 ]
+
+
+T = TypeVar("T")
 
 
 class EncounterEffect(Enum):
@@ -46,17 +51,20 @@ class EffectType(Enum):
     MODIFY_QUEST = enum_auto()
     MODIFY_TURNS = enum_auto()
     MODIFY_SPEED = enum_auto()
-    DISRUPT_JOB = enum_auto()
-    TRANSPORT = enum_auto()
     MODIFY_ACTION = enum_auto()
     ADD_EMBLEM = enum_auto()
+    MODIFY_LOCATION = enum_auto()
+    MODIFY_JOB = enum_auto()
+    # "complex" effects that trigger others
+    DISRUPT_JOB = enum_auto()
+    TRANSPORT = enum_auto()
 
 
 @dataclass(frozen=True)
-class Effect:
+class Effect(Generic[T]):
     type: EffectType
-    value: int
-    param: Optional[Any] = None
+    value: Optional[Any]
+    subtype: Optional[str] = None
     is_cost: bool = False
 
     @classmethod
@@ -65,10 +73,13 @@ class Effect:
 
     @classmethod
     def any_type(cls, type_val: Union[EffectType, str]) -> type:
-        if type_val in (EffectType.ADD_EMBLEM, EffectType.ADD_EMBLEM.name):
+        if type(type_val) is str:
+            type_val = EffectType[type_val]
+
+        if type_val == EffectType.ADD_EMBLEM:
             return Emblem
         else:
-            return str
+            return int
 
 
 class JobType(Enum):
@@ -101,7 +112,7 @@ class HookType(Enum):
 class Feat:
     hook: HookType
     value: int
-    param: Optional[str]
+    subtype: Optional[str]
 
 
 @dataclass(frozen=True)
@@ -180,34 +191,6 @@ class EncounterActions:
     choices: Sequence[int]
 
 
-T = TypeVar("T")
-
-
-@dataclass(frozen=True)
-class EncounterSingleOutcome(Generic[T]):
-    new_val: T
-    old_val: T
-    comments: List[str]
-
-
-@dataclass(frozen=True)
-class EncounterOutcome:
-    action_flag: Optional[EncounterSingleOutcome[int]]
-    coins: Optional[EncounterSingleOutcome[int]]
-    xp: Dict[str, EncounterSingleOutcome[int]]
-    free_xp: Optional[EncounterSingleOutcome[int]]
-    reputation: Optional[EncounterSingleOutcome[int]]
-    health: Optional[EncounterSingleOutcome[int]]
-    resource_draws: Optional[EncounterSingleOutcome[int]]
-    resources: Dict[str, EncounterSingleOutcome[int]]
-    quest: Optional[EncounterSingleOutcome[int]]
-    turns: Optional[EncounterSingleOutcome[int]]
-    speed: Optional[EncounterSingleOutcome[int]]
-    transport_location: Optional[EncounterSingleOutcome[str]]
-    new_job: Optional[EncounterSingleOutcome[str]]
-    emblems: List[EncounterSingleOutcome[Optional[Emblem]]]
-
-
 @dataclass(frozen=True)
 class Game:
     id: int
@@ -226,3 +209,80 @@ class Country:
     name: str
     capitol_hex: str
     resources: List[str]
+
+
+class EntityType(Enum):
+    HEX = enum_auto()
+    TOKEN = enum_auto()
+    CHARACTER = enum_auto()
+
+
+@dataclass(frozen=True)
+class Values(Generic[T]):
+    old: T
+    new: T
+
+
+@dataclass(frozen=True)
+class Event(Generic[T]):
+    id: int
+    entity_type: EntityType
+    entity_name: str
+    type: EffectType
+    subtype: Optional[str]
+    old_value: Any
+    new_value: Any
+    comments: List[str]
+
+    @classmethod
+    def type_field(cls) -> str:
+        return "type"
+
+    @classmethod
+    def any_type(cls, type_val: Union[EffectType, str]) -> type:
+        if type(type_val) is str:
+            type_val = EffectType[type_val]
+
+        if type_val == EffectType.ADD_EMBLEM:
+            return Emblem
+        elif type_val in (EffectType.MODIFY_JOB, EffectType.MODIFY_LOCATION):
+            return str
+        else:
+            return int
+
+    @classmethod
+    def for_token(
+        cls,
+        name: str,
+        type: EffectType,
+        subtype: Optional[str],
+        old: T,
+        new: T,
+        comments: List[str],
+    ) -> "Event":
+        return Event[T](
+            cls.make_id(), EntityType.TOKEN, name, type, subtype, old, new, comments
+        )
+
+    @classmethod
+    def for_character(
+        cls,
+        name: str,
+        type: EffectType,
+        subtype: Optional[str],
+        old: T,
+        new: T,
+        comments: List[str],
+    ) -> "Event":
+        return Event[T](
+            cls.make_id(), EntityType.CHARACTER, name, type, subtype, old, new, comments
+        )
+
+    @classmethod
+    def make_id(cls) -> str:
+        return "".join(random.choice(ascii_lowercase) for _ in range(12))
+
+
+@dataclass(frozen=True)
+class Outcome:
+    events: List[Event]

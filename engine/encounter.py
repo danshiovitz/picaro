@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, Any, Callable, List, Optional
 
 from .exceptions import BadStateException, IllegalMoveException
-from .types import Effect, EffectType, EncounterContextType, EncounterSingleOutcome
+from .types import Effect, EffectType, EncounterContextType, Event
 
 
 class UpdateHolder:
@@ -9,16 +9,16 @@ class UpdateHolder:
         self,
         name: str,
         effect_type: EffectType,
-        param: Optional[str],
+        subtype: Optional[str],
         context_type: EncounterContextType,
         min_val: Optional[int],
         max_val: Optional[int],
         get_f: Callable[[], int],
-        set_f: Callable[[int], None],
+        set_f: Callable[[int, int, List[str]], None],
     ) -> None:
         self._name = name
         self._effect_type = effect_type
-        self._param = param
+        self._subtype = subtype
         self._context_type = context_type
         self._min_val = min_val
         self._max_val = max_val
@@ -31,11 +31,11 @@ class UpdateHolder:
         # bump costs to the front of the list
         effects = sorted(
             effects,
-            key=lambda e: (e.type.name, e.param, 0 if e.is_cost else 1, e.value),
+            key=lambda e: (e.type.name, e.subtype, 0 if e.is_cost else 1, e.value),
         )
 
         for effect in effects:
-            if effect.type != self._effect_type or effect.param != self._param:
+            if effect.type != self._effect_type or effect.subtype != self._subtype:
                 continue
             self.add(effect.value, is_cost=effect.is_cost)
 
@@ -59,14 +59,11 @@ class UpdateHolder:
     def get_cur_value(self) -> int:
         return self._cur_value
 
-    def to_outcome(self) -> Optional[EncounterSingleOutcome[int]]:
+    def write(self, events: List[Event]) -> None:
         if self._min_val is not None and self._cur_value < self._min_val:
             self._cur_value = self._min_val
         if self._max_val is not None and self._cur_value > self._max_val:
             self._cur_value = self._max_val
         if self._cur_value == self._init_value and not self._comments:
-            return None
-        self._set_f(self._cur_value)
-        return EncounterSingleOutcome[int](
-            old_val=self._init_value, new_val=self._cur_value, comments=self._comments
-        )
+            return
+        self._set_f(self._init_value, self._cur_value, self._comments)

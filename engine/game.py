@@ -17,7 +17,6 @@ def create_game(name: str, json_dir: Path) -> Game:
 
 class GameStorage(ObjectStorageBase[Game]):
     TABLE_NAME = "game"
-    TYPE = Game
     PRIMARY_KEYS = {"id"}
 
     @classmethod

@@ -39,16 +39,17 @@ from picaro.server.api_types import (
     Emblem,
     EncounterCheck,
     EncounterActions,
-    EncounterOutcome,
-    EncounterSingleOutcome,
     EndTurnRequest,
     EndTurnResponse,
+    EntityType,
     ErrorResponse,
     ErrorType,
+    Event,
     Feat,
     HookType,
     JobRequest,
     JobResponse,
+    Outcome,
     ResolveEncounterRequest,
     ResolveEncounterResponse,
     TableauCard,
@@ -173,7 +174,7 @@ class Client:
 
         else:
             for line in self._make_small_map(
-                board, show_country=self.args.country, show_region=self.args.region
+                ch, board, show_country=self.args.country, show_region=self.args.region
             ):
                 print(line)
 
@@ -198,6 +199,7 @@ class Client:
 
     def _make_small_map(
         self,
+        ch: Character,
         board: Board,
         show_country: bool = False,
         show_region: bool = False,
@@ -214,24 +216,28 @@ class Client:
         def display(coord: OffsetCoordinate) -> str:
             hx = coords[coord]
 
+            rev = colors.reverse if False else ""
+
             if hx.name in tokens:
                 if tokens[hx.name][0].type == "Character":
                     return colors.bold + "@" + colors.reset
                 elif tokens[hx.name][0].type == "City":
-                    return colors.fg.red + "#" + colors.reset
+                    return colors.fg.red + rev + "#" + colors.reset
                 elif tokens[hx.name][0].type == "Mine":
-                    return colors.bg.magenta + colors.fg.black + "*" + colors.reset
+                    return (
+                        colors.bg.magenta + colors.fg.black + rev + "*" + colors.reset
+                    )
                 else:
-                    return colors.bold + colors.fg.green + "?" + colors.reset
+                    return colors.bold + colors.fg.green + rev + "?" + colors.reset
             elif encounters is not None and hx.name in encounters:
-                return colors.bold + colors.bg.red + "!" + colors.reset
+                return colors.bold + colors.bg.red + rev + "!" + colors.reset
 
             color, symbol = self.terrains[hx.terrain]
             if show_country:
                 symbol = hx.country[0]
             elif show_region:
                 symbol = hx.region[0]
-            return color + symbol + colors.reset
+            return color + rev + symbol + colors.reset
 
         return render_simple(set(coords), 1, display, center=center, radius=radius)
 
@@ -275,8 +281,8 @@ class Client:
             HookType.RELIABLE_SKILL: "reliability",
         }
         name = names.get(feat.hook, feat.hook.name)
-        if feat.param:
-            name = feat.param + " " + name
+        if feat.subtype:
+            name = feat.subtype + " " + name
         return f"{feat.value:+} {name}"
 
     def play(self) -> None:
@@ -291,8 +297,6 @@ class Client:
             if not self.args.season or ch.remaining_turns <= 0:
                 return
             else:
-                print("[End of turn, hit return for next]")
-                input()
                 print("===========")
                 print()
 
@@ -318,7 +322,7 @@ class Client:
 
         ch_hex = [hx for hx in board.hexes if hx.name == ch.location][0]
         minimap = self._make_small_map(
-            board, center=ch_hex.coordinate, radius=4, encounters=encounters
+            ch, board, center=ch_hex.coordinate, radius=4, encounters=encounters
         )
 
         display = []
@@ -460,6 +464,11 @@ class Client:
             print()
             return False
 
+        if resp.outcome.events:
+            self._display_outcome(ch, resp.outcome)
+            print("[Hit return]")
+            input()
+            return True
         return True
 
     def _token_action(self, token: Token, action: Action, ch: Character) -> bool:
@@ -483,7 +492,11 @@ class Client:
             print(e)
             print()
             return False
-
+        if resp.outcome.events:
+            self._display_outcome(ch, resp.outcome)
+            print("[Hit return]")
+            input()
+            return True
         return True
 
     def _camp(self, ch: Character) -> bool:
@@ -495,6 +508,11 @@ class Client:
             print(e)
             print()
             return False
+        if resp.outcome.events:
+            self._display_outcome(ch, resp.outcome)
+            print("[Hit return]")
+            input()
+            return True
         return True
 
     def _encounter(self, ch: Character) -> bool:
@@ -653,64 +671,91 @@ class Client:
             return False
         print()
         print(f"The outcome of your encounter:")
-
-        def render_single_int(
-            pfx: str, single: Optional[EncounterSingleOutcome[int]]
-        ) -> None:
-            if single is None:
-                return
-            if single.new_val > single.old_val:
-                print(
-                    f"* {pfx} increased to {single.new_val} ({', '.join(single.comments)})."
-                )
-            elif single.new_val < single.old_val:
-                print(
-                    f"* {pfx} decreased to {single.new_val} ({', '.join(single.comments)})."
-                )
-            else:
-                print(
-                    f"* {pfx} remained at {single.new_val} ({', '.join(single.comments)})."
-                )
-
-        if resp.outcome.action_flag is not None:
-            au = resp.outcome.action_flag
-            if au.new_val <= 0 and au.old_val > 0:
-                print(f"* Your action was used ({', '.join(au.comments)}).")
-            elif au.new_val > 0 and au.old_val <= 0:
-                print(f"* Your action was refreshed ({', '.join(au.comments)}).")
-            else:
-                print(f"* Your action is unchanged ({', '.join(au.comments)}).")
-        render_single_int("Your health has", resp.outcome.health)
-        render_single_int("Your coins have", resp.outcome.coins)
-        render_single_int("Your reputation has", resp.outcome.reputation)
-        for sk, val in resp.outcome.xp.items():
-            render_single_int(f"Your {sk} xp has", val)
-        render_single_int("Your unassigned xp has", resp.outcome.free_xp)
-        if resp.outcome.resource_draws is not None:
-            rd = resp.outcome.resource_draws
-            print(
-                f"* You gained {rd.new_val} resource draws ({', '.join(rd.comments)})."
-            )
-        for name, val in resp.outcome.resources.items():
-            render_single_int(f"Your {name} resources have", val)
-        render_single_int("Your quest points have", resp.outcome.quest)
-        render_single_int("Your remaining turns have", resp.outcome.turns)
-        render_single_int("Your speed has", resp.outcome.speed)
-        for emblem in resp.outcome.emblems:
-            if emblem.old_val:
-                print(
-                    f"* Your emblem was updated to {self._render_emblem(emblem.new_val)}."
-                )
-            else:
-                print(f"* You gained the emblem {self._render_emblem(emblem.new_val)}.")
-        if resp.outcome.transport_location is not None:
-            tl = resp.outcome.transport_location
-            print(f"* You are now in hex {tl.new_val} ({', '.join(tl.comments)}).")
-        if resp.outcome.new_job is not None:
-            nj = resp.outcome.new_job
-            print(f"* You have become a {nj.new_val} ({', '.join(nj.comments)})!")
-
+        self._display_outcome(ch, resp.outcome)
+        print("[Hit return]")
+        input()
         return True
+
+    def _display_outcome(self, ch: Character, outcome: Outcome) -> None:
+        if not outcome.events:
+            return
+
+        def render_single_int(event: Event) -> str:
+            if event.new_value > event.old_value:
+                return f"increased to {event.new_value}"
+            elif event.new_value < event.old_value:
+                return f"decreased to {event.new_value}"
+            else:
+                return f"remained at {event.new_value}"
+
+        for event in outcome.events:
+            line = "* "
+            subj = event.entity_name
+            if (
+                event.entity_type in (EntityType.CHARACTER, EntityType.TOKEN)
+                and event.entity_name == ch.name
+            ):
+                line += "Your "
+                subj = "You"
+            else:
+                line += event.entity_name + "'s "
+
+            if event.type == EffectType.MODIFY_ACTION:
+                if event.new_value <= 0 and event.old_value > 0:
+                    line += "action was used"
+                elif event.new_value > 0 and event.old_value <= 0:
+                    line += "action was refreshed"
+                else:
+                    line += "action is unchanged"
+            elif event.type == EffectType.MODIFY_HEALTH:
+                line += "health has " + render_single_int(event)
+            elif event.type == EffectType.MODIFY_COINS:
+                line += "coins have " + render_single_int(event)
+            elif event.type == EffectType.MODIFY_REPUTATION:
+                line += "reputation has " + render_single_int(event)
+            elif event.type == EffectType.MODIFY_XP:
+                line += f"{event.subtype or 'unassigned'} xp has " + render_single_int(
+                    event
+                )
+            elif event.type == EffectType.MODIFY_RESOURCES:
+                if event.subtype is None:
+                    line = f"* {subj} gained {event.new_value} resource draws"
+                else:
+                    line += f"{event.subtype} resources have " + render_single_int(
+                        event
+                    )
+            elif event.type == EffectType.MODIFY_QUEST:
+                line += "quest points have " + render_single_int(event)
+            elif event.type == EffectType.MODIFY_TURNS:
+                line += "remaining turns have " + render_single_int(event)
+            elif event.type == EffectType.MODIFY_SPEED:
+                line += "speed has " + render_single_int(event)
+            elif event.type == EffectType.ADD_EMBLEM:
+                if event.old_value:
+                    line += (
+                        f"emblem was updated to {self._render_emblem(event.new_value)}."
+                    )
+                else:
+                    line = f"* {subj} gained the emblem {self._render_emblem(event.new_value)}"
+            elif event.type == EffectType.MODIFY_LOCATION:
+                if subj == "You":
+                    line = f"* {subj} are "
+                else:
+                    line = f"* {subj} is "
+                line += f"now in hex {event.new_value}"
+            elif event.type == EffectType.MODIFY_JOB:
+                if subj == "You":
+                    line = f"* {subj} have "
+                else:
+                    line = f"* {subj} has "
+                line += f"become a {event.new_value}"
+            else:
+                line += f"UNKNOWN EVENT TYPE: {event}"
+
+            if event.comments:
+                line += " (" + ", ".join(event.comments) + ")"
+            line += "."
+            print(line)
 
     def _render_encounter_effect(self, eff: EncounterEffect) -> str:
         names = {
@@ -745,16 +790,16 @@ class Client:
         if eff.type == EffectType.MODIFY_COINS:
             return _with_s("coin")
         elif eff.type == EffectType.MODIFY_XP:
-            return f"{eff.value:+} {eff.param or 'unassigned'} xp"
+            return f"{eff.value:+} {eff.subtype or 'unassigned'} xp"
         elif eff.type == EffectType.MODIFY_REPUTATION:
             return f"{eff.value:+} reputation"
         elif eff.type == EffectType.MODIFY_HEALTH:
             return f"{eff.value:+} health"
         elif eff.type == EffectType.MODIFY_RESOURCES:
             return (
-                _with_s("resource")
-                if eff.param is None
-                else _with_s(f"{eff.param} resource")
+                _with_s("resource draw")
+                if eff.subtype is None
+                else _with_s(f"{eff.subtype} resource")
             )
         elif eff.type == EffectType.MODIFY_QUEST:
             return f"{eff.value:+} quest"
@@ -763,13 +808,13 @@ class Client:
         elif eff.type == EffectType.MODIFY_SPEED:
             return f"{eff.value:+} speed"
         elif eff.type == EffectType.DISRUPT_JOB:
-            return f"rank-{eff.value:+} job turmoil"
+            return f"job turmoil ({eff.value:+})"
         elif eff.type == EffectType.TRANSPORT:
-            return f"rank-{eff.value:+} random transport"
+            return f"random transport ({eff.value:+})"
         elif eff.type == EffectType.MODIFY_ACTION:
             return "use action" if eff.value <= 0 else "refresh action"
         elif eff.type == EffectType.ADD_EMBLEM:
-            return "add an emblem: " + self._render_emblem(eff.param)
+            return "add an emblem: " + self._render_emblem(eff.value)
         else:
             return eff
 
@@ -832,6 +877,11 @@ class Client:
                 print()
                 return False
             ch = self._get(f"/character/{self.args.name}", Character)
+            if resp.outcome.events:
+                self._display_outcome(ch, resp.outcome)
+                print("[Hit return]")
+                input()
+                return True
             if ch.encounters:
                 print(f"Your journey is interrupted in {ch.location}!")
                 return True
@@ -849,6 +899,11 @@ class Client:
             print(e)
             print()
             return False
+        if resp.outcome.events:
+            self._display_outcome(ch, resp.outcome)
+            print("[Hit return]")
+            input()
+            return True
         return True
 
     def _get(self, path: str, cls: Type[T]) -> T:

@@ -20,6 +20,7 @@ from .types import (
     Effect,
     EffectType,
     EncounterContextType,
+    Event,
     FullCard,
     ResourceCard,
     TemplateCard,
@@ -50,7 +51,8 @@ class ActiveBoard:
         name: str,
         type: str,
         location: str,
-        actions: Optional[Sequence[Action]] = None,
+        actions: Optional[Sequence[Action]],
+        events: List[Event],
     ) -> None:
         found = False
         try:
@@ -68,9 +70,18 @@ class ActiveBoard:
             Token(name=name, type=type, location=location, actions=actions)
         )
         # this validates location so we don't have to:
-        self.move_token(name, location)
+        self.move_token(
+            name, location, adjacent=False, comments=["Token created"], events=events
+        )
 
-    def move_token(self, token_name: str, to: str, adjacent: bool = False) -> None:
+    def move_token(
+        self,
+        token_name: str,
+        to: str,
+        adjacent: bool,
+        comments: List[str],
+        events: List[Event],
+    ) -> None:
         token = TokenStorage.load_by_name(token_name)
         if to == self.NOWHERE:
             token = dataclasses.replace(token, location=self.NOWHERE)
@@ -84,6 +95,7 @@ class ActiveBoard:
         # validate the new location
         new_hex = HexStorage.load_by_name(to)
 
+        old_hex = token.location
         if adjacent and token.location != self.NOWHERE:
             nearby = self.find_hexes_near_token(token_name, 0, 1)
             if new_hex.name not in nearby:
@@ -93,6 +105,16 @@ class ActiveBoard:
 
         token = dataclasses.replace(token, location=to)
         TokenStorage.update(token)
+        events.append(
+            Event.for_token(
+                token.name,
+                EffectType.MODIFY_LOCATION,
+                None,
+                old_hex,
+                new_hex.name,
+                comments,
+            )
+        )
 
     def get_token(self, token_name: str) -> snapshot_Token:
         return self._translate_token(TokenStorage.load_by_name(token_name), ["bogus"])
@@ -343,7 +365,7 @@ class ActiveBoard:
                         benefit=[
                             Effect(
                                 type=EffectType.MODIFY_RESOURCES,
-                                param=mine_rs[hx.country],
+                                subtype=mine_rs[hx.country],
                                 value=1,
                             )
                         ],
@@ -356,6 +378,11 @@ class ActiveBoard:
                     actions=actions,
                 )
                 TokenStorage.create(token)
+
+
+# since it has no state, this doesn't actually have to hit db currently
+def load_board() -> ActiveBoard:
+    return ActiveBoard()
 
 
 # this one is not frozen and not exposed externally
@@ -399,7 +426,6 @@ class Token:
 
 class HexStorage(ObjectStorageBase[Hex]):
     TABLE_NAME = "hex"
-    TYPE = Hex
     PRIMARY_KEYS = {"name"}
 
     @classmethod
@@ -450,7 +476,6 @@ class HexStorage(ObjectStorageBase[Hex]):
 
 class HexDeckStorage(ObjectStorageBase[HexDeck]):
     TABLE_NAME = "hex_deck"
-    TYPE = HexDeck
     PRIMARY_KEYS = {"name"}
 
     @classmethod
@@ -480,7 +505,6 @@ class HexDeckStorage(ObjectStorageBase[HexDeck]):
 
 class ResourceDeckStorage(ObjectStorageBase[ResourceDeck]):
     TABLE_NAME = "resource_deck"
-    TYPE = ResourceDeck
     PRIMARY_KEYS = {"country", "region"}
 
     @classmethod
@@ -514,7 +538,6 @@ class ResourceDeckStorage(ObjectStorageBase[ResourceDeck]):
 
 class TokenStorage(ObjectStorageBase[Token]):
     TABLE_NAME = "token"
-    TYPE = Token
     PRIMARY_KEYS = {"name"}
 
     @classmethod
@@ -545,7 +568,6 @@ class TokenStorage(ObjectStorageBase[Token]):
 
 class CountryStorage(ObjectStorageBase[Country]):
     TABLE_NAME = "country"
-    TYPE = Country
     PRIMARY_KEYS = {"name"}
 
     @classmethod

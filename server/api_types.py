@@ -13,10 +13,11 @@ from picaro.engine.types import (
     EncounterActions,
     EncounterCheck,
     EncounterEffect,
-    EncounterOutcome,
-    EncounterSingleOutcome,
+    EntityType,
+    Event,
     Feat,
     HookType,
+    Outcome,
 )
 
 
@@ -33,7 +34,7 @@ class JobRequest:
 
 @dataclass(frozen=True)
 class JobResponse:
-    pass
+    outcome: Outcome
 
 
 @dataclass(frozen=True)
@@ -44,7 +45,7 @@ class TokenActionRequest:
 
 @dataclass(frozen=True)
 class TokenActionResponse:
-    pass
+    outcome: Outcome
 
 
 @dataclass(frozen=True)
@@ -54,7 +55,7 @@ class CampRequest:
 
 @dataclass(frozen=True)
 class CampResponse:
-    pass
+    outcome: Outcome
 
 
 @dataclass(frozen=True)
@@ -64,7 +65,7 @@ class TravelRequest:
 
 @dataclass(frozen=True)
 class TravelResponse:
-    pass
+    outcome: Outcome
 
 
 @dataclass(frozen=True)
@@ -74,7 +75,7 @@ class EndTurnRequest:
 
 @dataclass(frozen=True)
 class EndTurnResponse:
-    pass
+    outcome: Outcome
 
 
 @dataclass(frozen=True)
@@ -84,7 +85,7 @@ class ResolveEncounterRequest:
 
 @dataclass(frozen=True)
 class ResolveEncounterResponse:
-    outcome: EncounterOutcome
+    outcome: Outcome
 
 
 class ErrorType(Enum):

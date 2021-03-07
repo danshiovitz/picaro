@@ -41,7 +41,6 @@ def load_job(job_name: str) -> Job:
 
 class JobsStorage(ObjectStorageBase[Job]):
     TABLE_NAME = "job"
-    TYPE = Job
     PRIMARY_KEYS = {"name"}
 
     @classmethod
