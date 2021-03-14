@@ -1,3 +1,4 @@
+import functools
 import json
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -9,6 +10,7 @@ from pathlib import Path
 from sqlite3 import Connection, Row, connect
 from typing import (
     Any,
+    Callable,
     ContextManager,
     Dict,
     Generic,
@@ -84,6 +86,20 @@ class ConnectionManager:
     def fix_game_id(cls, game_id: int) -> None:
         session = current_session.get()
         session.game_id = game_id
+
+
+def with_connection() -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            game_id = kwargs.get("game_id", None)
+            player_id = kwargs.get("player_id", None)
+            with ConnectionManager(game_id=game_id, player_id=player_id):
+                return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
 T = TypeVar("T")

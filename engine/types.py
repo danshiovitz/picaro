@@ -89,13 +89,6 @@ class JobType(Enum):
     KING = enum_auto()
 
 
-@dataclass(frozen=True)
-class Action:
-    name: str
-    cost: List[Effect]
-    benefit: List[Effect]
-
-
 class HookType(Enum):
     INIT_CARD_AGE = enum_auto()
     INIT_TURNS = enum_auto()
@@ -118,7 +111,7 @@ class Feat:
 @dataclass(frozen=True)
 class Emblem:
     name: str
-    feats: List[Feat]
+    feats: Sequence[Feat]
 
 
 @dataclass(frozen=True)
@@ -130,11 +123,18 @@ class EncounterCheck:
 
 
 @dataclass(frozen=True)
+class Choice:
+    name: Optional[str] = None
+    cost: Sequence[Effect] = ()
+    benefit: Sequence[Effect] = ()
+
+
+@dataclass(frozen=True)
 class Choices:
     min_choices: int
     max_choices: int
     is_random: bool
-    choice_list: Sequence[Sequence[Effect]]
+    choice_list: Sequence[Choice]
 
 
 @dataclass(frozen=True)
@@ -164,6 +164,12 @@ class TableauCard:
     card: FullCard
     age: int
     location: str
+
+
+@dataclass(frozen=True)
+class Action:
+    name: str
+    choices: Choices
 
 
 class EncounterContextType(Enum):
@@ -208,7 +214,7 @@ class ResourceCard:
 class Country:
     name: str
     capitol_hex: str
-    resources: List[str]
+    resources: Sequence[str]
 
 
 class EntityType(Enum):
@@ -232,7 +238,7 @@ class Event(Generic[T]):
     subtype: Optional[str]
     old_value: Any
     new_value: Any
-    comments: List[str]
+    comments: Sequence[str]
 
     @classmethod
     def type_field(cls) -> str:
@@ -261,7 +267,14 @@ class Event(Generic[T]):
         comments: List[str],
     ) -> "Event":
         return Event[T](
-            cls.make_id(), EntityType.TOKEN, name, type, subtype, old, new, comments
+            cls.make_id(),
+            EntityType.TOKEN,
+            name,
+            type,
+            subtype,
+            old,
+            new,
+            tuple(comments),
         )
 
     @classmethod
@@ -285,4 +298,4 @@ class Event(Generic[T]):
 
 @dataclass(frozen=True)
 class Outcome:
-    events: List[Event]
+    events: Sequence[Event]

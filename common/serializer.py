@@ -1,7 +1,8 @@
 import json
+from collections.abc import Sequence
 from dataclasses import _MISSING_TYPE, fields as dataclass_fields, is_dataclass
 from enum import Enum
-from typing import Any, Dict, Optional, Sequence, Type, TypeVar, Union
+from typing import Any, Dict, Iterable, Optional, Type, TypeVar, Union
 
 
 def serialize(val: Any, indent: Optional[int] = None) -> str:
@@ -54,15 +55,15 @@ def recursive_to_dict(val: T, cls: Type[T] = type(None)) -> Any:
     elif issubclass(cls_base, tuple):
         exp_types = getattr(cls, "__args__", [type(None)] * len(val))
         return [recursive_to_dict(sv, exp_types[idx]) for idx, sv in enumerate(val)]
-    elif cls_base != str and issubclass(cls_base, Sequence):
-        exp_types = getattr(cls, "__args__", [type(None)])
-        return [recursive_to_dict(sv, exp_types[0]) for sv in val]
     elif issubclass(cls_base, Dict):
         exp_types = getattr(cls, "__args__", [type(None), type(None)])
         return {
             recursive_to_dict(k, exp_types[0]): recursive_to_dict(v, exp_types[1])
             for k, v in val.items()
         }
+    elif cls_base != str and issubclass(cls_base, Iterable):
+        exp_types = getattr(cls, "__args__", [type(None)])
+        return [recursive_to_dict(sv, exp_types[0]) for sv in val]
     elif issubclass(cls_base, Enum):
         return val.name
     else:
@@ -119,11 +120,6 @@ def recursive_from_dict(val: Any, cls: Type[T], frozen: Optional[bool] = None) -
             recursive_from_dict(sv, cls.__args__[idx], frozen)
             for idx, sv in enumerate(val)
         )
-    elif cls_base != str and issubclass(cls_base, Sequence):
-        if type(val) == str:
-            val = logged_load(val)
-        seq = (recursive_from_dict(sv, cls.__args__[0], frozen) for sv in val)
-        return tuple(seq) if frozen else list(seq)
     elif issubclass(cls_base, Dict):
         if type(val) == str:
             val = logged_load(val)
@@ -133,6 +129,11 @@ def recursive_from_dict(val: Any, cls: Type[T], frozen: Optional[bool] = None) -
             )
             for k, v in val.items()
         }
+    elif cls_base != str and issubclass(cls_base, Iterable):
+        if type(val) == str:
+            val = logged_load(val)
+        seq = (recursive_from_dict(sv, cls.__args__[0], frozen) for sv in val)
+        return tuple(seq) if frozen or cls_base == Sequence else cls_base(seq)
     elif issubclass(cls_base, Enum):
         return cls[val]
     elif cls_base == bool:

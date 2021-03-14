@@ -21,7 +21,6 @@ if __name__ == "__main__":
         location="random",
         job_name="Raider",
     )
-    engine.start_season(game_id=game_id, player_id=None)
 
     server = Server(engine)
     server.run()

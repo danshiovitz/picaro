@@ -16,6 +16,8 @@ from .snapshot import (
 from .storage import ObjectStorageBase
 from .types import (
     Action,
+    Choice,
+    Choices,
     Country,
     Effect,
     EffectType,
@@ -121,6 +123,13 @@ class ActiveBoard:
 
     def get_token_location(self, token_name: str) -> str:
         return TokenStorage.load_by_name(token_name).location
+
+    def get_token_action(self, token_name: str, action_name: str) -> Action:
+        token = TokenStorage.load_by_name(token_name)
+        for action in token.actions:
+            if action.name == action_name:
+                return action
+        raise BadStateException(f"No such action {action_name} on token {token_name}.")
 
     def _translate_token(self, token: "Token", route: Sequence[str]) -> snapshot_Token:
         return snapshot_Token(
@@ -345,8 +354,26 @@ class ActiveBoard:
                 actions = [
                     Action(
                         name="Trade",
-                        cost=[Effect(type=EffectType.MODIFY_RESOURCES, value=-1)],
-                        benefit=[Effect(type=EffectType.MODIFY_COINS, value=5)],
+                        choices=Choices(
+                            min_choices=0,
+                            max_choices=1,
+                            is_random=False,
+                            choice_list=[
+                                Choice(
+                                    cost=[
+                                        Effect(
+                                            type=EffectType.MODIFY_RESOURCES,
+                                            subtype=rs,
+                                            value=-1,
+                                        )
+                                    ],
+                                    benefit=[
+                                        Effect(type=EffectType.MODIFY_COINS, value=5)
+                                    ],
+                                )
+                                for rs in mine_rs.values()
+                            ],
+                        ),
                     ),
                 ]
                 token = Token(
@@ -361,14 +388,25 @@ class ActiveBoard:
                 actions = [
                     Action(
                         name=f"Gather {mine_rs[hx.country]}",
-                        cost=[Effect(type=EffectType.MODIFY_ACTION, value=-1)],
-                        benefit=[
-                            Effect(
-                                type=EffectType.MODIFY_RESOURCES,
-                                subtype=mine_rs[hx.country],
-                                value=1,
-                            )
-                        ],
+                        choices=Choices(
+                            min_choices=0,
+                            max_choices=1,
+                            is_random=False,
+                            choice_list=[
+                                Choice(
+                                    cost=(
+                                        Effect(type=EffectType.MODIFY_ACTION, value=-1),
+                                    ),
+                                    benefit=(
+                                        Effect(
+                                            type=EffectType.MODIFY_RESOURCES,
+                                            subtype=mine_rs[hx.country],
+                                            value=1,
+                                        ),
+                                    ),
+                                )
+                            ],
+                        ),
                     ),
                 ]
                 token = Token(

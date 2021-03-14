@@ -63,18 +63,27 @@ class Server:
     @wrap_errors()
     def get_board(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
-        return self._engine.get_board(player_id, game_id, character_name)
+        return self._engine.get_board(
+            player_id=player_id, game_id=game_id, character_name=character_name
+        )
 
     @wrap_errors()
     def get_character(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
-        return self._engine.get_character(player_id, game_id, character_name)
+        return self._engine.get_character(
+            player_id=player_id, game_id=game_id, character_name=character_name
+        )
 
     @wrap_errors()
     def do_job(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(JobRequest)
-        outcome = self._engine.do_job(player_id, game_id, character_name, req.card_id)
+        outcome = self._engine.do_job(
+            req.card_id,
+            player_id=player_id,
+            game_id=game_id,
+            character_name=character_name,
+        )
         return JobResponse(outcome=outcome)
 
     @wrap_errors()
@@ -82,7 +91,11 @@ class Server:
         player_id = self._extract_player_id()
         req = self._read_body(TokenActionRequest)
         outcome = self._engine.token_action(
-            player_id, game_id, character_name, req.token, req.action
+            req.token,
+            req.action,
+            player_id=player_id,
+            game_id=game_id,
+            character_name=character_name,
         )
         return TokenActionResponse(outcome=outcome)
 
@@ -90,14 +103,21 @@ class Server:
     def travel(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(TravelRequest)
-        outcome = self._engine.travel(player_id, game_id, character_name, req.step)
+        outcome = self._engine.travel(
+            req.step,
+            player_id=player_id,
+            game_id=game_id,
+            character_name=character_name,
+        )
         return TravelResponse(outcome=outcome)
 
     @wrap_errors()
     def camp(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(CampRequest)
-        outcome = self._engine.camp(player_id, game_id, character_name)
+        outcome = self._engine.camp(
+            player_id=player_id, game_id=game_id, character_name=character_name
+        )
         if not req.rest:
             raise BadStateException("Rest is false!")
         else:
@@ -108,7 +128,10 @@ class Server:
         player_id = self._extract_player_id()
         req = self._read_body(ResolveEncounterRequest)
         outcome = self._engine.resolve_encounter(
-            player_id, game_id, character_name, req.actions
+            req.actions,
+            player_id=player_id,
+            game_id=game_id,
+            character_name=character_name,
         )
         return ResolveEncounterResponse(outcome=outcome)
 
@@ -116,7 +139,9 @@ class Server:
     def end_turn(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(EndTurnRequest)
-        outcome = self._engine.end_turn(player_id, game_id, character_name)
+        outcome = self._engine.end_turn(
+            player_id=player_id, game_id=game_id, character_name=character_name
+        )
         return EndTurnResponse(outcome=outcome)
 
     def run(self) -> None:

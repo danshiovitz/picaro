@@ -1,104 +1,270 @@
+import dataclasses
 from pathlib import Path
 from typing import Optional, Sequence
 
 from .board import load_board
-from .character import load_party
+from .character import Character, TurnFlags
 from .exceptions import BadStateException, IllegalMoveException
 from .game import create_game
-from .snapshot import Board, Character
-from .storage import ConnectionManager
-from .types import EncounterActions, Outcome
+from .snapshot import Board as snapshot_Board, Character as snapshot_Character
+from .storage import ConnectionManager, with_connection
+from .types import (
+    Action,
+    Choices,
+    EncounterActions,
+    EncounterContextType,
+    Outcome,
+    TemplateCard,
+)
+
+
+# 1) create game
+# 2) create character
+# x) start the season
+# x) finish the season
+# 5) do a job
+# 6) perform a token action
+# 7) travel to hex
+# 8) camp
+# 9) resolve encounter
+# 10) end the turn (early)
+# a) apply effects to character
+# b) when a job disruption occurs
+# c) when a character is promoted
+# d) when a turn finishes
 
 
 class Engine:
     def __init__(self, db_path: Optional[str]) -> None:
         ConnectionManager.initialize(db_path=db_path)
 
-    def create_game(self, player_id: int, name: str, json_dir: Path) -> int:
-        with ConnectionManager(player_id=player_id, game_id=None):
-            game = create_game(name, json_dir)
-            # create_game fixes the game_id in the session, so we can just call this:
-            board = load_board()
-            board.generate_map()
-            return game.id
+    @with_connection()
+    def create_game(self, name: str, json_dir: Path, *, player_id: int) -> int:
+        game = create_game(name, json_dir)
+        # create_game fixes the game_id in the session, so we can just call this:
+        board = load_board()
+        board.generate_map()
+        return game.id
 
-    def get_board(self, player_id: int, game_id: int, character_name: str) -> Board:
-        with ConnectionManager(player_id=player_id, game_id=game_id):
-            board = load_board()
-            return board.get_snapshot(character_name)
-
+    @with_connection()
     def add_character(
         self,
-        player_id: int,
-        game_id: int,
-        character_name: str,
         location: str,
         job_name: str,
+        *,
+        player_id: int,
+        game_id: int,
+        character_name: str,
     ) -> None:
-        with ConnectionManager(player_id=player_id, game_id=game_id):
-            party = load_party()
-            party.create_character(
-                name=character_name,
-                player_id=player_id,
-                job_name=job_name,
-                location=location,
-            )
+        Character.create(character_name, player_id, job_name, location)
+        with Character.load(character_name) as ch:
+            ch.refill_tableau()
 
+    @with_connection()
+    def get_board(
+        self, *, player_id: int, game_id: int, character_name: str
+    ) -> snapshot_Board:
+        board = load_board()
+        return board.get_snapshot(character_name)
+
+    @with_connection()
     def get_character(
-        self, player_id: int, game_id: int, character_name: str
-    ) -> Character:
-        with ConnectionManager(player_id=player_id, game_id=game_id):
-            party = load_party()
-            return party.get_character(character_name)
+        self, *, player_id: int, game_id: int, character_name: str
+    ) -> snapshot_Character:
+        with Character.load(character_name) as ch:
+            return ch.get_snapshot()
 
-    def start_season(self, player_id: Optional[int], game_id: int) -> None:
-        with ConnectionManager(player_id=player_id, game_id=game_id):
-            party = load_party()
-            party.start_season()
-
+    @with_connection()
     def do_job(
-        self, player_id: int, game_id: int, character_name: str, card_id: int
+        self, card_id: int, *, player_id: int, game_id: int, character_name: str
     ) -> Outcome:
-        with ConnectionManager(player_id=player_id, game_id=game_id):
-            party = load_party()
-            return party.do_job(character_name, card_id)
+        with Character.load(character_name) as ch:
+            self._basic_action_prep(ch, consume_action=True)
+            ch.queue_tableau_card(card_id)
+            if ch.acted_this_turn() and not ch.has_encounters():
+                self._finish_turn(ch)
+            return Outcome(events=[])
 
+    @with_connection()
     def token_action(
         self,
-        player_id: int,
-        game_id: int,
-        character_name: str,
         token_name: str,
         action_name: str,
-    ) -> Outcome:
-        with ConnectionManager(player_id=player_id, game_id=game_id):
-            party = load_party()
-            return party.token_action(character_name, token_name, action_name)
-
-    def travel(
-        self, player_id: int, game_id: int, character_name: str, step: str
-    ) -> Outcome:
-        with ConnectionManager(player_id=player_id, game_id=game_id):
-            party = load_party()
-            return party.travel(character_name, step)
-
-    def camp(self, player_id: int, game_id: int, character_name: str) -> Outcome:
-        with ConnectionManager(player_id=player_id, game_id=game_id):
-            party = load_party()
-            return party.camp(character_name)
-
-    def resolve_encounter(
-        self,
+        *,
         player_id: int,
         game_id: int,
         character_name: str,
-        actions: EncounterActions,
     ) -> Outcome:
-        with ConnectionManager(player_id=player_id, game_id=game_id):
-            party = load_party()
-            return party.resolve_encounter(character_name, actions)
+        with Character.load(character_name) as ch:
+            self._basic_action_prep(ch, consume_action=False)
 
-    def end_turn(self, player_id: int, game_id: int, character_name: str) -> Outcome:
-        with ConnectionManager(player_id=player_id, game_id=game_id):
-            party = load_party()
-            return party.end_turn(character_name)
+            board = load_board()
+            ch_location = board.get_token_location(ch.name)
+            token_location = board.get_token_location(token_name)
+            if ch_location != token_location:
+                raise IllegalMoveException(
+                    f"You must be in hex {token_location} to perform that action."
+                )
+            action = board.get_token_action(token_name, action_name)
+            ch.queue_template(
+                self._action_to_template(action),
+                context_type=EncounterContextType.ACTION,
+            )
+            if ch.acted_this_turn() and not ch.has_encounters():
+                self._finish_turn(ch)
+            return Outcome(events=[])
+
+    def _action_to_template(self, action: Action) -> TemplateCard:
+        return TemplateCard(
+            copies=1,
+            name=action.name,
+            desc="...",
+            choices=action.choices,
+        )
+
+    @with_connection()
+    def camp(self, player_id: int, game_id: int, character_name: str) -> Outcome:
+        with Character.load(character_name) as ch:
+            self._basic_action_prep(consume_action=True)
+            ch.queue_camp_card()
+            if ch.acted_this_turn() and not ch.has_encounters():
+                self._finish_turn(ch)
+            return Outcome(events=[])
+
+    @with_connection()
+    def travel(
+        self, step: str, *, player_id: int, game_id: int, character_name: str
+    ) -> Outcome:
+        with Character.load(character_name) as ch:
+            self._travel_prep(ch)
+            events: List[Event] = []
+            ch.step(step, events)
+            board = load_board()
+            ch.queue_travel_card(board.get_token_location(character_name))
+            if ch.acted_this_turn() and not ch.has_encounters():
+                self._finish_turn(ch)
+            return Outcome(events=events)
+
+    @with_connection()
+    def end_turn(self, *, player_id: int, game_id: int, character_name: str) -> Outcome:
+        with Character.load(character_name) as ch:
+            self._basic_action_prep(ch, consume_action=True)
+            if not ch.has_encounters():
+                self._finish_turn(ch)
+            return Outcome(events=[])
+
+    @with_connection()
+    def resolve_encounter(
+        self,
+        actions: EncounterActions,
+        *,
+        player_id: int,
+        game_id: int,
+        character_name: str,
+    ) -> Outcome:
+        with Character.load(character_name) as ch:
+            events: List[Event] = []
+
+            encounter = ch.pop_encounter()
+            effects = ch.calc_effects(encounter, actions)
+            ch.apply_effects(effects, encounter.context_type, events)
+            if ch.acted_this_turn() and not ch.has_encounters():
+                self._finish_turn(ch)
+            return Outcome(events=events)
+
+    def _basic_action_prep(self, ch: Character, consume_action: bool) -> None:
+        if ch.has_encounters():
+            raise BadStateException("An encounter is currently active.")
+        if consume_action:
+            if not ch.check_set_flag(TurnFlags.ACTED):
+                raise BadStateException("You have already acted this turn.")
+
+    def _travel_prep(self, ch: Character) -> None:
+        if ch.has_encounters():
+            raise BadStateException("An encounter is currently active.")
+        if ch.get_speed() <= 0:
+            raise IllegalMoveException(f"You have no remaining speed.")
+        if ch.acted_this_turn():
+            raise IllegalMoveException(f"You can't move in a turn after having acted.")
+
+    # currently we assume nothing in here adds to the current list of events,
+    # to avoid confusing the player when additional stuff shows up in the
+    # outcome, but there's probably nothing strictly wrong if it did
+    def _finish_turn(self, ch: Character) -> None:
+        self._bad_reputation_check(ch)
+        if ch.has_encounters():
+            return
+
+        self._discard_resources(ch)
+        if ch.has_encounters():
+            return
+
+        ch.turn_reset()
+
+        # filter to encounters near the PC (since they may have been transported, or just moved)
+        board = load_board()
+        near: Set[str] = {hx for hx in board.find_hexes_near_token(ch.name, 0, 5)}
+        ch.age_tableau(near)
+        ch.refill_tableau()
+
+    def _bad_reputation_check(self, ch: Character) -> None:
+        if ch.get_reputation() > 0:
+            return
+
+        if ch.check_set_flag(TurnFlags.BAD_REP_CHECKED):
+            return
+
+        job_template = TemplateCard(
+            copies=1,
+            name="Bad Reputation",
+            desc=f"Automatic job check at zero reputation.",
+            unsigned=True,
+            choices=Choices(
+                min_choices=1,
+                max_choices=1,
+                is_random=False,
+                choice_list=[
+                    [
+                        Choice(
+                            benefit=(
+                                Effect(
+                                    type=EffectType.DISRUPT_JOB, subtype=None, value=-1
+                                ),
+                            )
+                        )
+                    ],
+                ],
+            ),
+        )
+        ch.queue_template(job_template, context_type=EncounterContextType.SYSTEM)
+
+    def _discard_resources(self, ch: Character) -> None:
+        # discard down to correct number of resources
+        # (in the future should let player pick which to discard)
+        all_rs = [nm for rs, cnt in ch.get_resources().items() for nm in [rs] * cnt]
+        overage = len(all_rs) - ch.get_max_resources()
+        if overage <= 0:
+            return
+
+        discard_template = TemplateCard(
+            copies=1,
+            name="Discard Resources",
+            desc=f"You must discard to {ch.get_max_resources()} resources.",
+            unsigned=True,
+            choices=Choices(
+                min_choices=overage,
+                max_choices=overage,
+                is_random=False,
+                choice_list=[
+                    Choice(
+                        cost=(
+                            Effect(
+                                type=EffectType.MODIFY_RESOURCES, subtype=rs, value=-1
+                            ),
+                        )
+                    )
+                    for rs in all_rs
+                ],
+            ),
+        )
+        ch.queue_template(discard_template, context_type=EncounterContextType.SYSTEM)

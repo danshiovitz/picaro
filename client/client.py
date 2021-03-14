@@ -605,7 +605,9 @@ class Client:
                         pfx = " " + str(idx + 1) + ". "
                 else:
                     pfx = " * "
-                line = pfx + ", ".join(self._render_effect(eff) for eff in choice)
+                line = pfx + ", ".join(
+                    self._render_effect(eff) for eff in choice.benefit + choice.cost
+                )
                 if enc_choices.is_random and (idx + 1) in ch.encounters[0].rolls:
                     line = colors.bold + line + colors.reset
                 print(line)
