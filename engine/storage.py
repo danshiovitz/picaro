@@ -14,6 +14,7 @@ from typing import (
     ContextManager,
     Dict,
     Generic,
+    Iterable,
     List,
     Optional,
     Sequence,
@@ -405,3 +406,32 @@ class ObjectStorageBase(StorageBase[T]):
             return fval.name
         else:
             return serialize(fval)
+
+
+# Not strictly storage-related, but helpful in giving read-only views on some objects
+# that are stored
+class ReadOnlyWrapper:
+    def __init__(self, data: Any) -> None:
+        super().__setattr__("_fields", {f.name: f for f in dataclass_fields(data)})
+        super().__setattr__("_data", data)
+        self.z = -1
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in self._fields:
+            raise Exception(f"Can't write {name}")
+        else:
+            super().__setattr__(name, value)
+
+    def __getattr__(self, name: str) -> Any:
+        if name in self._fields:
+            val = getattr(self._data, name)
+            ut = self._fields[name].type
+            cls_base = getattr(ut, "__origin__", ut)
+            if issubclass(cls_base, Dict):
+                return val.copy()
+            elif cls_base not in (str, tuple) and issubclass(cls_base, Iterable):
+                return tuple(val)
+            else:
+                return val
+        else:
+            raise Exception("No such field")

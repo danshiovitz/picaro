@@ -81,7 +81,7 @@ class Engine:
         with Character.load(character_name) as ch:
             self._basic_action_prep(ch, consume_action=True)
             ch.queue_tableau_card(card_id)
-            if ch.acted_this_turn() and not ch.has_encounters():
+            if ch.acted_this_turn() and not ch.encounters:
                 self._finish_turn(ch)
             return Outcome(events=[])
 
@@ -110,7 +110,7 @@ class Engine:
                 self._action_to_template(action),
                 context_type=EncounterContextType.ACTION,
             )
-            if ch.acted_this_turn() and not ch.has_encounters():
+            if ch.acted_this_turn() and not ch.encounters:
                 self._finish_turn(ch)
             return Outcome(events=[])
 
@@ -127,7 +127,7 @@ class Engine:
         with Character.load(character_name) as ch:
             self._basic_action_prep(consume_action=True)
             ch.queue_camp_card()
-            if ch.acted_this_turn() and not ch.has_encounters():
+            if ch.acted_this_turn() and not ch.encounters:
                 self._finish_turn(ch)
             return Outcome(events=[])
 
@@ -141,7 +141,7 @@ class Engine:
             ch.step(step, events)
             board = load_board()
             ch.queue_travel_card(board.get_token_location(character_name))
-            if ch.acted_this_turn() and not ch.has_encounters():
+            if ch.acted_this_turn() and not ch.encounters:
                 self._finish_turn(ch)
             return Outcome(events=events)
 
@@ -149,7 +149,7 @@ class Engine:
     def end_turn(self, *, player_id: int, game_id: int, character_name: str) -> Outcome:
         with Character.load(character_name) as ch:
             self._basic_action_prep(ch, consume_action=True)
-            if not ch.has_encounters():
+            if not ch.encounters:
                 self._finish_turn(ch)
             return Outcome(events=[])
 
@@ -168,21 +168,21 @@ class Engine:
             encounter = ch.pop_encounter()
             effects = ch.calc_effects(encounter, actions)
             ch.apply_effects(effects, encounter.context_type, events)
-            if ch.acted_this_turn() and not ch.has_encounters():
+            if ch.acted_this_turn() and not ch.encounters:
                 self._finish_turn(ch)
             return Outcome(events=events)
 
     def _basic_action_prep(self, ch: Character, consume_action: bool) -> None:
-        if ch.has_encounters():
+        if ch.encounters:
             raise BadStateException("An encounter is currently active.")
         if consume_action:
             if not ch.check_set_flag(TurnFlags.ACTED):
                 raise BadStateException("You have already acted this turn.")
 
     def _travel_prep(self, ch: Character) -> None:
-        if ch.has_encounters():
+        if ch.encounters:
             raise BadStateException("An encounter is currently active.")
-        if ch.get_speed() <= 0:
+        if ch.speed <= 0:
             raise IllegalMoveException(f"You have no remaining speed.")
         if ch.acted_this_turn():
             raise IllegalMoveException(f"You can't move in a turn after having acted.")
@@ -192,11 +192,11 @@ class Engine:
     # outcome, but there's probably nothing strictly wrong if it did
     def _finish_turn(self, ch: Character) -> None:
         self._bad_reputation_check(ch)
-        if ch.has_encounters():
+        if ch.encounters:
             return
 
         self._discard_resources(ch)
-        if ch.has_encounters():
+        if ch.encounters:
             return
 
         ch.turn_reset()
@@ -208,7 +208,7 @@ class Engine:
         ch.refill_tableau()
 
     def _bad_reputation_check(self, ch: Character) -> None:
-        if ch.get_reputation() > 0:
+        if ch.reputation > 0:
             return
 
         if ch.check_set_flag(TurnFlags.BAD_REP_CHECKED):
@@ -241,7 +241,7 @@ class Engine:
     def _discard_resources(self, ch: Character) -> None:
         # discard down to correct number of resources
         # (in the future should let player pick which to discard)
-        all_rs = [nm for rs, cnt in ch.get_resources().items() for nm in [rs] * cnt]
+        all_rs = [nm for rs, cnt in ch.resources.items() for nm in [rs] * cnt]
         overage = len(all_rs) - ch.get_max_resources()
         if overage <= 0:
             return

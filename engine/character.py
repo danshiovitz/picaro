@@ -28,7 +28,7 @@ from .snapshot import (
     Encounter as snapshot_Encounter,
     TableauCard as snapshot_TableauCard,
 )
-from .storage import ObjectStorageBase
+from .storage import ObjectStorageBase, ReadOnlyWrapper
 from .types import (
     Action,
     Choices,
@@ -77,7 +77,7 @@ class TravelCard:
     value: int = 0
 
 
-class Character:
+class Character(ReadOnlyWrapper):
     @classmethod
     def create(cls, name: str, player_id: int, job_name: str, location: str) -> None:
         data = CharacterData(
@@ -102,12 +102,11 @@ class Character:
             turn_flags=set(),
         )
 
-        ch = Character(name)
-        ch.data = data
-        data.health = ch._get_max_health()
-        data.speed = ch._get_init_speed()
-        data.remaining_turns = ch._get_init_turns()
-        data.luck = ch._get_max_luck()
+        ch = Character(data)
+        data.health = ch.get_max_health()
+        data.speed = ch.get_init_speed()
+        data.remaining_turns = ch.get_init_turns()
+        data.luck = ch.get_max_luck()
         CharacterStorage.create(data)
 
         board = load_board()
@@ -116,71 +115,46 @@ class Character:
         )
 
     @classmethod
-    def load(cls, character_name: str) -> "Character":
-        return Character(character_name)
-
-    def __init__(self, name: str) -> None:
-        self.name = name
-
-    def __enter__(self) -> "Character":
-        self.data = CharacterStorage.load_by_name(self.name)
-        return self
-
-    def __exit__(self, *exc: Any) -> None:
-        CharacterStorage.update(self.data)
-
-    def has_encounters(self) -> bool:
-        return self.data.encounters
+    def load(cls, character_name: str) -> "CharacterContext":
+        return CharacterContext(character_name)
 
     def check_set_flag(self, flag: TurnFlags) -> bool:
-        prev = flag in self.data.turn_flags
-        self.data.turn_flags.add(flag)
+        prev = flag in self._data.turn_flags
+        self._data.turn_flags.add(flag)
         return not prev
 
     def acted_this_turn(self) -> None:
-        return TurnFlags.ACTED in self.data.turn_flags
-
-    def get_speed(self) -> int:
-        return self.data.speed
-
-    def get_reputation(self) -> int:
-        return self.data.reputation
-
-    def get_resources(self) -> Dict[str, int]:
-        return self.data.resources.copy()
-
-    def get_max_resources(self) -> int:
-        return self._get_max_resources()
+        return TurnFlags.ACTED in self._data.turn_flags
 
     def get_snapshot(self) -> snapshot_Character:
         all_skills = load_skills()
         board = load_board()
         location = board.get_token_location(self.name)
-        routes = board.best_routes(location, [c.location for c in self.data.tableau])
+        routes = board.best_routes(location, [c.location for c in self._data.tableau])
         return snapshot_Character(
-            name=self.data.name,
-            player_id=self.data.player_id,
-            skills={sk: self._get_skill_rank(sk) for sk in all_skills},
-            skill_xp={sk: self.data.skill_xp.get(sk, 0) for sk in all_skills},
-            job=self.data.job_name,
-            health=self.data.health,
-            max_health=self._get_max_health(),
-            coins=self.data.coins,
-            resources=self.data.resources,
-            max_resources=self._get_max_resources(),
-            reputation=self.data.reputation,
-            quest=self.data.quest,
+            name=self._data.name,
+            player_id=self._data.player_id,
+            skills={sk: self.get_skill_rank(sk) for sk in all_skills},
+            skill_xp={sk: self._data.skill_xp.get(sk, 0) for sk in all_skills},
+            job=self._data.job_name,
+            health=self._data.health,
+            max_health=self.get_max_health(),
+            coins=self._data.coins,
+            resources=self._data.resources,
+            max_resources=self.get_max_resources(),
+            reputation=self._data.reputation,
+            quest=self._data.quest,
             location=location,
-            remaining_turns=self.data.remaining_turns,
+            remaining_turns=self._data.remaining_turns,
             acted_this_turn=self.acted_this_turn(),
-            luck=self.data.luck,
-            speed=self.data.speed,
-            max_speed=self._get_init_speed(),
+            luck=self._data.luck,
+            speed=self._data.speed,
+            max_speed=self.get_init_speed(),
             tableau=tuple(
-                self._tableau_snapshot(c, routes[c.location]) for c in self.data.tableau
+                self._tableau_snapshot(c, routes[c.location]) for c in self._data.tableau
             ),
-            encounters=tuple(self._encounter_snapshot(e) for e in self.data.encounters),
-            emblems=tuple(self.data.emblems),
+            encounters=tuple(self._encounter_snapshot(e) for e in self._data.encounters),
+            emblems=tuple(self._data.emblems),
         )
 
     def _tableau_snapshot(
@@ -210,7 +184,7 @@ class Character:
     def queue_tableau_card(self, card_id: str) -> None:
         card = self._remove_tableau_card(card_id)
         board = load_board()
-        location = board.get_token_location(self.data.name)
+        location = board.get_token_location(self._data.name)
         if card.location != location:
             raise IllegalMoveException(
                 f"You must be in hex {card.location} for that encounter."
@@ -229,81 +203,81 @@ class Character:
         self._queue_encounter(card, context_type=EncounterContextType.CAMP)
 
     def queue_travel_card(self, location) -> None:
-        if TurnFlags.HAD_TRAVEL_ENCOUNTER not in self.data.turn_flags:
+        if TurnFlags.HAD_TRAVEL_ENCOUNTER not in self._data.turn_flags:
             card = self._draw_travel_card(location)
             if card:
                 self._queue_encounter(card, context_type=EncounterContextType.TRAVEL)
-                self.data.turn_flags.add(TurnFlags.HAD_TRAVEL_ENCOUNTER)
+                self._data.turn_flags.add(TurnFlags.HAD_TRAVEL_ENCOUNTER)
 
     def step(self, location: str, events: List[Event]) -> None:
-        if self.data.speed < 1:
+        if self._data.speed < 1:
             raise IllegalMoveException(f"You don't have enough speed.")
 
         # moving and decreasing speed are normal effects, so we don't report them
         # in events (this might be wrong, especially if we eventually want events
         # to be a true undo log, but it makes the client easier for now)
-        self.data.speed -= 1
+        self._data.speed -= 1
         board = load_board()
         board.move_token(
-            self.data.name, location, adjacent=True, comments=["Travel"], events=[]
+            self._data.name, location, adjacent=True, comments=["Travel"], events=[]
         )
 
     def refill_tableau(self) -> None:
-        job = load_job(self.data.job_name)
-        while len(self.data.tableau) < self._get_max_tableau_size():
-            if not self.data.job_deck:
+        job = load_job(self._data.job_name)
+        while len(self._data.tableau) < self.get_max_tableau_size():
+            if not self._data.job_deck:
                 additional: List[TemplateCard] = []
-                self.data.job_deck = job.make_deck(additional=additional)
-            card = self.data.job_deck.pop(0)
+                self._data.job_deck = job.make_deck(additional=additional)
+            card = self._data.job_deck.pop(0)
             dst = random.choice(job.encounter_distances)
             board = load_board()
             location = random.choice(
-                board.find_hexes_near_token(self.data.name, dst, dst)
+                board.find_hexes_near_token(self._data.name, dst, dst)
             )
 
-            self.data.tableau.append(
-                TableauCard(card=card, location=location, age=self._get_init_card_age())
+            self._data.tableau.append(
+                TableauCard(card=card, location=location, age=self.get_init_card_age())
             )
 
     def pop_encounter(self) -> Encounter:
-        if not self.data.encounters:
+        if not self._data.encounters:
             raise BadStateException("There is no active encounter.")
 
-        return self.data.encounters.pop(0)
+        return self._data.encounters.pop(0)
 
     def turn_reset(self) -> None:
         # these are all expected, so not reporting them in events
-        self.data.remaining_turns -= 1
-        self.data.turn_flags.clear()
-        self.data.speed = self._get_init_speed()
+        self._data.remaining_turns -= 1
+        self._data.turn_flags.clear()
+        self._data.speed = self.get_init_speed()
 
     def age_tableau(self, near: Set[str]) -> None:
         def is_valid(card: TableauCard) -> bool:
             return card.age > 1 and card.location in near
 
-        self.data.tableau = [
+        self._data.tableau = [
             dataclasses.replace(c, age=c.age - 1)
-            for c in self.data.tableau
+            for c in self._data.tableau
             if is_valid(c)
         ]
 
-    def _get_init_turns(self) -> int:
+    def get_init_turns(self) -> int:
         return clamp(20 + self._calc_hook(HookType.INIT_TURNS), min=10, max=40)
 
-    def _get_max_luck(self) -> int:
+    def get_max_luck(self) -> int:
         return clamp(5 + self._calc_hook(HookType.MAX_LUCK), min=0)
 
-    def _get_max_tableau_size(self) -> int:
+    def get_max_tableau_size(self) -> int:
         return clamp(3 + self._calc_hook(HookType.MAX_TABLEAU_SIZE), min=1)
 
-    def _get_init_card_age(self) -> int:
+    def get_init_card_age(self) -> int:
         return clamp(3 + self._calc_hook(HookType.INIT_CARD_AGE), min=1)
 
-    def _get_max_health(self) -> int:
+    def get_max_health(self) -> int:
         return clamp(20 + self._calc_hook(HookType.MAX_HEALTH), min=1)
 
-    def _get_max_resources(self) -> int:
-        job = load_job(self.data.job_name)
+    def get_max_resources(self) -> int:
+        job = load_job(self._data.job_name)
         if job.type == JobType.LACKEY:
             base_limit = 1
         elif job.type == JobType.SOLO:
@@ -316,9 +290,9 @@ class Character:
             raise Exception(f"Unknown job type: {job.type}")
         return clamp(base_limit + self._calc_hook(HookType.MAX_RESOURCES), min=0)
 
-    def _get_skill_rank(self, skill_name: str) -> int:
+    def get_skill_rank(self, skill_name: str) -> int:
         # 20 xp for rank 1, 30 xp for rank 5, 25 xp for all others
-        xp = self.data.skill_xp.get(skill_name, 0)
+        xp = self._data.skill_xp.get(skill_name, 0)
         if xp < 20:
             base_rank = 0
         elif 20 <= xp < 45:
@@ -335,8 +309,8 @@ class Character:
             base_rank + self._calc_hook(HookType.SKILL_RANK, skill_name), min=0, max=6
         )
 
-    def _get_init_speed(self) -> int:
-        job = load_job(self.data.job_name)
+    def get_init_speed(self) -> int:
+        job = load_job(self._data.job_name)
         if job.type == JobType.LACKEY:
             return 0
 
@@ -354,7 +328,7 @@ class Character:
         self, hook_name: HookType, hook_subtype: Optional[str] = None
     ) -> int:
         tot = 0
-        for emblem in self.data.emblems:
+        for emblem in self._data.emblems:
             for feat in emblem.feats:
                 if feat.hook == hook_name:
                     subtype_match = (
@@ -369,28 +343,29 @@ class Character:
     def _remove_tableau_card(self, card_id: str) -> TableauCard:
         idx = [
             i
-            for i in range(len(self.data.tableau))
-            if self.data.tableau[i].card.id == card_id
+            for i in range(len(self._data.tableau))
+            if self._data.tableau[i].card.id == card_id
         ]
         if not idx:
             raise BadStateException(f"No such encounter card found ({card_id})")
-        return self.data.tableau.pop(idx[0])
+        return self._data.tableau.pop(idx[0])
 
     def _queue_encounter(
         self, card: FullCard, context_type: EncounterContextType
     ) -> None:
         rolls = []
         for chk in card.checks:
-            bonus = self._get_skill_rank(chk.skill)
-            roll_min = 0 + self._calc_hook(HookType.RELIABLE_SKILL, chk.skill)
-            roll_val = clamp(random.randint(1, 8), min=roll_min, max=None)
+            bonus = self.get_skill_rank(chk.skill)
+            roll_val = random.randint(1, 8)
+            if roll_val <= self._calc_hook(HookType.RELIABLE_SKILL, chk.skill):
+                roll_val = random.randint(1, 8)
             rolls.append(roll_val + bonus)
         if card.choices and card.choices.is_random:
             rolls.extend(
                 random.randint(1, len(card.choices.choice_list))
                 for _ in range(card.choices.max_choices)
             )
-        self.data.encounters.append(
+        self._data.encounters.append(
             Encounter(
                 card=card,
                 rolls=rolls,
@@ -457,10 +432,10 @@ class Character:
         self._queue_template(assign_template, context_type=EncounterContextType.SYSTEM)
 
     def _draw_travel_card(self, location: str) -> Optional[FullCard]:
-        if not self.data.travel_deck:
-            self.data.travel_deck = self._make_travel_deck()
+        if not self._data.travel_deck:
+            self._data.travel_deck = self._make_travel_deck()
 
-        card = self.data.travel_deck.pop(0)
+        card = self._data.travel_deck.pop(0)
         if card.type == TravelCardType.NOTHING:
             return None
         elif card.type == TravelCardType.DANGER:
@@ -521,19 +496,19 @@ class Character:
         return cards
 
     def _draw_camp_card(self) -> FullCard:
-        if not self.data.camp_deck:
+        if not self._data.camp_deck:
             template_deck = load_deck("Camp")
             additional: List[TemplateCard] = []
             job = load_job(self.job_name)
-            self.data.camp_deck = template_deck.actualize(
+            self._data.camp_deck = template_deck.actualize(
                 job.rank + 1, EncounterContextType.CAMP, additional
             )
 
-        return self.data.camp_deck.pop(0)
+        return self._data.camp_deck.pop(0)
 
     def _job_check(self, modifier: int) -> Tuple[str, Optional[str], bool]:
         target_number = 4 - modifier
-        bonus = self.data.reputation // 4
+        bonus = self._data.reputation // 4
         roll = random.randint(1, 8) + bonus
         jobs = load_jobs()
         next_job: Optional[str] = None
@@ -542,7 +517,7 @@ class Character:
             bad_jobs = [j for j in jobs if j.rank == 0]
             next_job = (random.choice(bad_jobs)).name
         elif roll < target_number:
-            lower_jobs = [j for j in jobs if self.data.job_name in j.promotions]
+            lower_jobs = [j for j in jobs if self._data.job_name in j.promotions]
             if lower_jobs:
                 next_job = (random.choice(lower_jobs)).name
             else:
@@ -551,7 +526,7 @@ class Character:
         elif roll < target_number + 4:
             next_job = None
         else:
-            cur_job = [j for j in jobs if j.name == self.data.job_name][0]
+            cur_job = [j for j in jobs if j.name == self._data.job_name][0]
             promo_jobs = [j for j in jobs if j.name in cur_job.promotions]
             if promo_jobs:
                 next_job = (random.choice(promo_jobs)).name
@@ -564,7 +539,7 @@ class Character:
     def calc_effects(
         self, encounter: Encounter, actions: EncounterActions
     ) -> List[Effect]:
-        self._validate_actions(encounter, actions)
+        rolls = self._replay_actions(encounter, actions)
         if actions.flee:
             return []
 
@@ -575,7 +550,7 @@ class Character:
             failures = 0
 
             for idx, check in enumerate(encounter.card.checks):
-                if encounter.rolls[idx] >= check.target_number:
+                if rolls[idx] >= check.target_number:
                     ocs[check.reward] += 1
                 else:
                     ocs[check.penalty] += 1
@@ -646,13 +621,14 @@ class Character:
         return ret
 
     # note this does update luck as well as validating stuff
-    def _validate_actions(
+    def _replay_actions(
         self, encounter: Encounter, actions: EncounterActions
-    ) -> None:
+    ) -> List[int]:
+        rolls = list(encounter.rolls[:])
+
         if encounter.card.checks:
             # validate the actions by rerunning them
-            luck = self.data.luck
-            rolls = list(encounter.rolls[:])
+            luck = self._data.luck
 
             for adj in actions.adjusts or []:
                 if luck <= 0:
@@ -675,7 +651,7 @@ class Character:
             if (luck, rolls) != (actions.luck, actions.rolls):
                 raise BadStateException("Computed luck/rolls doesn't match?")
 
-            self.data.luck = luck
+            self._data.luck = luck
 
         if encounter.card.choices:
             choices = encounter.card.choices
@@ -697,6 +673,8 @@ class Character:
         elif actions.choices:
             raise BadStateException("Choices not allowed here.")
 
+        return rolls
+
     def apply_effects(
         self,
         effects: List[Effect],
@@ -715,10 +693,10 @@ class Character:
         def simple(
             name: str, effect_type: EffectType, max_val: Optional[int] = None
         ) -> UpdateHolder:
-            get_f = lambda: getattr(self.data, name)
+            get_f = lambda: getattr(self._data, name)
 
             def set_f(old_val, new_val, comments) -> None:
-                setattr(self.data, name, new_val)
+                setattr(self._data, name, new_val)
                 events.append(
                     Event.for_character(
                         self.name, effect_type, None, old_val, new_val, comments
@@ -739,7 +717,7 @@ class Character:
             return holder
 
         def dict_holder(name: str, effect_type: EffectType) -> Dict[str, UpdateHolder]:
-            char_self = self.data
+            char_self = self._data
 
             class HolderDict(dict):
                 def __missing__(self, subtype):
@@ -793,12 +771,12 @@ class Character:
         action_holder = const_val(
             "action_flag",
             EffectType.MODIFY_ACTION,
-            0 if TurnFlags.ACTED in self.data.turn_flags else 1,
+            0 if TurnFlags.ACTED in self._data.turn_flags else 1,
         )
         coins_holder = simple("coins", EffectType.MODIFY_COINS)
         reputation_holder = simple("reputation", EffectType.MODIFY_REPUTATION)
         health_holder = simple(
-            "health", EffectType.MODIFY_HEALTH, max_val=self._get_max_health()
+            "health", EffectType.MODIFY_HEALTH, max_val=self.get_max_health()
         )
         quest_holder = simple("quest", EffectType.MODIFY_QUEST)
         turn_holder = simple("remaining_turns", EffectType.MODIFY_TURNS)
@@ -814,21 +792,21 @@ class Character:
         for eff in effects_split.pop((EffectType.ADD_EMBLEM, False), []):
             old_idxs = [
                 idx
-                for idx in range(len(self.data.emblems))
-                if self.data.emblems[idx].name == eff.value.name
+                for idx in range(len(self._data.emblems))
+                if self._data.emblems[idx].name == eff.value.name
             ]
             if old_idxs:
-                old_emblem = self.data.emblems.pop(old_idxs[0])
+                old_emblem = self._data.emblems.pop(old_idxs[0])
                 new_emblem = Emblem(
                     name=eff.value.name, feats=old_emblem.feats + eff.value.feats
                 )
             else:
                 old_emblem = None
                 new_emblem = eff.value
-            self.data.emblems.append(new_emblem)
+            self._data.emblems.append(new_emblem)
             events.append(
                 Event.for_character(
-                    self.data.name,
+                    self._data.name,
                     EffectType.ADD_EMBLEM,
                     None,
                     old_emblem,
@@ -840,10 +818,10 @@ class Character:
         if job_val_holder.get_cur_value() != 0:
             job_msg, new_job, is_promo = self._job_check(job_val_holder.get_cur_value())
             if new_job:
-                old_job = self.data.job_name
-                self.data.job_name = new_job
-                self.data.tableau = []
-                self.data.job_deck = []
+                old_job = self._data.job_name
+                self._data.job_name = new_job
+                self._data.tableau = []
+                self._data.job_deck = []
                 self._refill_tableau()
                 # blow away earlier rep mods:
                 reputation_holder.set_to(3, "set to 3 for job switch")
@@ -859,7 +837,7 @@ class Character:
                     )
                 events.append(
                     Event.for_character(
-                        self.data.name,
+                        self._data.name,
                         EffectType.MODIFY_JOB,
                         None,
                         old_job,
@@ -875,7 +853,7 @@ class Character:
         draw_cnt = resource_draw_holder.get_cur_value()
         if draw_cnt < 0:
             cur_rs = [
-                nm for rs, cnt in self.data.resources.items() for nm in [rs] * cnt
+                nm for rs, cnt in self._data.resources.items() for nm in [rs] * cnt
             ]
             to_rm = (
                 random.sample(cur_rs, draw_cnt * -1)
@@ -903,9 +881,9 @@ class Character:
 
         action_cnt = action_holder.get_cur_value()
         if action_cnt <= 0:
-            self.data.turn_flags.add(TurnFlags.ACTED)
+            self._data.turn_flags.add(TurnFlags.ACTED)
         else:
-            self.data.turn_flags.discard(TurnFlags.ACTED)
+            self._data.turn_flags.discard(TurnFlags.ACTED)
 
         free_xp = free_xp_holder.get_cur_value()
         if free_xp > 0:
@@ -947,6 +925,18 @@ class Character:
         quest_holder.write(events)
         turn_holder.write(events)
         speed_holder.write(events)
+
+
+class CharacterContext:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def __enter__(self) -> "Character":
+        self._data = CharacterStorage.load_by_name(self.name)
+        return Character(self._data)
+
+    def __exit__(self, *exc: Any) -> None:
+        CharacterStorage.update(self._data)
 
 
 # This class is not frozen, and also not exposed externally - it needs to be loaded every time
