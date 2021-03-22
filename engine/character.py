@@ -151,9 +151,12 @@ class Character(ReadOnlyWrapper):
             speed=self._data.speed,
             max_speed=self.get_init_speed(),
             tableau=tuple(
-                self._tableau_snapshot(c, routes[c.location]) for c in self._data.tableau
+                self._tableau_snapshot(c, routes[c.location])
+                for c in self._data.tableau
             ),
-            encounters=tuple(self._encounter_snapshot(e) for e in self._data.encounters),
+            encounters=tuple(
+                self._encounter_snapshot(e) for e in self._data.encounters
+            ),
             emblems=tuple(self._data.emblems),
         )
 
@@ -954,7 +957,7 @@ class CharacterData:
     quest: int
     remaining_turns: int
     luck: int
-    emblems: Sequence[Emblem]
+    emblems: List[Emblem]
     tableau: List[TableauCard]
     encounters: List[Encounter]
     job_deck: List[FullCard]

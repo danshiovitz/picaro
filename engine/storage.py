@@ -8,6 +8,7 @@ from dataclasses import dataclass, fields as dataclass_fields
 from enum import Enum
 from pathlib import Path
 from sqlite3 import Connection, Row, connect
+from types import MappingProxyType
 from typing import (
     Any,
     Callable,
@@ -387,6 +388,9 @@ class ObjectStorageBase(StorageBase[T]):
             if fname in cls.SUBTABLES:
                 ret[fname] = fval
             else:
+                if ftype == Any:
+                    indicator = val_type.type_field()
+                    ftype = val_type.any_type(getattr(val, indicator))
                 ret[fname] = cls._serialize_val(ftype, fval)
         return ret
 
@@ -428,7 +432,7 @@ class ReadOnlyWrapper:
             ut = self._fields[name].type
             cls_base = getattr(ut, "__origin__", ut)
             if issubclass(cls_base, Dict):
-                return val.copy()
+                return MappingProxyType(val)
             elif cls_base not in (str, tuple) and issubclass(cls_base, Iterable):
                 return tuple(val)
             else:

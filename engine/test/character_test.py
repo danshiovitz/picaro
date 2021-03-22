@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 from picaro.engine.board import ActiveBoard
 from picaro.engine.character import Character
 from picaro.engine.job import Job
+from picaro.engine.storage import ConnectionManager, with_connection
 from picaro.engine.types import (
     Effect,
     EffectType,
@@ -24,10 +25,24 @@ from picaro.engine.types import (
 
 class CharacterTest(TestCase):
     def setUp(self):
-        patcher = patch("picaro.engine.character.load_job")
-        self.load_job_mock = patcher.start()
-        self.addCleanup(patcher.stop)
+        job_patcher = patch("picaro.engine.character.load_job")
+        self.load_job_mock = job_patcher.start()
+        self.addCleanup(job_patcher.stop)
         self.load_job_mock.return_value = self._make_job()
+        board_patcher = patch("picaro.engine.character.load_board")
+        self.load_board_mock = board_patcher.start()
+        self.addCleanup(board_patcher.stop)
+
+        ConnectionManager.initialize(db_path=None)
+        self.session_ctx = ConnectionManager(player_id=100, game_id=1)
+        self.session_ctx.__enter__()
+
+        def session_cleanup():
+            self.session_ctx.__exit__(None, None, None)
+            self.session_ctx = None
+            ConnectionManager.MEMORY_CONNECTION_HANDLE = None
+
+        self.addCleanup(session_cleanup)
 
     def test_get_skill_rank(self) -> None:
         ch = self._make_ch()
@@ -63,59 +78,64 @@ class CharacterTest(TestCase):
             (135, 5),
         ]
         for xp, rank in xp_rank:
-            ch.skill_xp["Foo"] = xp
+            ch._data.skill_xp["Foo"] = xp
             self.assertEqual(
                 ch.get_skill_rank("Foo"), rank, f"Expected rank={rank} for xp={xp}"
             )
 
-        ch.skill_xp["Foo"] = 70
+        ch._data.skill_xp["Foo"] = 70
         emblem = Emblem(
             name="Foo Boost",
             feats=[Feat(hook=HookType.SKILL_RANK, subtype="Foo", value=2)],
         )
-        ch.emblems.append(emblem)
+        ch._data.emblems.append(emblem)
         self.assertEqual(ch.get_skill_rank("Foo"), 5)
         emblem = Emblem(
             name="Generic Boost",
             feats=[Feat(hook=HookType.SKILL_RANK, subtype=None, value=2)],
         )
-        ch.emblems.append(emblem)
+        ch._data.emblems.append(emblem)
         self.assertEqual(ch.get_skill_rank("Foo"), 6)  # capped at 6
 
     def test_apply_effect_gain_coins(self) -> None:
         ch = self._make_ch()
-        board = self._make_board()
-        ch.coins = 3
+        ch._data.coins = 3
 
         effects = [Effect(type=EffectType.MODIFY_COINS, value=1)]
-        outcome = ch.apply_effects(effects, EncounterContextType.JOB, board)
+        events = []
+        outcome = ch.apply_effects(effects, EncounterContextType.JOB, events)
         self.assertEqual(ch.coins, 4)
-        assert outcome.coins is not None
-        self.assertEqual(outcome.coins.old_val, 3)
-        self.assertEqual(outcome.coins.new_val, 4)
+        ec = [e for e in events if e.type == EffectType.MODIFY_COINS]
+        self.assertEqual(len(ec), 1)
+        self.assertEqual(ec[0].old_value, 3)
+        self.assertEqual(ec[0].new_value, 4)
 
         effects = [
             Effect(type=EffectType.MODIFY_COINS, value=6),
             Effect(type=EffectType.MODIFY_COINS, value=4),
         ]
-        outcome = ch.apply_effects(effects, EncounterContextType.JOB, board)
+        events = []
+        outcome = ch.apply_effects(effects, EncounterContextType.JOB, events)
         self.assertEqual(ch.coins, 14)
-        assert outcome.coins is not None
-        self.assertEqual(outcome.coins.old_val, 4)
-        self.assertEqual(outcome.coins.new_val, 14)
+        ec = [e for e in events if e.type == EffectType.MODIFY_COINS]
+        self.assertEqual(len(ec), 1)
+        self.assertEqual(ec[0].old_value, 4)
+        self.assertEqual(ec[0].new_value, 14)
 
     def test_apply_effect_gain_xp(self) -> None:
         ch = self._make_ch()
-        board = self._make_board()
 
         effects = [
             Effect(type=EffectType.MODIFY_XP, subtype="Fishing", value=3),
             Effect(type=EffectType.MODIFY_XP, subtype="Fishing", value=1),
         ]
-        outcome = ch.apply_effects(effects, EncounterContextType.JOB, board)
-        self.assertEqual(ch.skill_xp["Fishing"], 4)
-        self.assertEqual(outcome.xp["Fishing"].old_val, 0)
-        self.assertEqual(outcome.xp["Fishing"].new_val, 4)
+        events = []
+        outcome = ch.apply_effects(effects, EncounterContextType.JOB, events)
+        ec = [e for e in events if e.type == EffectType.MODIFY_XP]
+        self.assertEqual(len(ec), 1)
+        self.assertEqual(ec[0].subtype, "Fishing")
+        self.assertEqual(ec[0].old_value, 0)
+        self.assertEqual(ec[0].new_value, 4)
 
     def test_speed_hook(self) -> None:
         ch = self._make_ch()
@@ -126,32 +146,33 @@ class CharacterTest(TestCase):
             name="Speed Boost",
             feats=[Feat(hook=HookType.INIT_SPEED, subtype=None, value=2)],
         )
-        ch.emblems.append(emblem)
+        ch._data.emblems.append(emblem)
         self.assertEqual(ch.get_init_speed(), 5)
 
         emblem = Emblem(
             name="Speed Penalty",
             feats=[Feat(hook=HookType.INIT_SPEED, subtype=None, value=-4)],
         )
-        ch.emblems.append(emblem)
+        ch._data.emblems.append(emblem)
         self.assertEqual(ch.get_init_speed(), 1)
 
         emblem = Emblem(
             name="Speed Penalty",
             feats=[Feat(hook=HookType.INIT_SPEED, subtype=None, value=-3)],
         )
-        ch.emblems.append(emblem)
+        ch._data.emblems.append(emblem)
         self.assertEqual(ch.get_init_speed(), 0)
 
-        ch.emblems.pop()
-        ch.emblems.pop()
+        ch._data.emblems.pop()
+        ch._data.emblems.pop()
         self.assertEqual(ch.get_init_speed(), 5)
 
         self.load_job_mock.return_value = self._make_job(type=JobType.LACKEY)
         self.assertEqual(ch.get_init_speed(), 0)
 
     def _make_ch(self) -> Character:
-        return Character.create(name="Test", player_id=100, job_name="Tester")
+        Character.create(name="Test", player_id=100, job_name="Tester", location="AA11")
+        return Character.load("Test").__enter__()
 
     def _make_board(self) -> ActiveBoard:
         return cast(ActiveBoard, Mock(spec=ActiveBoard))

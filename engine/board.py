@@ -149,11 +149,25 @@ class ActiveBoard:
         token = TokenStorage.load_by_name(token_name)
         if token.location == self.NOWHERE:
             return []
-        center_hex = HexStorage.load_by_name(token.location)
+        return find_hexes_near_hex(token.location, min_distance, max_distance)
+
+    def find_hexes_near_hex(
+        self, hex_name: str, min_distance: int, max_distance: int
+    ) -> List[str]:
+        center_hex = HexStorage.load_by_name(hex_name)
         nearby = HexStorage.load_by_distance(
             center_hex.x, center_hex.y, center_hex.z, min_distance, max_distance
         )
         return [hx.name for hx in nearby]
+
+    def random_hex_near_hex(
+        self, hex_name: str, min_distance: int, max_distance: int
+    ) -> str:
+        center_hex = HexStorage.load_by_name(hex_name)
+        nearby = HexStorage.load_by_distance(
+            center_hex.x, center_hex.y, center_hex.z, min_distance, max_distance
+        )
+        return random.choice([hx.name for hx in nearby])
 
     def best_routes(
         self,
@@ -262,6 +276,13 @@ class ActiveBoard:
         for _ in range((len(cards) // 10) + 1):
             cards.pop()
         return cards
+
+    def get_base_resources(self) -> List[str]:
+        countries = CountryStorage.load()
+        resources = set()
+        for c in countries:
+            resources |= set(c.resources)
+        return list(resources)
 
     def generate_map(self) -> None:
         all_hexes = HexStorage.load()

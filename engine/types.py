@@ -221,6 +221,7 @@ class EntityType(Enum):
     HEX = enum_auto()
     TOKEN = enum_auto()
     CHARACTER = enum_auto()
+    PROJECT = enum_auto()
 
 
 @dataclass(frozen=True)
@@ -289,6 +290,20 @@ class Event(Generic[T]):
     ) -> "Event":
         return Event[T](
             cls.make_id(), EntityType.CHARACTER, name, type, subtype, old, new, comments
+        )
+
+    @classmethod
+    def for_project(
+        cls,
+        name: str,
+        type: EffectType,
+        subtype: Optional[str],
+        old: T,
+        new: T,
+        comments: List[str],
+    ) -> "Event":
+        return Event[T](
+            cls.make_id(), EntityType.PROJECT, name, type, subtype, old, new, comments
         )
 
     @classmethod

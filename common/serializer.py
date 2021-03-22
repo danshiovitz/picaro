@@ -47,7 +47,7 @@ def recursive_to_dict(val: T, cls: Type[T] = type(None)) -> Any:
             # hack, assumes this dataclass is templated on a single variable only
             if isinstance(ut, TypeVar):
                 ut = cls.__args__[0]
-            if ut is Any:
+            if ut == Any:
                 indicator = cls_base.type_field()
                 ut = cls_base.any_type(getattr(val, indicator))
             ret[field.name] = recursive_to_dict(subv, ut)
@@ -87,6 +87,8 @@ def recursive_from_dict(val: Any, cls: Type[T], frozen: Optional[bool] = None) -
             raise
 
     if is_dataclass(cls_base):
+        if type(val) == str:
+            val = logged_load(val)
         if frozen is None:
             frozen = cls_base.__dataclass_params__.frozen
         dt = {}
@@ -105,7 +107,7 @@ def recursive_from_dict(val: Any, cls: Type[T], frozen: Optional[bool] = None) -
             # hack, assumes this dataclass is templated on a single variable only
             if isinstance(ut, TypeVar):
                 ut = cls.__args__[0]
-            if ut is Any:
+            if ut == Any:
                 indicator = cls_base.type_field()
                 ut = cls_base.any_type(val[indicator])
             if field.name not in val and not isinstance(field.default, _MISSING_TYPE):

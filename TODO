@@ -1,5 +1,13 @@
 - Add one time password / session cookie stuff
 - projects
+  - display projects in client
+  - project and stage ownership?
+  - some notion of project & stage difficulty
+  - stage groups
+  - "project" reward type and modify_project_xp effect type
+  - some notion of "the project, if any, associated with this encounter card" (to make challenge stages work)
+  - wire in the stage hooks to character actions
+  - character-based requirements to start stages
 - events + actions
 - regional, country, and arch villains, and their moves
 - proposals/adjustments/whatever
