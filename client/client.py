@@ -50,8 +50,15 @@ from picaro.server.api_types import (
     JobRequest,
     JobResponse,
     Outcome,
+    ProjectStageStatus,
+    ProjectStageType,
     ResolveEncounterRequest,
     ResolveEncounterResponse,
+    ReturnProjectStageRequest,
+    ReturnProjectStageResponse,
+    SearchProjectsResponse,
+    StartProjectStageRequest,
+    StartProjectStageResponse,
     TableauCard,
     Token,
     TokenActionRequest,
@@ -105,6 +112,13 @@ class Client:
         get_character_parser.set_defaults(cmd=lambda cli: cli.get_character())
         get_character_parser.add_argument("name", type=str)
         get_character_parser.add_argument("--all", action="store_true")
+
+        get_projects_parser = subparsers.add_parser("projects")
+        get_projects_parser.set_defaults(cmd=lambda cli: cli.get_projects())
+        get_projects_parser.add_argument("name", type=str)
+        get_projects_parser.add_argument("--all", action="store_true")
+        get_projects_parser.add_argument("--start", action="store_true")
+        get_projects_parser.add_argument("--do_return", "--return", action="store_true")
 
         play_parser = subparsers.add_parser("play")
         play_parser.set_defaults(cmd=lambda cli: cli.play())
@@ -284,6 +298,111 @@ class Client:
         if feat.subtype:
             name = feat.subtype + " " + name
         return f"{feat.value:+} {name}"
+
+    def get_projects(self) -> None:
+        ch = self._get(f"/character/{self.args.name}", Character)
+
+        is_all = "?all=true" if self.args.all or self.args.start else ""
+        resp = self._get(f"/projects/{ch.name}{is_all}", SearchProjectsResponse)
+        projects = resp.projects
+        print(f"All Current Projects:" if is_all else "Your Current Projects:")
+        if not projects:
+            print("* None")
+            return
+
+        choices = []
+        for project in projects:
+            print(
+                f"* {project.name} ({project.type}, {project.status.name}) @ {project.target_hex}"
+            )
+            print(f"  {project.desc}")
+            print(f"  Stages:")
+            stages = project.stages
+            if self.args.start:
+                stages = [
+                    s for s in stages if s.status == ProjectStageStatus.UNASSIGNED
+                ]
+            elif self.args.do_return:
+                stages = [
+                    s for s in stages if s.status == ProjectStageStatus.IN_PROGRESS and ch.name in s.participants
+                ]
+
+            if not stages:
+                print("  * None")
+                print()
+                continue
+            for stage in stages:
+                if self.args.start or self.args.do_return:
+                    ltr = ascii_lowercase[len(choices)]
+                    choices.append((stage.project_name, stage.stage_num))
+                    print(
+                        f"  {ltr}. {stage.name} ({stage.type.name}) - {stage.xp}/{stage.max_xp}"
+                    )
+                else:
+                    print(
+                        f"  * {stage.name} ({stage.type.name}, {stage.status.name}) - {stage.xp}/{stage.max_xp} [{', '.join(stage.participants)}]"
+                    )
+                if stage.desc:
+                    print(f"    {stage.desc}")
+                if stage.type == ProjectStageType.CHALLENGE:
+                    print(
+                        f"    Skills: {', '.join(stage.extra.base_skills)}; Difficulty: {stage.extra.difficulty}"
+                    )
+                elif stage.type == ProjectStageType.RESOURCE:
+                    print(
+                        f"    Wanted: {', '.join(stage.extra.wanted_resources)}; Given: {stage.extra.given_resources}"
+                    )
+                elif stage.type == ProjectStageType.WAITING:
+                    print(f"    Turns Waited: {stage.extra.turns_waited}")
+                elif stage.type == ProjectStageType.DISCOVERY:
+                    print(
+                        f"    Possible Hexes: {', '.join(stage.extra.possible_hexes)}"
+                    )
+                else:
+                    print(f"    Unknown Stage Type: {stage.extra}")
+
+        if (self.args.start or self.args.do_return) and choices:
+            verb = "start" if self.args.start else "return"
+            while True:
+                print(f"Stage to {verb}? ", end="")
+                line = input().lower().strip()
+                if not line:
+                    continue
+
+                if line[0] == "q":
+                    print(f"[Not {verb}ing any stage]")
+                    return
+
+                c_idx = ascii_lowercase.index(line[0])
+                if c_idx >= len(choices):
+                    print("No such stage!")
+                    print()
+                    continue
+
+                try:
+                    if self.args.start:
+                        pargs = [
+                            f"/projects/{ch.name}/start",
+                            StartProjectStageRequest(*choices[c_idx]),
+                            StartProjectStageResponse,
+                        ]
+                    else:
+                        pargs = [
+                            f"/projects/{ch.name}/return",
+                            ReturnProjectStageRequest(*choices[c_idx]),
+                            ReturnProjectStageResponse,
+                        ]
+
+                    resp = self._post(*pargs)
+                    if resp.outcome.events:
+                        self._display_outcome(ch, resp.outcome)
+                        print("[Hit return]")
+                        input()
+                    return
+                except IllegalMoveException as e:
+                    print(e)
+                    print()
+                    continue
 
     def play(self) -> None:
         while True:
@@ -751,6 +870,22 @@ class Client:
                 else:
                     line = f"* {subj} has "
                 line += f"become a {event.new_value}"
+            elif event.type == EffectType.START_PROJECT_STAGE:
+                # in the event the project is the subject and the character is the
+                # object, but we want to display it the other way around
+                if event.new_value == ch.name:
+                    line = f"* You have "
+                else:
+                    line = f"* {event.new_value} has "
+                line += f"started the stage {event.entity_name}"
+            elif event.type == EffectType.RETURN_PROJECT_STAGE:
+                # in the event the project is the subject and the character is the
+                # object, but we want to display it the other way around
+                if event.new_value == ch.name:
+                    line = f"* You have "
+                else:
+                    line = f"* {event.new_value} has "
+                line += f"returned the stage {event.entity_name}"
             else:
                 line += f"UNKNOWN EVENT TYPE: {event}"
 

@@ -3,7 +3,6 @@ from collections import defaultdict
 from dataclasses import dataclass
 from functools import reduce
 from math import floor
-from string import ascii_uppercase
 from typing import Callable, Dict, List, Set, Tuple
 
 from picaro.common.hexmap.types import CubeCoordinate, OffsetCoordinate
@@ -116,10 +115,8 @@ def generate(
 
     def make_hex(coord: OffsetCoordinate) -> Hex:
         row, column = (coord.row, coord.column)
-        rn = ascii_uppercase[row // 26] + ascii_uppercase[row % 26]
-        nm = f"{rn}{column+1:02}"
         return Hex(
-            name=nm,
+            name=coord.get_name(),
             coordinate=coord,
             terrain=terrain[coord],
             country=random.choice(Countries),
@@ -165,12 +162,10 @@ def generate_from_mini(
 
     def make_hex(coord: OffsetCoordinate) -> Hex:
         row, column = (coord.row, coord.column)
-        rn = ascii_uppercase[row // 26] + ascii_uppercase[row % 26]
-        nm = f"{rn}{column+1:02}"
         if coord in cap_set:
-            country_data[country_map[coord]] = nm
+            country_data[country_map[coord]] = coord.get_name()
         return Hex(
-            name=nm,
+            name=coord.get_name(),
             coordinate=coord,
             terrain=terrain[coord],
             country=country_map[coord],

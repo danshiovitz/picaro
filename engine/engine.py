@@ -1,12 +1,17 @@
 import dataclasses
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import List, Optional, Sequence
 
 from .board import load_board
 from .character import Character, TurnFlags
 from .exceptions import BadStateException, IllegalMoveException
 from .game import create_game
-from .snapshot import Board as snapshot_Board, Character as snapshot_Character
+from .project import Project, ProjectStage
+from .snapshot import (
+    Board as snapshot_Board,
+    Character as snapshot_Character,
+    Project as snapshot_Project,
+)
 from .storage import ConnectionManager, with_connection
 from .types import (
     Action,
@@ -16,22 +21,6 @@ from .types import (
     Outcome,
     TemplateCard,
 )
-
-
-# 1) create game
-# 2) create character
-# x) start the season
-# x) finish the season
-# 5) do a job
-# 6) perform a token action
-# 7) travel to hex
-# 8) camp
-# 9) resolve encounter
-# 10) end the turn (early)
-# a) apply effects to character
-# b) when a job disruption occurs
-# c) when a character is promoted
-# d) when a turn finishes
 
 
 class Engine:
@@ -73,6 +62,73 @@ class Engine:
     ) -> snapshot_Character:
         with Character.load(character_name) as ch:
             return ch.get_snapshot()
+
+    @with_connection()
+    def get_projects(
+        self, include_all: bool, *, player_id: int, game_id: int, character_name: str
+    ) -> List[snapshot_Project]:
+        return Project.get_snapshots(character_name, include_all)
+
+    @with_connection()
+    def create_project(
+        self,
+        name: str,
+        project_type: str,
+        location: str,
+        *,
+        player_id: int,
+        game_id: int,
+        character_name: str,
+    ) -> None:
+        Project.create(name, project_type, location)
+        with Project.load(name) as proj:
+            from .types import ProjectStageType
+
+            proj.add_stage(ProjectStageType.WAITING)
+
+    @with_connection()
+    def start_project_stage(
+        self,
+        project_name: str,
+        stage_num: int,
+        *,
+        player_id: int,
+        game_id: int,
+        character_name: str,
+    ) -> Outcome:
+        with ProjectStage.load(project_name, stage_num) as stage:
+            with Character.load(character_name) as ch:
+                current = Project.get_snapshots(character_name, False)
+                cur_count = sum(len(p.stages) for p in current)
+                if cur_count >= ch.get_max_project_stages():
+                    raise IllegalMoveException(
+                        "You are already at your maximum number of open stages."
+                    )
+
+                # other requirements could be checked here
+
+                events: List[Event] = []
+                cost = [dataclasses.replace(ct, is_cost=True) for ct in stage.cost]
+                ch.apply_effects(cost, EncounterContextType.SYSTEM, events)
+
+                stage.start(ch.name, events)
+                return Outcome(events=events)
+
+    @with_connection()
+    def return_project_stage(
+        self,
+        project_name: str,
+        stage_num: int,
+        *,
+        player_id: int,
+        game_id: int,
+        character_name: str,
+    ) -> Outcome:
+        with ProjectStage.load(project_name, stage_num) as stage:
+            with Character.load(character_name) as ch:
+                events: List[Event] = []
+                stage.do_return(ch.name, events)
+                return Outcome(events=events)
 
     @with_connection()
     def do_job(
@@ -125,7 +181,7 @@ class Engine:
     @with_connection()
     def camp(self, player_id: int, game_id: int, character_name: str) -> Outcome:
         with Character.load(character_name) as ch:
-            self._basic_action_prep(consume_action=True)
+            self._basic_action_prep(ch, consume_action=True)
             ch.queue_camp_card()
             if ch.acted_this_turn() and not ch.encounters:
                 self._finish_turn(ch)

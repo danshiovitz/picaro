@@ -344,8 +344,9 @@
           "max_choices": 1,
           "is_random": false,
           "choice_list": [
-            [ {"type": "MODIFY_HEALTH", "value": 10, "subtype": null} ],
-            [ {"type": "DISRUPT_JOB", "value": 20, "subtype": null} ]
+            { "benefit": [ {"type": "MODIFY_HEALTH", "value": 10, "subtype": null} ] },
+            { "benefit": [ {"type": "MODIFY_COINS", "value": 10, "subtype": null} ] },
+            { "benefit": [ {"type": "DISRUPT_JOB", "value": 20, "subtype": null} ] }
           ]
         }
       }

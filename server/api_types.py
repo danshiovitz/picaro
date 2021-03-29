@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from picaro.common.hexmap.types import OffsetCoordinate
-from picaro.engine.snapshot import Board, Character, Encounter, Hex, Token
+from picaro.engine.snapshot import Board, Character, Encounter, Hex, Project, Token
 from picaro.engine.types import (
     Action,
     TableauCard,
@@ -18,6 +18,8 @@ from picaro.engine.types import (
     Feat,
     HookType,
     Outcome,
+    ProjectStageStatus,
+    ProjectStageType,
 )
 
 
@@ -25,6 +27,33 @@ from picaro.engine.types import (
 class Player:
     id: int
     name: str
+
+
+@dataclass(frozen=True)
+class SearchProjectsResponse:
+    projects: List[Project]
+
+
+@dataclass(frozen=True)
+class StartProjectStageRequest:
+    project_name: str
+    stage_num: int
+
+
+@dataclass(frozen=True)
+class StartProjectStageResponse:
+    outcome: Outcome
+
+
+@dataclass(frozen=True)
+class ReturnProjectStageRequest:
+    project_name: str
+    stage_num: int
+
+
+@dataclass(frozen=True)
+class ReturnProjectStageResponse:
+    outcome: Outcome
 
 
 @dataclass(frozen=True)

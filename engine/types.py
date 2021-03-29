@@ -58,7 +58,9 @@ class EffectType(Enum):
     # "complex" effects that trigger others
     DISRUPT_JOB = enum_auto()
     TRANSPORT = enum_auto()
-
+    # display-only effects (at least for now)
+    START_PROJECT_STAGE = enum_auto()
+    RETURN_PROJECT_STAGE = enum_auto()
 
 @dataclass(frozen=True)
 class Effect(Generic[T]):
@@ -217,17 +219,29 @@ class Country:
     resources: Sequence[str]
 
 
+class ProjectStageType(Enum):
+    CHALLENGE = enum_auto()
+    RESOURCE = enum_auto()
+    WAITING = enum_auto()
+    DISCOVERY = enum_auto()
+
+
+class ProjectStageStatus(Enum):
+    UNASSIGNED = enum_auto()
+    IN_PROGRESS = enum_auto()
+    FINISHED = enum_auto()
+
+
+class ProjectStatus(Enum):
+    IN_PROGRESS = enum_auto()
+    FINISHED = enum_auto()
+
+
 class EntityType(Enum):
     HEX = enum_auto()
     TOKEN = enum_auto()
     CHARACTER = enum_auto()
     PROJECT = enum_auto()
-
-
-@dataclass(frozen=True)
-class Values(Generic[T]):
-    old: T
-    new: T
 
 
 @dataclass(frozen=True)

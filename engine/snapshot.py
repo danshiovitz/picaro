@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 from picaro.common.hexmap.types import OffsetCoordinate
 from picaro.engine.types import (
@@ -10,6 +10,9 @@ from picaro.engine.types import (
     Effect,
     Emblem,
     EncounterCheck,
+    ProjectStageStatus,
+    ProjectStageType,
+    ProjectStatus,
 )
 
 
@@ -82,3 +85,71 @@ class Character:
     tableau: Sequence[TableauCard]
     encounters: Sequence[Encounter]
     emblems: Sequence[Emblem]
+
+
+@dataclass()
+class ProjectStage:
+    name: str
+    project_name: str
+    stage_num: int
+    desc: Optional[str]
+    type: ProjectStageType
+    participants: List[str]
+    status: ProjectStageStatus
+    xp: int
+    max_xp: int
+    extra: Any
+
+    @classmethod
+    def type_field(cls) -> str:
+        return "type"
+
+    @classmethod
+    def any_type(cls, type_val: Union[ProjectStageType, str]) -> type:
+        if type(type_val) is str:
+            type_val = ProjectStageType[type_val]
+
+        if type_val == ProjectStageType.CHALLENGE:
+            return ProjectStageChallenge
+        elif type_val == ProjectStageType.RESOURCE:
+            return ProjectStageResource
+        elif type_val == ProjectStageType.WAITING:
+            return ProjectStageWaiting
+        elif type_val == ProjectStageType.DISCOVERY:
+            return ProjectStageDiscovery
+        else:
+            raise Exception("Unknown type")
+
+
+@dataclass(frozen=True)
+class ProjectStageChallenge:
+    base_skills: List[str]
+    difficulty: int
+
+
+@dataclass(frozen=True)
+class ProjectStageResource:
+    wanted_resources: Set[str]
+    given_resources: Dict[str, int]
+
+
+@dataclass(frozen=True)
+class ProjectStageWaiting:
+    turns_waited: int
+
+
+@dataclass(frozen=True)
+class ProjectStageDiscovery:
+    ref_hexes: List[Tuple[str, int]]
+    possible_hexes: Set[str]
+    explored_hexes: Set[str]
+
+
+@dataclass(frozen=True)
+class Project:
+    name: str
+    desc: str
+    type: str
+    status: ProjectStatus
+    target_hex: str
+    stages: List[ProjectStage]

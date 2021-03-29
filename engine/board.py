@@ -3,7 +3,7 @@ import random
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
-from picaro.common.hexmap.types import CubeCoordinate
+from picaro.common.hexmap.types import CubeCoordinate, OffsetCoordinate
 
 from .deck import load_deck
 from .exceptions import BadStateException, IllegalMoveException
@@ -149,7 +149,7 @@ class ActiveBoard:
         token = TokenStorage.load_by_name(token_name)
         if token.location == self.NOWHERE:
             return []
-        return find_hexes_near_hex(token.location, min_distance, max_distance)
+        return self.find_hexes_near_hex(token.location, min_distance, max_distance)
 
     def find_hexes_near_hex(
         self, hex_name: str, min_distance: int, max_distance: int
@@ -221,6 +221,21 @@ class ActiveBoard:
             country=hx.country,
             region=hx.region,
             coordinate=CubeCoordinate(x=hx.x, y=hx.y, z=hx.z).to_offset(),
+            danger=hx.danger,
+        )
+
+    def _translate_from_snapshot_hex(self, hx: snapshot_Hex) -> "Hex":
+        cube = CubeCoordinate.from_row_col(
+            row=hx.coordinate.row, col=hx.coordinate.column
+        )
+        return Hex(
+            name=hx.name,
+            terrain=hx.terrain,
+            country=hx.country,
+            region=hx.region,
+            x=cube.x,
+            y=cube.y,
+            z=cube.z,
             danger=hx.danger,
         )
 
@@ -302,24 +317,7 @@ class ActiveBoard:
         hexes, countries, mines = generate_from_mini(50, 50, minimap)
 
         CountryStorage.insert_all(countries)
-
-        # translate these into storage format:
-        def trans(hx: snapshot_Hex) -> Hex:
-            cube = CubeCoordinate.from_row_col(
-                row=hx.coordinate.row, col=hx.coordinate.column
-            )
-            return Hex(
-                name=hx.name,
-                terrain=hx.terrain,
-                country=hx.country,
-                region=hx.region,
-                x=cube.x,
-                y=cube.y,
-                z=cube.z,
-                danger=hx.danger,
-            )
-
-        HexStorage.insert([trans(hx) for hx in hexes])
+        HexStorage.insert([self._translate_from_snapshot_hex(hx) for hx in hexes])
 
         # using http://www.dungeoneering.net/d100-list-fantasy-town-names/ as a placeholder
         # for now
@@ -437,6 +435,36 @@ class ActiveBoard:
                     actions=actions,
                 )
                 TokenStorage.create(token)
+
+    def generate_flat_map(self) -> None:
+        all_hexes = HexStorage.load()
+        if all_hexes:
+            raise Exception("Can't generate, hexes already exist")
+
+        hexes = []
+        for r in range(30):
+            for c in range(30):
+                coord = OffsetCoordinate(row=r, column=c)
+                hexes.append(
+                    snapshot_Hex(
+                        name=coord.get_name(),
+                        coordinate=coord,
+                        terrain="Plains",
+                        country="Alpha",
+                        region="1",
+                        danger=2,
+                    )
+                )
+        countries = [
+            Country(
+                name="Alpha",
+                capitol_hex="AJ15",
+                resources=["Stone", "Timber"],
+            ),
+        ]
+
+        CountryStorage.insert_all(countries)
+        HexStorage.insert([self._translate_from_snapshot_hex(hx) for hx in hexes])
 
 
 # since it has no state, this doesn't actually have to hit db currently
