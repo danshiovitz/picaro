@@ -4,6 +4,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).absolute().parent.parent.parent))
 
 from picaro.engine import Engine
+from picaro.engine.types import ProjectStageType
 from picaro.server import Server
 
 if __name__ == "__main__":
@@ -20,6 +21,18 @@ if __name__ == "__main__":
         character_name="Conan",
         location="random",
         job_name="Raider",
+    )
+
+    loc = engine.get_character(
+        game_id=game_id, player_id=PLAYER_ID, character_name="Conan"
+    ).location
+    engine.create_project(
+        name="Quest for Sandwiches",
+        project_type="Monument",
+        location=loc,
+        game_id=game_id,
+        player_id=PLAYER_ID,
+        character_name="Conan",
     )
 
     server = Server(engine)

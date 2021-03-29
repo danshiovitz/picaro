@@ -431,6 +431,9 @@ class ReadOnlyWrapper:
             val = getattr(self._data, name)
             ut = self._fields[name].type
             cls_base = getattr(ut, "__origin__", ut)
+            if cls_base == Any:
+                indicator = self._data.type_field()
+                cls_base = self._data.any_type(getattr(self._data, indicator))
             if issubclass(cls_base, Dict):
                 return MappingProxyType(val)
             elif cls_base not in (str, tuple) and issubclass(cls_base, Iterable):
@@ -438,4 +441,4 @@ class ReadOnlyWrapper:
             else:
                 return val
         else:
-            raise Exception("No such field")
+            raise Exception(f"No such field: {name}")

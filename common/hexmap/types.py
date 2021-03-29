@@ -1,10 +1,15 @@
 from dataclasses import dataclass
+from string import ascii_uppercase
 
 
 @dataclass(frozen=True)
 class OffsetCoordinate:
     row: int
     column: int
+
+    def get_name(self) -> str:
+        rn = ascii_uppercase[self.row // 26] + ascii_uppercase[self.row % 26]
+        return f"{rn}{self.column+1:02}"
 
 
 @dataclass(frozen=True)

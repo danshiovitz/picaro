@@ -17,6 +17,8 @@ from typing import (
     TypeVar,
 )
 
+from picaro.common.utils import clamp
+
 from .board import load_board
 from .deck import load_deck
 from .encounter import UpdateHolder
@@ -31,6 +33,7 @@ from .snapshot import (
 from .storage import ObjectStorageBase, ReadOnlyWrapper
 from .types import (
     Action,
+    Choice,
     Choices,
     Effect,
     EffectType,
@@ -48,15 +51,6 @@ from .types import (
     TableauCard,
     TemplateCard,
 )
-
-
-def clamp(val: int, min: Optional[int] = None, max: Optional[int] = None) -> int:
-    if min is not None and val < min:
-        return min
-    elif max is not None and val > max:
-        return max
-    else:
-        return val
 
 
 class TurnFlags(Enum):
@@ -292,6 +286,9 @@ class Character(ReadOnlyWrapper):
         else:
             raise Exception(f"Unknown job type: {job.type}")
         return clamp(base_limit + self._calc_hook(HookType.MAX_RESOURCES), min=0)
+
+    def get_max_project_stages(self) -> int:
+        return 3
 
     def get_skill_rank(self, skill_name: str) -> int:
         # 20 xp for rank 1, 30 xp for rank 5, 25 xp for all others
@@ -825,7 +822,7 @@ class Character(ReadOnlyWrapper):
                 self._data.job_name = new_job
                 self._data.tableau = []
                 self._data.job_deck = []
-                self._refill_tableau()
+                self.refill_tableau()
                 # blow away earlier rep mods:
                 reputation_holder.set_to(3, "set to 3 for job switch")
                 if is_promo:

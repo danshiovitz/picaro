@@ -8,6 +8,7 @@ from picaro.engine.exceptions import IllegalMoveException, BadStateException
 
 from . import bottle
 from .api_types import (
+    Board,
     CampRequest,
     CampResponse,
     Character,
@@ -19,6 +20,9 @@ from .api_types import (
     ResolveEncounterResponse,
     JobRequest,
     JobResponse,
+    SearchProjectsResponse,
+    StartProjectStageRequest,
+    StartProjectStageResponse,
     TokenActionRequest,
     TokenActionResponse,
     TravelRequest,
@@ -61,21 +65,49 @@ class Server:
         self._engine = engine
 
     @wrap_errors()
-    def get_board(self, game_id: int, character_name: str) -> Any:
+    def get_board(self, game_id: int, character_name: str) -> Board:
         player_id = self._extract_player_id()
         return self._engine.get_board(
             player_id=player_id, game_id=game_id, character_name=character_name
         )
 
     @wrap_errors()
-    def get_character(self, game_id: int, character_name: str) -> Any:
+    def get_character(self, game_id: int, character_name: str) -> Character:
         player_id = self._extract_player_id()
         return self._engine.get_character(
             player_id=player_id, game_id=game_id, character_name=character_name
         )
 
     @wrap_errors()
-    def do_job(self, game_id: int, character_name: str) -> Any:
+    def get_projects(self, game_id: int, character_name: str) -> SearchProjectsResponse:
+        player_id = self._extract_player_id()
+        include_all = bottle.request.query.all or False
+        return SearchProjectsResponse(
+            projects=self._engine.get_projects(
+                include_all=include_all,
+                player_id=player_id,
+                game_id=game_id,
+                character_name=character_name,
+            )
+        )
+
+    @wrap_errors()
+    def start_project_stage(
+        self, game_id: int, character_name: str
+    ) -> StartProjectStageResponse:
+        player_id = self._extract_player_id()
+        req = self._read_body(StartProjectStageRequest)
+        outcome = self._engine.start_project_stage(
+            project_name=req.project_name,
+            stage_num=req.stage_num,
+            player_id=player_id,
+            game_id=game_id,
+            character_name=character_name,
+        )
+        return StartProjectStageResponse(outcome=outcome)
+
+    @wrap_errors()
+    def do_job(self, game_id: int, character_name: str) -> JobResponse:
         player_id = self._extract_player_id()
         req = self._read_body(JobRequest)
         outcome = self._engine.do_job(
@@ -87,7 +119,7 @@ class Server:
         return JobResponse(outcome=outcome)
 
     @wrap_errors()
-    def token_action(self, game_id: int, character_name: str) -> Any:
+    def token_action(self, game_id: int, character_name: str) -> TokenActionResponse:
         player_id = self._extract_player_id()
         req = self._read_body(TokenActionRequest)
         outcome = self._engine.token_action(
@@ -112,7 +144,7 @@ class Server:
         return TravelResponse(outcome=outcome)
 
     @wrap_errors()
-    def camp(self, game_id: int, character_name: str) -> Any:
+    def camp(self, game_id: int, character_name: str) -> CampResponse:
         player_id = self._extract_player_id()
         req = self._read_body(CampRequest)
         outcome = self._engine.camp(
@@ -136,7 +168,7 @@ class Server:
         return ResolveEncounterResponse(outcome=outcome)
 
     @wrap_errors()
-    def end_turn(self, game_id: int, character_name: str) -> Any:
+    def end_turn(self, game_id: int, character_name: str) -> EndTurnResponse:
         player_id = self._extract_player_id()
         req = self._read_body(EndTurnRequest)
         outcome = self._engine.end_turn(
@@ -151,6 +183,15 @@ class Server:
         bottle.route(
             path="/game/<game_id>/character/<character_name>",
             callback=self.get_character,
+        )
+        bottle.route(
+            path="/game/<game_id>/projects/<character_name>",
+            callback=self.get_projects,
+        )
+        bottle.route(
+            path="/game/<game_id>/projects/<character_name>/start",
+            method="POST",
+            callback=self.start_project_stage,
         )
         bottle.route(
             path="/game/<game_id>/play/<character_name>/job",

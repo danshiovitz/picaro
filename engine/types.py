@@ -217,6 +217,24 @@ class Country:
     resources: Sequence[str]
 
 
+class ProjectStageType(Enum):
+    CHALLENGE = enum_auto()
+    RESOURCE = enum_auto()
+    WAITING = enum_auto()
+    DISCOVERY = enum_auto()
+
+
+class ProjectStageStatus(Enum):
+    UNASSIGNED = enum_auto()
+    IN_PROGRESS = enum_auto()
+    FINISHED = enum_auto()
+
+
+class ProjectStatus(Enum):
+    IN_PROGRESS = enum_auto()
+    FINISHED = enum_auto()
+
+
 class EntityType(Enum):
     HEX = enum_auto()
     TOKEN = enum_auto()

@@ -1,6 +1,5 @@
 - Add one time password / session cookie stuff
 - projects
-  - display projects in client
   - project and stage ownership?
   - some notion of project & stage difficulty
   - stage groups
@@ -8,6 +7,15 @@
   - some notion of "the project, if any, associated with this encounter card" (to make challenge stages work)
   - wire in the stage hooks to character actions
   - character-based requirements to start stages
+          bottle.route(
+            path="/game/<game_id>/projects/<character_name>/manage",
+            method="POST",
+            callback=self.manage_projects,
+          )
+       - start a project stage
+       - create a project (?)
+       - drop a project stage
+
 - events + actions
 - regional, country, and arch villains, and their moves
 - proposals/adjustments/whatever
@@ -19,8 +27,9 @@
 - better engine unit testing
 - different mechanics for captain and king play ("tool" exhaustion?)
 - record all encounters + outcome + commentary and command to view history
-- spend coins on stuff (xp? reputation?)
+- spend coins on stuff (spend on xp or rep in camp, plus costs to start project stage)
 - being able to undo outcomes
+- death
 - fill in stuff:
   - more feat hooks
   - terrain decks
