@@ -483,11 +483,11 @@ class Character(ReadOnlyWrapper):
     def _make_travel_deck(self) -> List[TravelCard]:
         cards = (
             [TravelCard(type=TravelCardType.NOTHING)] * 14
-            + [TravelCard(type=TravelCardType.DANGER, value=1)] * 2
-            + [TravelCard(type=TravelCardType.DANGER, value=2)] * 2
-            + [TravelCard(type=TravelCardType.DANGER, value=3)] * 2
-            + [TravelCard(type=TravelCardType.DANGER, value=4)] * 2
-            + [TravelCard(type=TravelCardType.DANGER, value=5)] * 2
+            + [TravelCard(type=TravelCardType.DANGER, value=1)] * 3
+            + [TravelCard(type=TravelCardType.DANGER, value=2)] * 3
+            + [TravelCard(type=TravelCardType.DANGER, value=3)] * 3
+            + [TravelCard(type=TravelCardType.DANGER, value=4)] * 3
+            + [TravelCard(type=TravelCardType.DANGER, value=5)] * 3
             + [TravelCard(type=TravelCardType.TRINKET)] * 2
         )
         random.shuffle(cards)

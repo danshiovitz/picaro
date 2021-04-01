@@ -4,7 +4,7 @@ import random
 from dataclasses import dataclass
 from enum import Enum, auto as enum_auto
 from itertools import groupby
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
 
 from picaro.common.utils import clamp
 
@@ -138,6 +138,50 @@ class ProjectStage(ReadOnlyWrapper):
     @classmethod
     def load(cls, project_name: str, stage_num: int) -> "ProjectStageContext":
         return ProjectStageContext(project_name, stage_num)
+
+    @classmethod
+    def load_for_character(cls, character_name: str) -> "ProjectStagesContext":
+        return ProjectStagesContext(lambda: [d for d in ProjectStageStorage.load() if character_name in d.participants])
+
+    def get_snapshot(self) -> snapshot_ProjectStage:
+        if self._data.type == ProjectStageType.CHALLENGE:
+            extra = cast(ProjectStageChallenge, self._data.extra)
+            snapshot_extra = snapshot_ProjectStageChallenge(
+                base_skills=tuple(extra.base_skills), difficulty=extra.difficulty
+            )
+        elif self._data.type == ProjectStageType.RESOURCE:
+            extra = cast(ProjectStageResource, self._data.extra)
+            snapshot_extra = snapshot_ProjectStageResource(
+                wanted_resources=extra.wanted_resources,
+                given_resources=extra.given_resources,
+            )
+        elif self._data.type == ProjectStageType.WAITING:
+            extra = cast(ProjectStageWaiting, self._data.extra)
+            snapshot_extra = snapshot_ProjectStageWaiting(
+                turns_waited=extra.turns_waited
+            )
+        elif self._data.type == ProjectStageType.DISCOVERY:
+            extra = cast(ProjectStageDiscovery, self._data.extra)
+            snapshot_extra = snapshot_ProjectStageDiscovery(
+                ref_hexes=extra.ref_hexes,
+                possible_hexes=extra.possible_hexes,
+                explored_hexes=extra.explored_hexes,
+            )
+        else:
+            raise Exception(f"Unknown type {self._data.type.name}")
+
+        return snapshot_ProjectStage(
+            name=self.name,
+            project_name=self._data.project_name,
+            stage_num=self._data.stage_num,
+            desc=self._data.desc,
+            type=self._data.type,
+            participants=self._data.participants,
+            status=self._data.status,
+            xp=self._data.xp,
+            max_xp=self._data.xp,
+            extra=snapshot_extra,
+        )
 
     @property
     def name(self) -> str:
@@ -286,6 +330,19 @@ class ProjectStageContext:
         ProjectStageStorage.update(self._data)
 
 
+class ProjectStagesContext:
+    def __init__(self, load_func: Callable[[], List[ProjectStage]]) -> None:
+        self.load_func = load_func
+
+    def __enter__(self) -> List[ProjectStage]:
+        self._data_list = self.load_func()
+        return [ProjectStage(d) for d in self._data_list]
+
+    def __exit__(self, *exc: Any) -> None:
+        for d in self._data_list:
+            ProjectStageStorage.update(d)
+
+
 class Project(ReadOnlyWrapper):
     @classmethod
     def create(cls, name: str, project_type: str, target_hex: str) -> None:
@@ -316,81 +373,23 @@ class Project(ReadOnlyWrapper):
         return ProjectContext(name)
 
     @classmethod
-    def get_snapshots(
-        cls, character_name: str, include_all: bool
-    ) -> List[snapshot_Project]:
+    def load_for_character(cls, character_name: str) -> "ProjectsContext":
+        return ProjectsContext(lambda: list(ProjectStorage.load()))
+
+    def get_snapshot(self, character_name: str, include_all: bool) -> snapshot_Project:
         stages = [
-            cls._to_stage_snapshot(d)
-            for d in ProjectStageStorage.load()
+            ProjectStage(d).get_snapshot()
+            for d in ProjectStageStorage.load_by_project(self.name)
             if include_all or character_name in d.participants
         ]
-        stages.sort(key=lambda s: (s.project_name, s.stage_num))
-        project_stages = {
-            k: list(g) for k, g in groupby(stages, lambda s: s.project_name)
-        }
-        if include_all:
-            raw_projects = list(ProjectStorage.load())
-        else:
-            raw_projects = [ProjectStorage.load_by_name(p) for p in project_stages]
-        projects = [
-            cls._to_snapshot(d, project_stages.get(d.name, [])) for d in raw_projects
-        ]
-        projects.sort(key=lambda p: p.name)
-        return projects
-
-    @classmethod
-    def _to_snapshot(
-        cls, project: "ProjectData", stages: List[snapshot_ProjectStage]
-    ) -> snapshot_Project:
+        stages.sort(key=lambda s: (s.stage_num))
         return snapshot_Project(
-            name=project.name,
-            desc=project.desc,
-            type=project.type,
-            status=project.status,
-            target_hex=project.target_hex,
+            name=self.name,
+            desc=self.desc,
+            type=self.type,
+            status=self.status,
+            target_hex=self.target_hex,
             stages=tuple(stages),
-        )
-
-    @classmethod
-    def _to_stage_snapshot(cls, stage: "ProjectStageData") -> snapshot_ProjectStage:
-        if stage.type == ProjectStageType.CHALLENGE:
-            extra = cast(ProjectStageChallenge, stage.extra)
-            snapshot_extra = snapshot_ProjectStageChallenge(
-                base_skills=tuple(extra.base_skills), difficulty=extra.difficulty
-            )
-        elif stage.type == ProjectStageType.RESOURCE:
-            extra = cast(ProjectStageResource, stage.extra)
-            snapshot_extra = snapshot_ProjectStageResource(
-                wanted_resources=extra.wanted_resources,
-                given_resources=extra.given_resources,
-            )
-        elif stage.type == ProjectStageType.WAITING:
-            extra = cast(ProjectStageWaiting, stage.extra)
-            snapshot_extra = snapshot_ProjectStageWaiting(
-                turns_waited=extra.turns_waited
-            )
-        elif stage.type == ProjectStageType.DISCOVERY:
-            extra = cast(ProjectStageDiscovery, stage.extra)
-            snapshot_extra = snapshot_ProjectStageDiscovery(
-                ref_hexes=extra.ref_hexes,
-                possible_hexes=extra.possible_hexes,
-                explored_hexes=extra.explored_hexes,
-            )
-        else:
-            raise Exception(f"Unknown type {stage.type.name}")
-
-        stage_obj = ProjectStage(stage)
-        return snapshot_ProjectStage(
-            name=stage_obj.name,
-            project_name=stage.project_name,
-            stage_num=stage.stage_num,
-            desc=stage.desc,
-            type=stage.type,
-            participants=stage.participants,
-            status=stage.status,
-            xp=stage.xp,
-            max_xp=stage.xp,
-            extra=snapshot_extra,
         )
 
     def add_stage(self, stage_type: Optional[ProjectStageType], **kwargs) -> None:
@@ -443,12 +442,25 @@ class ProjectContext:
     def __init__(self, name: str) -> None:
         self.name = name
 
-    def __enter__(self) -> "Project":
+    def __enter__(self) -> Project:
         self._data = ProjectStorage.load_by_name(self.name)
         return Project(self._data)
 
     def __exit__(self, *exc: Any) -> None:
         ProjectStorage.update(self._data)
+
+
+class ProjectsContext:
+    def __init__(self, load_func: Callable[[], List[Project]]) -> None:
+        self.load_func = load_func
+
+    def __enter__(self) -> List[Project]:
+        self._data_list = self.load_func()
+        return [Project(d) for d in self._data_list]
+
+    def __exit__(self, *exc: Any) -> None:
+        for d in self._data_list:
+            ProjectStorage.update(d)
 
 
 @dataclass()

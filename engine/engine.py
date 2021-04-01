@@ -18,6 +18,7 @@ from .types import (
     Choices,
     EncounterActions,
     EncounterContextType,
+    Event,
     Outcome,
     TemplateCard,
 )
@@ -67,7 +68,9 @@ class Engine:
     def get_projects(
         self, include_all: bool, *, player_id: int, game_id: int, character_name: str
     ) -> List[snapshot_Project]:
-        return Project.get_snapshots(character_name, include_all)
+        with Project.load_for_character(character_name) as projects:
+            snapshots = (p.get_snapshot(character_name, include_all) for p in projects)
+            return [s for s in snapshots if include_all or s.stages]
 
     @with_connection()
     def create_project(
@@ -83,8 +86,7 @@ class Engine:
         Project.create(name, project_type, location)
         with Project.load(name) as proj:
             from .types import ProjectStageType
-
-            proj.add_stage(ProjectStageType.WAITING)
+            proj.add_stage(ProjectStageType.DISCOVERY)
 
     @with_connection()
     def start_project_stage(
@@ -98,12 +100,11 @@ class Engine:
     ) -> Outcome:
         with ProjectStage.load(project_name, stage_num) as stage:
             with Character.load(character_name) as ch:
-                current = Project.get_snapshots(character_name, False)
-                cur_count = sum(len(p.stages) for p in current)
-                if cur_count >= ch.get_max_project_stages():
-                    raise IllegalMoveException(
-                        "You are already at your maximum number of open stages."
-                    )
+                with ProjectStage.load_for_character(character_name) as current:
+                    if len(current) >= ch.get_max_project_stages():
+                        raise IllegalMoveException(
+                            "You are already at your maximum number of active stages."
+                        )
 
                 # other requirements could be checked here
 
@@ -135,11 +136,12 @@ class Engine:
         self, card_id: int, *, player_id: int, game_id: int, character_name: str
     ) -> Outcome:
         with Character.load(character_name) as ch:
+            events: List[Event] = []
             self._basic_action_prep(ch, consume_action=True)
             ch.queue_tableau_card(card_id)
             if ch.acted_this_turn() and not ch.encounters:
-                self._finish_turn(ch)
-            return Outcome(events=[])
+                self._finish_turn(ch, events)
+            return Outcome(events=events)
 
     @with_connection()
     def token_action(
@@ -152,6 +154,7 @@ class Engine:
         character_name: str,
     ) -> Outcome:
         with Character.load(character_name) as ch:
+            events: List[Event] = []
             self._basic_action_prep(ch, consume_action=False)
 
             board = load_board()
@@ -167,8 +170,8 @@ class Engine:
                 context_type=EncounterContextType.ACTION,
             )
             if ch.acted_this_turn() and not ch.encounters:
-                self._finish_turn(ch)
-            return Outcome(events=[])
+                self._finish_turn(ch, events)
+            return Outcome(events=events)
 
     def _action_to_template(self, action: Action) -> TemplateCard:
         return TemplateCard(
@@ -181,11 +184,12 @@ class Engine:
     @with_connection()
     def camp(self, player_id: int, game_id: int, character_name: str) -> Outcome:
         with Character.load(character_name) as ch:
+            events: List[Event] = []
             self._basic_action_prep(ch, consume_action=True)
             ch.queue_camp_card()
             if ch.acted_this_turn() and not ch.encounters:
-                self._finish_turn(ch)
-            return Outcome(events=[])
+                self._finish_turn(ch, events)
+            return Outcome(events=events)
 
     @with_connection()
     def travel(
@@ -196,18 +200,23 @@ class Engine:
             events: List[Event] = []
             ch.step(step, events)
             board = load_board()
-            ch.queue_travel_card(board.get_token_location(character_name))
+            new_loc = board.get_token_location(ch.name)
+            with ProjectStage.load_for_character(ch.name) as current:
+                for cur in current:
+                    cur.hex_explored(new_loc, events)
+            ch.queue_travel_card(new_loc)
             if ch.acted_this_turn() and not ch.encounters:
-                self._finish_turn(ch)
+                self._finish_turn(ch, events)
             return Outcome(events=events)
 
     @with_connection()
     def end_turn(self, *, player_id: int, game_id: int, character_name: str) -> Outcome:
         with Character.load(character_name) as ch:
+            events: List[Event] = []
             self._basic_action_prep(ch, consume_action=True)
             if not ch.encounters:
-                self._finish_turn(ch)
-            return Outcome(events=[])
+                self._finish_turn(ch, events)
+            return Outcome(events=events)
 
     @with_connection()
     def resolve_encounter(
@@ -225,7 +234,7 @@ class Engine:
             effects = ch.calc_effects(encounter, actions)
             ch.apply_effects(effects, encounter.context_type, events)
             if ch.acted_this_turn() and not ch.encounters:
-                self._finish_turn(ch)
+                self._finish_turn(ch, events)
             return Outcome(events=events)
 
     def _basic_action_prep(self, ch: Character, consume_action: bool) -> None:
@@ -246,7 +255,7 @@ class Engine:
     # currently we assume nothing in here adds to the current list of events,
     # to avoid confusing the player when additional stuff shows up in the
     # outcome, but there's probably nothing strictly wrong if it did
-    def _finish_turn(self, ch: Character) -> None:
+    def _finish_turn(self, ch: Character, events: List[Event]) -> None:
         self._bad_reputation_check(ch)
         if ch.encounters:
             return
@@ -254,6 +263,10 @@ class Engine:
         self._discard_resources(ch)
         if ch.encounters:
             return
+
+        with ProjectStage.load_for_character(ch.name) as current:
+            for cur in current:
+                cur.turn_finished(events)
 
         ch.turn_reset()
 

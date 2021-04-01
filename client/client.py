@@ -346,17 +346,17 @@ class Client:
                     print(f"    {stage.desc}")
                 if stage.type == ProjectStageType.CHALLENGE:
                     print(
-                        f"    Skills: {', '.join(stage.extra.base_skills)}; Difficulty: {stage.extra.difficulty}"
+                        f"    Skills: {', '.join(sorted(stage.extra.base_skills))}; Difficulty: {stage.extra.difficulty}"
                     )
                 elif stage.type == ProjectStageType.RESOURCE:
                     print(
-                        f"    Wanted: {', '.join(stage.extra.wanted_resources)}; Given: {stage.extra.given_resources}"
+                        f"    Wanted: {', '.join(sorted(stage.extra.wanted_resources))}; Given: {stage.extra.given_resources}"
                     )
                 elif stage.type == ProjectStageType.WAITING:
                     print(f"    Turns Waited: {stage.extra.turns_waited}")
                 elif stage.type == ProjectStageType.DISCOVERY:
                     print(
-                        f"    Possible Hexes: {', '.join(stage.extra.possible_hexes)}"
+                        f"    Possible Hexes: {', '.join(sorted(stage.extra.possible_hexes))}"
                     )
                 else:
                     print(f"    Unknown Stage Type: {stage.extra}")
