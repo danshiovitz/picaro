@@ -6,7 +6,7 @@ from picaro.common.hexmap.types import OffsetCoordinate
 from picaro.engine.snapshot import Board, Character, Encounter, Hex, Project, Token
 from picaro.engine.types import (
     Action,
-    TableauCard,
+    Choices,
     Effect,
     EffectType,
     Emblem,
@@ -20,6 +20,7 @@ from picaro.engine.types import (
     Outcome,
     ProjectStageStatus,
     ProjectStageType,
+    TableauCard,
 )
 
 
@@ -36,8 +37,7 @@ class SearchProjectsResponse:
 
 @dataclass(frozen=True)
 class StartProjectStageRequest:
-    project_name: str
-    stage_num: int
+    project_stage_name: str
 
 
 @dataclass(frozen=True)
@@ -47,8 +47,7 @@ class StartProjectStageResponse:
 
 @dataclass(frozen=True)
 class ReturnProjectStageRequest:
-    project_name: str
-    stage_num: int
+    project_stage_name: str
 
 
 @dataclass(frozen=True)

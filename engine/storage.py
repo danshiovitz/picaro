@@ -328,6 +328,20 @@ class StorageBase(ABC, Generic[T]):
         # object storage base, which is also specialized on T
         return cls.__orig_bases__[0].__args__[0]
 
+    @classmethod
+    def _delete_helper(cls, where_clauses: List[str], params: Dict[str, Any]) -> None:
+        session = current_session.get()
+        if not where_clauses:
+            raise Exception("Probably unsafe to delete with no where clauses, refusing")
+        if session.game_id is not None and cls.TABLE_NAME != "game":
+            where_clauses.append("game_id = :game_id")
+            params["game_id"] = session.game_id
+        sql = f"DELETE FROM {cls.TABLE_NAME}"
+        sql += " WHERE (" + ") AND (".join(where_clauses) + ")"
+        session.connection.execute(sql, params)
+        if cls.SUBTABLES:
+            raise Exception("Subtable delete currently not supported")
+
 
 class ValueStorageBase(StorageBase[str]):
     @classmethod

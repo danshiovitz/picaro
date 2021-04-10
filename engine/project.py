@@ -4,11 +4,28 @@ import random
 from dataclasses import dataclass
 from enum import Enum, auto as enum_auto
 from itertools import groupby
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+    cast,
+)
 
 from picaro.common.utils import clamp
 
 from .board import load_board
+from .entity import (
+    Entity,
+    EntityField,
+    IntEntityField,
+    SimpleIntEntityField,
+)
 from .exceptions import BadStateException, IllegalMoveException
 from .snapshot import (
     ProjectStage as snapshot_ProjectStage,
@@ -20,19 +37,33 @@ from .snapshot import (
 )
 from .storage import ObjectStorageBase, ReadOnlyWrapper
 from .types import (
+    Action,
+    Choices,
     Effect,
     EffectType,
+    EntityType,
     Event,
     ProjectStageStatus,
     ProjectStageType,
     ProjectStatus,
+    SpecialChoiceType,
 )
 
 
-class ProjectStage(ReadOnlyWrapper):
+class ProjectStage(Entity, ReadOnlyWrapper):
+    ENTITY_TYPE = EntityType.PROJECT_STAGE
+    FIELDS = [
+        lambda evs: ModifyResourcesMetaField.make_fields(evs),
+        lambda _vs: [TimePassesMetaField()],
+        lambda _vs: [ExploreHexMetaField()],
+        # project stages don't have subtype for xp, unlike characters
+        lambda _vs: [ModifyXpField()],
+    ]
+
     @classmethod
     def create_challenge(
         cls,
+        name: Optional[str],
         project_name: str,
         stage_num: int,
         base_skills: List[str],
@@ -41,12 +72,13 @@ class ProjectStage(ReadOnlyWrapper):
     ) -> None:
         extra = ProjectStageChallenge(base_skills=base_skills, difficulty=difficulty)
         cls._create_common(
-            project_name, stage_num, ProjectStageType.CHALLENGE, extra, cost
+            name, project_name, stage_num, ProjectStageType.CHALLENGE, extra, cost
         )
 
     @classmethod
     def create_resource(
         cls,
+        name: Optional[str],
         project_name: str,
         stage_num: int,
         wanted_resources: Set[str],
@@ -56,21 +88,22 @@ class ProjectStage(ReadOnlyWrapper):
             wanted_resources=wanted_resources, given_resources={}
         )
         cls._create_common(
-            project_name, stage_num, ProjectStageType.RESOURCE, extra, cost
+            name, project_name, stage_num, ProjectStageType.RESOURCE, extra, cost
         )
 
     @classmethod
     def create_waiting(
-        cls, project_name: str, stage_num: int, cost: List[Effect]
+        cls, name: Optional[str], project_name: str, stage_num: int, cost: List[Effect]
     ) -> None:
         extra = ProjectStageWaiting(turns_waited=0)
         cls._create_common(
-            project_name, stage_num, ProjectStageType.WAITING, extra, cost
+            name, project_name, stage_num, ProjectStageType.WAITING, extra, cost
         )
 
     @classmethod
     def create_discovery(
         cls,
+        name: Optional[str],
         project_name: str,
         stage_num: int,
         start_hex: Optional[str],
@@ -108,19 +141,23 @@ class ProjectStage(ReadOnlyWrapper):
             explored_hexes=set(),
         )
         cls._create_common(
-            project_name, stage_num, ProjectStageType.DISCOVERY, extra, cost
+            name, project_name, stage_num, ProjectStageType.DISCOVERY, extra, cost
         )
 
     @classmethod
     def _create_common(
         cls,
+        name: Optional[str],
         project_name: str,
         stage_num: int,
         type: ProjectStageType,
         extra: Any,
         cost: List[Effect],
     ) -> None:
+        if name is None:
+            name = f"{project_name} Stage {stage_num}"
         data = ProjectStageData(
+            name=name,
             project_name=project_name,
             stage_num=stage_num,
             desc="...",
@@ -136,12 +173,18 @@ class ProjectStage(ReadOnlyWrapper):
         ProjectStageStorage.create(data)
 
     @classmethod
-    def load(cls, project_name: str, stage_num: int) -> "ProjectStageContext":
-        return ProjectStageContext(project_name, stage_num)
+    def load(cls, project_stage_name: str) -> "ProjectStageContext":
+        return ProjectStageContext(project_stage_name)
 
     @classmethod
     def load_for_character(cls, character_name: str) -> "ProjectStagesContext":
-        return ProjectStagesContext(lambda: [d for d in ProjectStageStorage.load() if character_name in d.participants])
+        return ProjectStagesContext(
+            lambda: [
+                d
+                for d in ProjectStageStorage.load()
+                if character_name in d.participants
+            ]
+        )
 
     def get_snapshot(self) -> snapshot_ProjectStage:
         if self._data.type == ProjectStageType.CHALLENGE:
@@ -183,17 +226,13 @@ class ProjectStage(ReadOnlyWrapper):
             extra=snapshot_extra,
         )
 
-    @property
-    def name(self) -> str:
-        return f"{self._data.project_name} Stage {self._data.stage_num}"
-
     def start(self, character_name: str, events: List[Event]) -> None:
         if self.status != ProjectStageStatus.UNASSIGNED:
             raise BadStateException(f"Stage is in {self.status.name}, not unassigned")
         self._data.participants = [character_name]
         self._data.status = ProjectStageStatus.IN_PROGRESS
         events.append(
-            Event.for_project(
+            Event.for_project_stage(
                 self.name,
                 EffectType.START_PROJECT_STAGE,
                 None,
@@ -210,7 +249,7 @@ class ProjectStage(ReadOnlyWrapper):
         if not self._data.participants:
             self._data.status = ProjectStageStatus.UNASSIGNED
         events.append(
-            Event.for_project(
+            Event.for_project_stage(
                 self.name,
                 EffectType.RETURN_PROJECT_STAGE,
                 None,
@@ -220,110 +259,13 @@ class ProjectStage(ReadOnlyWrapper):
             )
         )
 
-    def hex_explored(self, hex_name: str, events: List[Event]) -> bool:
-        if self._data.type != ProjectStageType.DISCOVERY:
-            return False
-        extra = cast(ProjectStageDiscovery, self._data.extra)
-        if hex_name not in extra.possible_hexes:
-            return False
-        extra.possible_hexes.discard(hex_name)
-        extra.explored_hexes.add(hex_name)
-        if hex_name == extra.secret_hex:
-            old_xp = self._data.xp
-            self._data.xp = self._data.max_xp
-            self._data.status = ProjectStageStatus.FINISHED
-            events.append(
-                Event.for_project(
-                    self.name,
-                    EffectType.MODIFY_XP,
-                    None,
-                    old_xp,
-                    self._data.xp,
-                    ["Secret hex located!"],
-                )
-            )
-            return True
-        return False
-
-    def resource_delivered(self, resrc: str, events: List[Event]) -> bool:
-        if self._data.type != ProjectStageType.RESOURCE:
-            return False
-        extra = cast(ProjectStageResource, self._data.extra)
-        if resrc not in extra.wanted_resources:
-            raise IllegalMoveException(
-                f"Resource {resrc} is not needed by {self.name}!"
-            )
-        if resrc not in extra.given_resources:
-            extra.given_resources[resrc] = 1
-        else:
-            extra.given_resources[resrc] += 1
-        old_xp = self._data.xp
-        self._data.xp = clamp(self._data.xp + 5, min=0, max=self._data.max_xp)
-        events.append(
-            Event.for_project(
-                self.name,
-                EffectType.MODIFY_XP,
-                None,
-                old_xp,
-                self._data.xp,
-                [f"Delivered {resrc}"],
-            )
-        )
-        if self._data.xp >= self._data.max_xp:
-            self._data.status = ProjectStageStatus.FINISHED
-            return True
-        return False
-
-    def turn_finished(self, events: List[Event]) -> bool:
-        if self._data.type != ProjectStageType.WAITING:
-            return False
-        extra = cast(ProjectStageWaiting, self._data.extra)
-        extra.turns_waited += 1
-        old_xp = self._data.xp
-        self._data.xp = clamp(self._data.xp + 1, min=0, max=self._data.max_xp)
-        events.append(
-            Event.for_project(
-                self.name,
-                EffectType.MODIFY_XP,
-                None,
-                old_xp,
-                self._data.xp,
-                ["Turn finished"],
-            )
-        )
-        if self._data.xp >= self._data.max_xp:
-            self._data.status = ProjectStageStatus.FINISHED
-            return True
-        return False
-
-    def modify_xp(self, xp_mod: int, events: List[Event]) -> bool:
-        old_xp = self._data.xp
-        self._data.xp = clamp(self._data.xp + xp_mod, min=0, max=self._data.max_xp)
-        events.append(
-            Event.for_project(
-                self.name,
-                EffectType.MODIFY_XP,
-                None,
-                old_xp,
-                self._data.xp,
-                [f"{xp_mod:+}"],
-            )
-        )
-        if self._data.xp >= self._data.max_xp:
-            self._data.status = ProjectStageStatus.FINISHED
-            return True
-        return False
-
 
 class ProjectStageContext:
-    def __init__(self, project_name: str, stage_num: int) -> None:
-        self.project_name = project_name
-        self.stage_num = stage_num
+    def __init__(self, project_stage_name: str) -> None:
+        self.project_stage_name = project_stage_name
 
     def __enter__(self) -> "ProjectStage":
-        self._data = ProjectStageStorage.load_by_project_stage(
-            self.project_name, self.stage_num
-        )
+        self._data = ProjectStageStorage.load_by_name(self.project_stage_name)
         return ProjectStage(self._data)
 
     def __exit__(self, *exc: Any) -> None:
@@ -341,6 +283,133 @@ class ProjectStagesContext:
     def __exit__(self, *exc: Any) -> None:
         for d in self._data_list:
             ProjectStageStorage.update(d)
+
+
+class ModifyResourcesMetaField(IntEntityField):
+    def __init__(self, subtype: str):
+        super().__init__(
+            f"resources_{subtype}",
+            EffectType.MODIFY_RESOURCES,
+            subtype,
+            self._get_init,
+            self._do_deliver,
+        )
+
+    def _get_init(self, entity: Entity) -> int:
+        if entity._data.type != ProjectStageType.RESOURCE:
+            return 0
+        extra = cast(ProjectStageResource, entity._data.extra)
+        return extra.given_resources.get(self._subtype, 0)
+
+    def _do_deliver(self, entity: Entity, val: int) -> bool:
+        if entity._data.type != ProjectStageType.RESOURCE:
+            return False
+        extra = cast(ProjectStageResource, entity._data.extra)
+        if self._subtype not in extra.wanted_resources:
+            raise IllegalMoveException(
+                f"Resource {self._subtype} is not needed by {entity.name}!"
+            )
+
+        inc = val - self._init_value
+        if self._subtype not in extra.given_resources:
+            if inc <= 0:
+                return False
+            extra.given_resources[self._subtype] = inc
+        else:
+            extra.given_resources[self._subtype] += inc
+
+        self._split_effects[(EffectType.MODIFY_XP, None)].append(
+            Effect(
+                EffectType.MODIFY_XP,
+                inc * 5,
+            )
+        )
+
+        # generate a regular event for the project gaining resources
+        return True
+
+    @classmethod
+    def make_fields(
+        cls,
+        split_effects: Dict[Tuple[EntityType, Optional[str]], List[Effect]],
+    ) -> List[EntityField]:
+        subtypes = [
+            k[1]
+            for k in split_effects
+            if k[0] == EffectType.MODIFY_RESOURCES and k[1] is not None
+        ]
+        return [cls(subtype) for subtype in subtypes]
+
+
+class TimePassesMetaField(IntEntityField):
+    def __init__(self):
+        super().__init__(
+            "waiting",
+            EffectType.TIME_PASSES,
+            None,
+            init_v=lambda e: 0,
+            set_v=self._do_wait,
+        )
+
+    def _do_wait(self, entity: Entity, val: int) -> bool:
+        if entity._data.type != ProjectStageType.WAITING:
+            return False
+        if val <= 0:
+            raise Exception("Don't know how to un-wait yet")
+        extra = cast(ProjectStageWaiting, entity._data.extra)
+        extra.turns_waited += val
+        self._split_effects[(EffectType.MODIFY_XP, None)].append(
+            Effect(
+                EffectType.MODIFY_XP,
+                val,
+                comment=f"Time passes",
+            )
+        )
+        return False
+
+
+class ExploreHexMetaField(EntityField):
+    def __init__(self):
+        super().__init__(
+            "exploration",
+            EffectType.EXPLORE,
+            None,
+        )
+
+    def _update(self, effect: Effect, is_first: bool, is_last: bool) -> None:
+        if self._entity._data.type != ProjectStageType.DISCOVERY:
+            return
+        extra = cast(ProjectStageDiscovery, self._entity._data.extra)
+        if effect.value not in extra.possible_hexes:
+            return
+        extra.possible_hexes.discard(effect.value)
+        extra.explored_hexes.add(effect.value)
+        if effect.value == extra.secret_hex:
+            self._split_effects[(EffectType.MODIFY_XP, None)].append(
+                Effect(
+                    EffectType.MODIFY_XP,
+                    self._entity.max_xp,
+                    comment=f"Secret hex located!",
+                )
+            )
+
+
+class ModifyXpField(IntEntityField):
+    def __init__(self):
+        super().__init__(
+            "xp",
+            EffectType.MODIFY_XP,
+            None,
+            init_v=lambda e: e.xp,
+            set_v=self._do_set,
+            max_value=lambda e: e.max_xp,
+        )
+
+    def _do_set(self, entity: Entity, val: int) -> bool:
+        entity._data.xp = val
+        if entity._data.xp == entity._data.max_xp:
+            entity._data.status = ProjectStageStatus.FINISHED
+        return True  # just generate the standard event
 
 
 class Project(ReadOnlyWrapper):
@@ -364,7 +433,14 @@ class Project(ReadOnlyWrapper):
             name=f"Site: {name}",
             type="Other",
             location=target_hex,
-            actions=None,
+            actions=[
+                Action(
+                    name="Deliver",
+                    choices=Choices.make_special(
+                        type=SpecialChoiceType.DELIVER, entity=name
+                    ),
+                ),
+            ],
             events=[],
         )
 
@@ -401,13 +477,20 @@ class Project(ReadOnlyWrapper):
             Effect(type=EffectType.MODIFY_COINS, value=-10)
         ]
 
+        stage_name = kwargs.get("name", None)
+
         if stage_type == ProjectStageType.CHALLENGE:
             project_type = ProjectTypeStorage.load_by_name(self.type)
             base_skills = kwargs.get("base_skills", None) or project_type.base_skills
             # difficulty should come off some combo of base project difficulty (?) and number of stages so far
             difficulty = kwargs.get("difficulty", None) or 3
             ProjectStage.create_challenge(
-                self.name, len(cur_stages) + 1, base_skills, difficulty, cost
+                stage_name,
+                self.name,
+                len(cur_stages) + 1,
+                base_skills,
+                difficulty,
+                cost,
             )
         elif stage_type == ProjectStageType.RESOURCE:
             board = load_board()
@@ -418,16 +501,19 @@ class Project(ReadOnlyWrapper):
                 kwargs.get("resources", None) or random.sample(all_resources, 2)
             )
             ProjectStage.create_resource(
-                self.name, len(cur_stages) + 1, resources, cost
+                stage_name, self.name, len(cur_stages) + 1, resources, cost
             )
         elif stage_type == ProjectStageType.WAITING:
-            ProjectStage.create_waiting(self.name, len(cur_stages) + 1, cost)
+            ProjectStage.create_waiting(
+                stage_name, self.name, len(cur_stages) + 1, cost
+            )
         elif stage_type == ProjectStageType.DISCOVERY:
             start_hex = kwargs.get("start_hex", None)
             secret_hex = kwargs.get("secret_hex", None)
             if not start_hex and not secret_hex:
                 start_hex = self.target_hex
             ProjectStage.create_discovery(
+                stage_name,
                 self.name,
                 len(cur_stages) + 1,
                 start_hex=start_hex,
@@ -436,6 +522,11 @@ class Project(ReadOnlyWrapper):
             )
         else:
             raise Exception(f"Bad stage type: {stage_type}")
+
+    def finish(self) -> None:
+        self._data.status = ProjectStatus.FINISHED
+        board = load_board()
+        board.remove_token(f"Site: {self.name}")
 
 
 class ProjectContext:
@@ -465,6 +556,7 @@ class ProjectsContext:
 
 @dataclass()
 class ProjectStageData:
+    name: str
     project_name: str
     stage_num: int
     desc: Optional[str]
@@ -617,17 +709,13 @@ class ProjectStageStorage(ObjectStorageBase[ProjectStageData]):
         )
 
     @classmethod
-    def load_by_project_stage(
-        cls, project_name: str, stage_num: int
-    ) -> ProjectStageData:
+    def load_by_name(cls, name: str) -> ProjectStageData:
         stages = cls._select_helper(
-            ["project_name = :project_name", "stage_num = :stage_num"],
-            {"project_name": project_name, "stage_num": stage_num},
+            ["name = :name"],
+            {"name": name},
         )
         if not stages:
-            raise IllegalMoveException(
-                f"No such project or stage: {project_name} {stage_num}"
-            )
+            raise IllegalMoveException(f"No such stage: {name}")
         return stages[0]
 
     @classmethod

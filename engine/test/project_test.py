@@ -18,7 +18,7 @@ from picaro.engine.project import (
     ProjectTypeStorage,
 )
 from picaro.engine.storage import ConnectionManager, with_connection
-from picaro.engine.types import Event
+from picaro.engine.types import Effect, EffectType, Event
 
 
 class ProjectTest(TestCase):
@@ -45,21 +45,23 @@ class ProjectTest(TestCase):
         with Project.load("Operation Meatloaf") as proj:
             proj.add_stage(ProjectStageType.WAITING)
 
-        with ProjectStage.load("Operation Meatloaf", 1) as stage:
+        with ProjectStage.load("Operation Meatloaf Stage 1") as stage:
             self.assertEqual(stage.status, ProjectStageStatus.UNASSIGNED)
             self.assertEqual(stage.xp, 0)
             events: List[Event] = []
-            stage.turn_finished(events)
+            stage.apply_effects([Effect(type=EffectType.TIME_PASSES, value=1)], events)
             self.assertEqual(stage.xp, 1)
             self.assertEqual(stage.status, ProjectStageStatus.UNASSIGNED)
             self.assertEqual(stage.max_xp, 25)
             for _ in range(100):
-                stage.turn_finished(events)
+                stage.apply_effects(
+                    [Effect(type=EffectType.TIME_PASSES, value=1)], events
+                )
             self.assertEqual(stage.extra.turns_waited, 101)
             self.assertEqual(stage.xp, stage.max_xp)
             self.assertEqual(stage.status, ProjectStageStatus.FINISHED)
 
-        with ProjectStage.load("Operation Meatloaf", 1) as stage:
+        with ProjectStage.load("Operation Meatloaf Stage 1") as stage:
             self.assertEqual(stage.xp, stage.max_xp)
             self.assertEqual(stage.status, ProjectStageStatus.FINISHED)
 
@@ -68,27 +70,39 @@ class ProjectTest(TestCase):
         with Project.load("Operation Meatloaf") as proj:
             proj.add_stage(ProjectStageType.RESOURCE, resources=["Stone", "Timber"])
 
-        with ProjectStage.load("Operation Meatloaf", 1) as stage:
+        with ProjectStage.load("Operation Meatloaf Stage 1") as stage:
             self.assertEqual(stage.status, ProjectStageStatus.UNASSIGNED)
             self.assertEqual(stage.xp, 0)
             events: List[Event] = []
-            stage.resource_delivered("Stone", events)
+            stage.apply_effects(
+                [Effect(type=EffectType.MODIFY_RESOURCES, subtype="Stone", value=1)],
+                events,
+            )
             self.assertEqual(stage.xp, 5)
-            stage.resource_delivered("Stone", events)
-            self.assertEqual(stage.xp, 10)
-            stage.resource_delivered("Timber", events)
-            self.assertEqual(stage.xp, 15)
+            stage.apply_effects(
+                [
+                    Effect(type=EffectType.MODIFY_RESOURCES, subtype="Stone", value=2),
+                    Effect(type=EffectType.MODIFY_RESOURCES, subtype="Timber", value=1),
+                ],
+                events,
+            )
+            self.assertEqual(stage.xp, 20)
             with self.assertRaises(IllegalMoveException):
-                stage.resource_delivered("Wine", events)
+                stage.apply_effects(
+                    [Effect(type=EffectType.MODIFY_RESOURCES, subtype="Wine", value=1)],
+                    events,
+                )
             self.assertEqual(stage.status, ProjectStageStatus.UNASSIGNED)
             self.assertEqual(stage.max_xp, 25)
-            for _ in range(10):
-                stage.resource_delivered("Timber", events)
-            self.assertEqual(stage.extra.given_resources, {"Stone": 2, "Timber": 11})
+            stage.apply_effects(
+                [Effect(type=EffectType.MODIFY_RESOURCES, subtype="Timber", value=10)],
+                events,
+            )
+            self.assertEqual(stage.extra.given_resources, {"Stone": 3, "Timber": 11})
             self.assertEqual(stage.xp, stage.max_xp)
             self.assertEqual(stage.status, ProjectStageStatus.FINISHED)
 
-        with ProjectStage.load("Operation Meatloaf", 1) as stage:
+        with ProjectStage.load("Operation Meatloaf Stage 1") as stage:
             self.assertEqual(stage.xp, stage.max_xp)
             self.assertEqual(stage.status, ProjectStageStatus.FINISHED)
 
@@ -97,7 +111,7 @@ class ProjectTest(TestCase):
         with Project.load("Operation Meatloaf") as proj:
             proj.add_stage(ProjectStageType.DISCOVERY)
 
-        with ProjectStage.load("Operation Meatloaf", 1) as stage:
+        with ProjectStage.load("Operation Meatloaf Stage 1") as stage:
             self.assertEqual(stage.status, ProjectStageStatus.UNASSIGNED)
             self.assertEqual(stage.xp, 0)
             events: List[Event] = []
@@ -106,14 +120,16 @@ class ProjectTest(TestCase):
             possible_size = len(stage.extra.possible_hexes)
 
             for wrong in wrong_guesses:
-                stage.hex_explored(wrong, events)
+                stage.apply_effects(
+                    [Effect(type=EffectType.EXPLORE, value=wrong)], events
+                )
                 self.assertEqual(stage.xp, 0)
                 self.assertEqual(len(stage.extra.possible_hexes), possible_size - 1)
                 self.assertEqual(stage.extra.explored_hexes, {wrong})
                 self.assertEqual(events, [])
                 break
 
-            stage.hex_explored("ZZ11", events)
+            stage.apply_effects([Effect(type=EffectType.EXPLORE, value="ZZ11")], events)
             self.assertEqual(stage.xp, 0)
             self.assertEqual(
                 len(stage.extra.possible_hexes), possible_size - 1
@@ -121,12 +137,14 @@ class ProjectTest(TestCase):
             self.assertEqual(len(stage.extra.explored_hexes), 1)  # did not increment
             self.assertEqual(events, [])
 
-            stage.hex_explored(stage.extra.secret_hex, events)
+            stage.apply_effects(
+                [Effect(type=EffectType.EXPLORE, value=stage.extra.secret_hex)], events
+            )
             self.assertEqual(stage.xp, stage.max_xp)
             self.assertEqual(len(events), 1)
             self.assertEqual(stage.status, ProjectStageStatus.FINISHED)
 
-        with ProjectStage.load("Operation Meatloaf", 1) as stage:
+        with ProjectStage.load("Operation Meatloaf Stage 1") as stage:
             self.assertEqual(stage.xp, stage.max_xp)
             self.assertEqual(stage.status, ProjectStageStatus.FINISHED)
 
@@ -135,25 +153,25 @@ class ProjectTest(TestCase):
         with Project.load("Operation Meatloaf") as proj:
             proj.add_stage(ProjectStageType.WAITING)
 
-        with ProjectStage.load("Operation Meatloaf", 1) as stage:
+        with ProjectStage.load("Operation Meatloaf Stage 1") as stage:
             self.assertEqual(stage.status, ProjectStageStatus.UNASSIGNED)
             self.assertEqual(stage.xp, 0)
             events: List[Event] = []
 
-            stage.modify_xp(3, events)
+            stage.apply_effects([Effect(type=EffectType.MODIFY_XP, value=3)], events)
             self.assertEqual(stage.xp, 3)
             self.assertEqual(stage.status, ProjectStageStatus.UNASSIGNED)
 
-            stage.modify_xp(-5, events)
+            stage.apply_effects([Effect(type=EffectType.MODIFY_XP, value=-5)], events)
             self.assertEqual(stage.xp, 0)
             self.assertEqual(stage.status, ProjectStageStatus.UNASSIGNED)
 
             self.assertEqual(stage.max_xp, 25)
-            stage.modify_xp(25, events)
+            stage.apply_effects([Effect(type=EffectType.MODIFY_XP, value=25)], events)
             self.assertEqual(stage.xp, stage.max_xp)
             self.assertEqual(stage.status, ProjectStageStatus.FINISHED)
 
-        with ProjectStage.load("Operation Meatloaf", 1) as stage:
+        with ProjectStage.load("Operation Meatloaf Stage 1") as stage:
             self.assertEqual(stage.xp, stage.max_xp)
             self.assertEqual(stage.status, ProjectStageStatus.FINISHED)
 

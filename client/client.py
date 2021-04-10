@@ -33,6 +33,7 @@ from picaro.server.api_types import (
     CampRequest,
     CampResponse,
     Character,
+    Choices,
     Effect,
     EffectType,
     EncounterEffect,
@@ -324,7 +325,10 @@ class Client:
                 ]
             elif self.args.do_return:
                 stages = [
-                    s for s in stages if s.status == ProjectStageStatus.IN_PROGRESS and ch.name in s.participants
+                    s
+                    for s in stages
+                    if s.status == ProjectStageStatus.IN_PROGRESS
+                    and ch.name in s.participants
                 ]
 
             if not stages:
@@ -334,7 +338,7 @@ class Client:
             for stage in stages:
                 if self.args.start or self.args.do_return:
                     ltr = ascii_lowercase[len(choices)]
-                    choices.append((stage.project_name, stage.stage_num))
+                    choices.append(stage.name)
                     print(
                         f"  {ltr}. {stage.name} ({stage.type.name}) - {stage.xp}/{stage.max_xp}"
                     )
@@ -383,13 +387,13 @@ class Client:
                     if self.args.start:
                         pargs = [
                             f"/projects/{ch.name}/start",
-                            StartProjectStageRequest(*choices[c_idx]),
+                            StartProjectStageRequest(choices[c_idx]),
                             StartProjectStageResponse,
                         ]
                     else:
                         pargs = [
                             f"/projects/{ch.name}/return",
-                            ReturnProjectStageRequest(*choices[c_idx]),
+                            ReturnProjectStageRequest(choices[c_idx]),
                             ReturnProjectStageResponse,
                         ]
 
@@ -646,16 +650,46 @@ class Client:
         return self._input_encounter_action(ch)
 
     def _input_encounter_action(self, ch: Character) -> bool:
-        rolls = list(ch.encounters[0].rolls[:])
+        if ch.encounters[0].checks:
+            actions = self._input_encounter_checks(
+                ch, ch.encounters[0].checks, ch.encounters[0].rolls
+            )
+        elif ch.encounters[0].choices:
+            actions = self._input_encounter_choices(
+                ch, ch.encounters[0].choices, ch.encounters[0].rolls
+            )
+        else:
+            raise Exception("Encounter with no checks or choices?")
+
+        try:
+            resp = self._post(
+                f"/play/{ch.name}/resolve_encounter",
+                ResolveEncounterRequest(actions=actions),
+                ResolveEncounterResponse,
+            )
+        except IllegalMoveException as e:
+            print(e)
+            print()
+            return False
+        print()
+        print(f"The outcome of your encounter:")
+        self._display_outcome(ch, resp.outcome)
+        print("[Hit return]")
+        input()
+        return True
+
+    def _input_encounter_checks(
+        self, ch: Character, checks: Sequence[EncounterCheck], rolls: Sequence[int]
+    ) -> EncounterActions:
+        rolls = list(rolls[:])
         luck = ch.luck
         transfers = []
         adjusts = []
         flee = False
-        choices = set()
 
-        while True and ch.encounters[0].checks:
+        while True:
             print()
-            for idx, check in enumerate(ch.encounters[0].checks):
+            for idx, check in enumerate(checks):
                 status = "SUCCESS" if rolls[idx] >= check.target_number else "FAILURE"
                 print(
                     f"Check #{idx+1}: {self._check_str(check, ch)}: {rolls[idx]} - {status}"
@@ -711,91 +745,113 @@ class Client:
                 print("Unknown command!")
                 continue
 
-        if not flee and ch.encounters[0].choices:
-            enc_choices = ch.encounters[0].choices
-            can_choose = (not enc_choices.is_random) and (
-                len(enc_choices.choice_list) - enc_choices.min_choices > 0
-            )
-            for idx, choice in enumerate(enc_choices.choice_list):
-                if can_choose:
-                    if len(enc_choices.choice_list) < 15:
-                        pfx = " " + ascii_lowercase[idx] + ". "
-                    else:
-                        pfx = " " + str(idx + 1) + ". "
-                else:
-                    pfx = " * "
-                line = pfx + ", ".join(
-                    self._render_effect(eff) for eff in choice.benefit + choice.cost
-                )
-                if enc_choices.is_random and (idx + 1) in ch.encounters[0].rolls:
-                    line = colors.bold + line + colors.reset
-                print(line)
-            if can_choose:
-                if enc_choices.min_choices < enc_choices.max_choices:
-                    print(" z. Finish")
-                while True:
-                    mi = enc_choices.min_choices - len(choices)
-                    mx = enc_choices.max_choices - len(choices)
-                    inline = "Make your choice"
-                    if mi != 1 or mx != 1:
-                        inline += f" ({mi} - {mx} items)"
-                    inline += ": "
-                    print(inline, end="")
-                    line = input().lower().strip()
-                    if not line:
-                        continue
-                    if line[0] == "z":
-                        if len(choices) >= enc_choices.min_choices:
-                            break
-                        else:
-                            print("You must make another selection.")
-                            continue
-                    init_num_m = re.match(r"^([0-9]+)", line)
-                    if init_num_m:
-                        c_idx = int(init_num_m.group(1)) - 1
-                    else:
-                        c_idx = ascii_lowercase.index(line[0])
-                    if c_idx >= len(enc_choices.choice_list):
-                        print("Not a valid choice?")
-                        continue
-                    if c_idx in choices:
-                        print(f"Undoing choice {line[0]}")
-                        choices.remove(c_idx)
-                    else:
-                        choices.add(c_idx)
-
-                    if len(choices) >= enc_choices.max_choices:
-                        break
-            else:
-                if enc_choices.is_random:
-                    choices |= {r - 1 for r in ch.encounters[0].rolls}
-                elif len(enc_choices.choice_list) == 1:
-                    choices.add(0)
-
-        actions = EncounterActions(
+        return EncounterActions(
             flee=flee,
             transfers=transfers,
             adjusts=adjusts,
             luck=luck,
             rolls=rolls,
-            choices=list(choices),
+            choices={},
         )
-        try:
-            resp = self._post(
-                f"/play/{ch.name}/resolve_encounter",
-                ResolveEncounterRequest(actions=actions),
-                ResolveEncounterResponse,
-            )
-        except IllegalMoveException as e:
-            print(e)
-            print()
-            return False
-        print()
-        print(f"The outcome of your encounter:")
-        self._display_outcome(ch, resp.outcome)
-        print("[Hit return]")
-        input()
-        return True
+
+    def _input_encounter_choices(
+        self, ch: Character, choices: Choices, rolls: Sequence[int]
+    ) -> EncounterActions:
+        user_choices = defaultdict(int)
+        can_choose = True
+        if choices.is_random:
+            for v in rolls:
+                user_choices[v - 1] += 1
+            can_choose = False
+        elif choices.min_choices >= sum(c.max_choices for c in choices.choice_list):
+            for idx, c in enumerate(choices.choice_list):
+                user_choices[idx] = c.max_choices
+            can_choose = False
+
+        while True:
+            if choices.benefit or choices.cost:
+                line = " ** Overall: " + ", ".join(
+                    self._render_effect(eff) for eff in choices.benefit + choices.cost
+                )
+                print(line)
+            for idx, choice in enumerate(choices.choice_list):
+                line = " "
+                if can_choose:
+                    if len(choices.choice_list) < 15:
+                        line += ascii_lowercase[idx] + ". "
+                    else:
+                        line += str(idx + 1) + ". "
+                else:
+                    line += "* " if idx in user_choices else "- "
+
+                line += ", ".join(
+                    self._render_effect(eff) for eff in choice.benefit + choice.cost
+                )
+                line += f" [{user_choices[idx]}/{choice.max_choices}]"
+                print(line)
+
+            if not can_choose:
+                break
+
+            inline = "Make your choice"
+
+            if choices.min_choices != 1 or choices.max_choices != 1:
+                print(" z. Finish")
+                inline += f" ({choices.min_choices} - {choices.max_choices} items)"
+            inline += ": "
+            print(inline, end="")
+
+            line = input().lower().strip()
+            if not line:
+                continue
+            if line[0] == "z":
+                if sum(user_choices.values()) >= choices.min_choices:
+                    break
+                else:
+                    print("You must make another selection.")
+                    continue
+            choice_m = re.match(r"^([0-9]+|[a-z])(?:\s+(-?[0-9]+))?", line)
+            if not choice_m:
+                print("Invalid input?")
+                continue
+            c_idx = ascii_lowercase.find(choice_m.group(1))
+            if c_idx == -1:
+                c_idx = int(choice_m.group(1)) - 1
+            c_val = int(choice_m.group(2)) if choice_m.group(2) else None
+            if c_idx < 0 or c_idx >= len(choices.choice_list):
+                print("Not a valid choice?")
+                continue
+            if c_val is None:
+                # if this is a once-only choice, then entering the choice with no
+                # count toggles, otherwise it always adds 1
+                if choices.choice_list[c_idx].max_choices == 1 and user_choices[c_idx]:
+                    c_val = -1
+                else:
+                    c_val = 1
+            cc = choices.choice_list[c_idx]
+            if user_choices[c_idx] + c_val < cc.min_choices:
+                print(
+                    f"That would be lower than the allowed minimum ({cc.min_choices}) for the choice."
+                )
+                continue
+            if user_choices[c_idx] + c_val > cc.max_choices:
+                print(
+                    f"That would be higher than the allowed maximum ({cc.max_choices}) for the choice."
+                )
+                continue
+            user_choices[c_idx] += c_val
+
+            if sum(user_choices.values()) >= choices.max_choices:
+                break
+
+        return EncounterActions(
+            flee=False,
+            transfers=[],
+            adjusts=[],
+            luck=ch.luck,
+            rolls=rolls,
+            choices={k: v for k, v in user_choices.items() if v > 0},
+        )
 
     def _display_outcome(self, ch: Character, outcome: Outcome) -> None:
         if not outcome.events:
@@ -870,6 +926,15 @@ class Client:
                 else:
                     line = f"* {subj} has "
                 line += f"become a {event.new_value}"
+            elif event.type == EffectType.DISRUPT_JOB:
+                if subj == "You":
+                    line = f"* {subj} have "
+                else:
+                    line = f"* {subj} has "
+                if event.new_value:
+                    line += f"lost in a leadership challenge"
+                else:
+                    line += f"survived a leadership challenge"
             elif event.type == EffectType.START_PROJECT_STAGE:
                 # in the event the project is the subject and the character is the
                 # object, but we want to display it the other way around
@@ -924,34 +989,38 @@ class Client:
             else:
                 return f"{eff.value:+} {word_s}"
 
+        entity = ""
+        if eff.entity_name:
+            entity = f" for {eff.entity_name}"
+
         if eff.type == EffectType.MODIFY_COINS:
-            return _with_s("coin")
+            return _with_s("coin") + entity
         elif eff.type == EffectType.MODIFY_XP:
-            return f"{eff.value:+} {eff.subtype or 'unassigned'} xp"
+            return f"{eff.value:+} {eff.subtype or 'unassigned'} xp{entity}"
         elif eff.type == EffectType.MODIFY_REPUTATION:
-            return f"{eff.value:+} reputation"
+            return f"{eff.value:+} reputation{entity}"
         elif eff.type == EffectType.MODIFY_HEALTH:
-            return f"{eff.value:+} health"
+            return f"{eff.value:+} health{entity}"
         elif eff.type == EffectType.MODIFY_RESOURCES:
             return (
                 _with_s("resource draw")
                 if eff.subtype is None
                 else _with_s(f"{eff.subtype} resource")
-            )
+            ) + entity
         elif eff.type == EffectType.MODIFY_QUEST:
-            return f"{eff.value:+} quest"
+            return f"{eff.value:+} quest{entity}"
         elif eff.type == EffectType.MODIFY_TURNS:
-            return _with_s("turn")
+            return _with_s("turn") + entity
         elif eff.type == EffectType.MODIFY_SPEED:
-            return f"{eff.value:+} speed"
+            return f"{eff.value:+} speed{entity}"
         elif eff.type == EffectType.DISRUPT_JOB:
-            return f"job turmoil ({eff.value:+})"
+            return f"job turmoil ({eff.value:+}){entity}"
         elif eff.type == EffectType.TRANSPORT:
-            return f"random transport ({eff.value:+})"
+            return f"random transport ({eff.value:+}){entity}"
         elif eff.type == EffectType.MODIFY_ACTION:
-            return "use action" if eff.value <= 0 else "refresh action"
+            return ("use action" if eff.value <= 0 else "refresh action") + entity
         elif eff.type == EffectType.ADD_EMBLEM:
-            return "add an emblem: " + self._render_emblem(eff.value)
+            return "add an emblem (" + self._render_emblem(eff.value) + ")" + entity
         else:
             return eff
 

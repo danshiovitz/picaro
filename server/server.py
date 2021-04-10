@@ -100,8 +100,7 @@ class Server:
         player_id = self._extract_player_id()
         req = self._read_body(StartProjectStageRequest)
         outcome = self._engine.start_project_stage(
-            project_name=req.project_name,
-            stage_num=req.stage_num,
+            project_stage_name=req.project_stage_name,
             player_id=player_id,
             game_id=game_id,
             character_name=character_name,
@@ -115,8 +114,7 @@ class Server:
         player_id = self._extract_player_id()
         req = self._read_body(ReturnProjectStageRequest)
         outcome = self._engine.return_project_stage(
-            project_name=req.project_name,
-            stage_num=req.stage_num,
+            project_stage_name=req.project_stage_name,
             player_id=player_id,
             game_id=game_id,
             character_name=character_name,

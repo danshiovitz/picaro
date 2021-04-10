@@ -76,6 +76,10 @@ class ActiveBoard:
             name, location, adjacent=False, comments=["Token created"], events=events
         )
 
+    def remove_token(self, token_name: str) -> None:
+        token = TokenStorage.load_by_name(token_name)
+        TokenStorage.delete_by_name(token_name)
+
     def move_token(
         self,
         token_name: str,
@@ -375,7 +379,7 @@ class ActiveBoard:
                         name="Trade",
                         choices=Choices(
                             min_choices=0,
-                            max_choices=1,
+                            max_choices=99,
                             is_random=False,
                             choice_list=[
                                 Choice(
@@ -389,9 +393,11 @@ class ActiveBoard:
                                     benefit=[
                                         Effect(type=EffectType.MODIFY_COINS, value=5)
                                     ],
+                                    max_choices=99,
                                 )
                                 for rs in mine_rs.values()
                             ],
+                            cost=[Effect(type=EffectType.MODIFY_ACTION, value=-1)],
                         ),
                     ),
                 ]
@@ -651,6 +657,10 @@ class TokenStorage(ObjectStorageBase[Token]):
     def update(cls, token: Token) -> Token:
         cls._update_helper(token)
         return token
+
+    @classmethod
+    def delete_by_name(cls, name: str) -> None:
+        cls._delete_helper(["name = :name"], {"name": name})
 
 
 class CountryStorage(ObjectStorageBase[Country]):

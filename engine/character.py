@@ -15,15 +15,28 @@ from typing import (
     Set,
     Tuple,
     TypeVar,
+    cast,
 )
 
 from picaro.common.utils import clamp
 
 from .board import load_board
 from .deck import load_deck
-from .encounter import UpdateHolder
+from .entity import (
+    Entity,
+    EntityField,
+    IntEntityField,
+    SimpleIntEntityField,
+    SimpleDictIntEntityField,
+)
 from .exceptions import BadStateException, IllegalMoveException
 from .job import load_job, load_jobs
+from .project import (
+    ProjectStage,
+    ProjectStageResource,
+    ProjectStageStatus,
+    ProjectStageType,
+)
 from .skills import load_skills
 from .snapshot import (
     Character as snapshot_Character,
@@ -42,12 +55,14 @@ from .types import (
     EncounterActions,
     EncounterContextType,
     EncounterEffect,
+    EntityType,
     Event,
     Feat,
     FullCard,
     HookType,
     JobType,
     Outcome,
+    SpecialChoiceType,
     TableauCard,
     TemplateCard,
 )
@@ -71,7 +86,46 @@ class TravelCard:
     value: int = 0
 
 
-class Character(ReadOnlyWrapper):
+class Character(Entity, ReadOnlyWrapper):
+    ENTITY_TYPE = EntityType.CHARACTER
+    FIELDS = [
+        lambda _vs: [DisruptJobMetaField()],
+        lambda _vs: [ModifyJobField()],
+        lambda _vs: [ResourceDrawMetaField()],
+        lambda evs: SimpleDictIntEntityField.make_fields(
+            evs, "resources", "resources", EffectType.MODIFY_RESOURCES
+        ),
+        lambda _vs: [TransportField()],
+        lambda _vs: [ModifyLocationField()],
+        lambda _vs: [ModifyActionField()],
+        lambda _vs: [AddEmblemField()],
+        lambda _vs: [SimpleIntEntityField("coins", "coins", EffectType.MODIFY_COINS)],
+        lambda _vs: [
+            SimpleIntEntityField(
+                "reputation", "reputation", EffectType.MODIFY_REPUTATION
+            )
+        ],
+        lambda _vs: [
+            SimpleIntEntityField(
+                "health",
+                "health",
+                EffectType.MODIFY_HEALTH,
+                max_value=lambda e: e.get_max_health(),
+            )
+        ],
+        lambda _vs: [
+            SimpleIntEntityField("quest points", "quest", EffectType.MODIFY_QUEST)
+        ],
+        lambda _vs: [
+            SimpleIntEntityField("turns", "remaining_turns", EffectType.MODIFY_TURNS)
+        ],
+        lambda _vs: [SimpleIntEntityField("speed", "speed", EffectType.MODIFY_SPEED)],
+        lambda evs: SimpleDictIntEntityField.make_fields(
+            evs, "xp", "skill_xp", EffectType.MODIFY_XP
+        ),
+        lambda _vs: [ModifyFreeXpField()],
+    ]
+
     @classmethod
     def create(cls, name: str, player_id: int, job_name: str, location: str) -> None:
         data = CharacterData(
@@ -258,6 +312,11 @@ class Character(ReadOnlyWrapper):
             if is_valid(c)
         ]
 
+    def spend_luck(self, amt: int, action: str) -> None:
+        if self._data.luck < amt:
+            raise BadStateException(f"Luck too low for {action}")
+        self._data.luck -= amt
+
     def get_init_turns(self) -> int:
         return clamp(20 + self._calc_hook(HookType.INIT_TURNS), min=10, max=40)
 
@@ -360,11 +419,16 @@ class Character(ReadOnlyWrapper):
             if roll_val <= self._calc_hook(HookType.RELIABLE_SKILL, chk.skill):
                 roll_val = random.randint(1, 8)
             rolls.append(roll_val + bonus)
-        if card.choices and card.choices.is_random:
-            rolls.extend(
-                random.randint(1, len(card.choices.choice_list))
-                for _ in range(card.choices.max_choices)
-            )
+        if card.choices:
+            if card.choices.special_type:
+                card = dataclasses.replace(
+                    card, choices=self._make_special_choices(card.choices)
+                )
+            if card.choices.is_random:
+                rolls.extend(
+                    random.randint(1, len(card.choices.choice_list))
+                    for _ in range(card.choices.max_choices)
+                )
         self._data.encounters.append(
             Encounter(
                 card=card,
@@ -372,6 +436,48 @@ class Character(ReadOnlyWrapper):
                 context_type=context_type,
             )
         )
+
+    def _make_special_choices(self, choices: Choices) -> Choices:
+        if choices.special_type == SpecialChoiceType.DELIVER:
+            stage_rs: List[Tuple[str, str]] = []
+            with ProjectStage.load_for_character(self.name) as stages:
+                for stage in stages:
+                    if (
+                        stage.project_name != choices.special_entity
+                        or stage.type != ProjectStageType.RESOURCE
+                        or stage.status != ProjectStageStatus.IN_PROGRESS
+                    ):
+                        continue
+                    extra = cast(ProjectStageResource, stage.extra)
+                    stage_rs.extend((stage.name, rs) for rs in extra.wanted_resources)
+            return Choices(
+                min_choices=0,
+                max_choices=99,
+                is_random=False,
+                choice_list=[
+                    Choice(
+                        cost=[
+                            Effect(
+                                type=EffectType.MODIFY_RESOURCES, subtype=rs, value=-1
+                            )
+                        ],
+                        benefit=[
+                            Effect(
+                                entity_type=EntityType.PROJECT_STAGE,
+                                entity_name=stage_name,
+                                type=EffectType.MODIFY_RESOURCES,
+                                subtype=rs,
+                                value=1,
+                            )
+                        ],
+                        max_choices=self.resources.get(rs, 0),
+                    )
+                    for stage_name, rs in stage_rs
+                ],
+                cost=[Effect(type=EffectType.MODIFY_ACTION, value=-1)],
+            )
+        else:
+            raise Exception(f"Unknown special choice type: {choices.special_type}")
 
     def _schedule_promotion(self, job_name: str) -> None:
         job = load_job(job_name)
@@ -405,7 +511,7 @@ class Character(ReadOnlyWrapper):
                 choice_list=choice_list,
             ),
         )
-        self._queue_template(promo_template, context_type=EncounterContextType.SYSTEM)
+        self.queue_template(promo_template, context_type=EncounterContextType.SYSTEM)
 
     def _distribute_free_xp(self, xp: int) -> None:
         all_skills = load_skills()
@@ -429,7 +535,7 @@ class Character(ReadOnlyWrapper):
                 ],
             ),
         )
-        self._queue_template(assign_template, context_type=EncounterContextType.SYSTEM)
+        self.queue_template(assign_template, context_type=EncounterContextType.SYSTEM)
 
     def _draw_travel_card(self, location: str) -> Optional[FullCard]:
         if not self._data.travel_deck:
@@ -535,397 +641,6 @@ class Character(ReadOnlyWrapper):
                 next_job = None
         return (f"1d8+{bonus} vs {target_number}: {roll}", next_job, is_promo)
 
-    # translate the results of the encounter into absolute modifications
-    def calc_effects(
-        self, encounter: Encounter, actions: EncounterActions
-    ) -> List[Effect]:
-        rolls = self._replay_actions(encounter, actions)
-        if actions.flee:
-            return []
-
-        ret = []
-
-        if encounter.card.checks:
-            ocs = defaultdict(int)
-            failures = 0
-
-            for idx, check in enumerate(encounter.card.checks):
-                if rolls[idx] >= check.target_number:
-                    ocs[check.reward] += 1
-                else:
-                    ocs[check.penalty] += 1
-                    failures += 1
-
-            mcs = defaultdict(int)
-
-            sum_til = lambda v: (v * v + v) // 2
-            for enc_eff, cnt in ocs.items():
-                if enc_eff == EncounterEffect.GAIN_COINS:
-                    ret.append(Effect(type=EffectType.MODIFY_COINS, value=sum_til(cnt)))
-                elif enc_eff == EncounterEffect.LOSE_COINS:
-                    ret.append(Effect(type=EffectType.MODIFY_COINS, value=-cnt))
-                elif enc_eff == EncounterEffect.GAIN_REPUTATION:
-                    ret.append(
-                        Effect(type=EffectType.MODIFY_REPUTATION, value=sum_til(cnt))
-                    )
-                elif enc_eff == EncounterEffect.LOSE_REPUTATION:
-                    ret.append(Effect(type=EffectType.MODIFY_REPUTATION, value=-cnt))
-                elif enc_eff == EncounterEffect.GAIN_HEALING:
-                    ret.append(Effect(type=EffectType.MODIFY_HEALTH, value=cnt * 3))
-                elif enc_eff == EncounterEffect.DAMAGE:
-                    ret.append(
-                        Effect(type=EffectType.MODIFY_HEALTH, value=-sum_til(cnt))
-                    )
-                elif enc_eff == EncounterEffect.GAIN_QUEST:
-                    ret.append(Effect(type=EffectType.MODIFY_QUEST, value=cnt))
-                elif enc_eff == EncounterEffect.GAIN_XP:
-                    ret.append(
-                        Effect(
-                            type=EffectType.MODIFY_XP,
-                            subtype=encounter.card.checks[0].skill,
-                            value=cnt * 5,
-                        )
-                    )
-                elif enc_eff == EncounterEffect.GAIN_RESOURCES:
-                    ret.append(Effect(type=EffectType.MODIFY_RESOURCES, value=cnt))
-                elif enc_eff == EncounterEffect.LOSE_RESOURCES:
-                    ret.append(Effect(type=EffectType.MODIFY_RESOURCES, value=-cnt))
-                elif enc_eff == EncounterEffect.GAIN_TURNS:
-                    ret.append(Effect(type=EffectType.MODIFY_TURNS, value=cnt))
-                elif enc_eff == EncounterEffect.LOSE_TURNS:
-                    ret.append(Effect(type=EffectType.MODIFY_TURNS, value=-cnt))
-                elif enc_eff == EncounterEffect.LOSE_SPEED:
-                    ret.append(Effect(type=EffectType.MODIFY_SPEED, value=-cnt))
-                elif enc_eff == EncounterEffect.TRANSPORT:
-                    ret.append(Effect(type=EffectType.TRANSPORT, value=cnt * 5))
-                elif enc_eff == EncounterEffect.DISRUPT_JOB:
-                    ret.append(Effect(type=EffectType.DISRUPT_JOB, value=-cnt))
-                elif enc_eff == EncounterEffect.NOTHING:
-                    pass
-                else:
-                    raise Exception(f"Unknown effect: {enc_eff}")
-            if failures > 0:
-                ret.append(
-                    Effect(
-                        type=EffectType.MODIFY_XP,
-                        subtype=encounter.card.checks[0].skill,
-                        value=failures,
-                    )
-                )
-
-        for c in actions.choices:
-            choice = encounter.card.choices.choice_list[c]
-            ret.extend(choice.benefit)
-            ret.extend(dataclasses.replace(ct, is_cost=True) for ct in choice.cost)
-
-        return ret
-
-    # note this does update luck as well as validating stuff
-    def _replay_actions(
-        self, encounter: Encounter, actions: EncounterActions
-    ) -> List[int]:
-        rolls = list(encounter.rolls[:])
-
-        if encounter.card.checks:
-            # validate the actions by rerunning them
-            luck = self._data.luck
-
-            for adj in actions.adjusts or []:
-                if luck <= 0:
-                    raise BadStateException("Luck not high enough for adjust")
-                luck -= 1
-                rolls[adj] += 1
-
-            for from_c, to_c in actions.transfers or []:
-                if rolls[from_c] < 2:
-                    raise BadStateException("From not enough for transfer")
-                rolls[from_c] -= 2
-                rolls[to_c] += 1
-
-            if actions.flee:
-                if luck <= 0:
-                    raise BadStateException("Luck not high enough for flee")
-                luck -= 1
-
-            rolls = tuple(rolls)
-            if (luck, rolls) != (actions.luck, actions.rolls):
-                raise BadStateException("Computed luck/rolls doesn't match?")
-
-            self._data.luck = luck
-
-        if encounter.card.choices:
-            choices = encounter.card.choices
-            if len(actions.choices) < choices.min_choices:
-                with_s = f"{choices.min_choices} choice"
-                if choices.min_choices != 1:
-                    with_s += "s"
-                raise IllegalMoveException(f"Must supply at least {with_s}.")
-            if len(actions.choices) > choices.max_choices:
-                with_s = f"{choices.min_choices} choice"
-                if choices.min_choices != 1:
-                    with_s += "s"
-                raise IllegalMoveException(f"Must supply at most {with_s}.")
-            for idx, cur in enumerate(actions.choices):
-                if choices.is_random and cur != encounter.rolls[idx] - 1:
-                    raise BadStateException("Choice should match roll for random")
-                elif cur < 0 or cur >= len(choices.choice_list):
-                    raise BadStateException(f"Choice out of range: {cur}")
-        elif actions.choices:
-            raise BadStateException("Choices not allowed here.")
-
-        return rolls
-
-    def apply_effects(
-        self,
-        effects: List[Effect],
-        context_type: EncounterContextType,
-        events: List[Event],
-    ) -> None:
-        # want something like: first process gain coins, if any, then process lose coins, if any,
-        # then gain resources, then lose resources, ... , then job change, then pick the actual
-        # transport location if any
-        # we do it this way because we want, eg, to be able to overwrite reputation changes with
-        # reputation set via job change (note that any 'set' overwrites previous comments, as well)
-        effects_split = defaultdict(list)
-        for effect in effects:
-            effects_split[(effect.type, effect.subtype is None)].append(effect)
-
-        def simple(
-            name: str, effect_type: EffectType, max_val: Optional[int] = None
-        ) -> UpdateHolder:
-            get_f = lambda: getattr(self._data, name)
-
-            def set_f(old_val, new_val, comments) -> None:
-                setattr(self._data, name, new_val)
-                events.append(
-                    Event.for_character(
-                        self.name, effect_type, None, old_val, new_val, comments
-                    )
-                )
-
-            holder = UpdateHolder(
-                name,
-                effect_type,
-                None,
-                context_type,
-                0,
-                max_val,
-                get_f=get_f,
-                set_f=set_f,
-            )
-            holder.apply_effects(effects_split.pop((effect_type, True), []))
-            return holder
-
-        def dict_holder(name: str, effect_type: EffectType) -> Dict[str, UpdateHolder]:
-            char_self = self._data
-
-            class HolderDict(dict):
-                def __missing__(self, subtype):
-                    get_f = lambda: getattr(char_self, name).get(subtype, 0)
-
-                    def set_f(old_val, new_val, comments) -> None:
-                        getattr(char_self, name)[subtype] = new_val
-                        events.append(
-                            Event.for_character(
-                                char_self.name,
-                                effect_type,
-                                subtype,
-                                old_val,
-                                new_val,
-                                comments,
-                            )
-                        )
-
-                    holder = UpdateHolder(
-                        name,
-                        effect_type,
-                        subtype,
-                        context_type,
-                        0,
-                        None,
-                        get_f=get_f,
-                        set_f=set_f,
-                    )
-                    self[subtype] = holder
-                    return holder
-
-            subtypes = {
-                e.subtype for e in effects if e.type == effect_type and e.subtype
-            }
-            ret = HolderDict()
-            for subtype in subtypes:
-                ret[subtype].apply_effects(effects_split.pop((effect_type, False), []))
-            return ret
-
-        def const_val(
-            name: str, effect_type: EffectType, init_val: int
-        ) -> UpdateHolder:
-            get_f = lambda: init_val
-            set_f = lambda _old_val, _new_val, _comments: None
-            holder = UpdateHolder(
-                name, effect_type, None, context_type, 0, None, get_f=get_f, set_f=set_f
-            )
-            holder.apply_effects(effects_split.pop((effect_type, True), []))
-            return holder
-
-        action_holder = const_val(
-            "action_flag",
-            EffectType.MODIFY_ACTION,
-            0 if TurnFlags.ACTED in self._data.turn_flags else 1,
-        )
-        coins_holder = simple("coins", EffectType.MODIFY_COINS)
-        reputation_holder = simple("reputation", EffectType.MODIFY_REPUTATION)
-        health_holder = simple(
-            "health", EffectType.MODIFY_HEALTH, max_val=self.get_max_health()
-        )
-        quest_holder = simple("quest", EffectType.MODIFY_QUEST)
-        turn_holder = simple("remaining_turns", EffectType.MODIFY_TURNS)
-        resource_draw_holder = const_val(
-            "resources_draw", EffectType.MODIFY_RESOURCES, 0
-        )
-        resources_holder = dict_holder("resources", EffectType.MODIFY_RESOURCES)
-        speed_holder = simple("speed", EffectType.MODIFY_SPEED)
-        xp_holder = dict_holder("skill_xp", EffectType.MODIFY_XP)
-        free_xp_holder = const_val("free_xp", EffectType.MODIFY_XP, 0)
-        job_val_holder = const_val("job", EffectType.DISRUPT_JOB, 0)
-
-        for eff in effects_split.pop((EffectType.ADD_EMBLEM, False), []):
-            old_idxs = [
-                idx
-                for idx in range(len(self._data.emblems))
-                if self._data.emblems[idx].name == eff.value.name
-            ]
-            if old_idxs:
-                old_emblem = self._data.emblems.pop(old_idxs[0])
-                new_emblem = Emblem(
-                    name=eff.value.name, feats=old_emblem.feats + eff.value.feats
-                )
-            else:
-                old_emblem = None
-                new_emblem = eff.value
-            self._data.emblems.append(new_emblem)
-            events.append(
-                Event.for_character(
-                    self._data.name,
-                    EffectType.ADD_EMBLEM,
-                    None,
-                    old_emblem,
-                    new_emblem,
-                    [],
-                )
-            )
-
-        if job_val_holder.get_cur_value() != 0:
-            job_msg, new_job, is_promo = self._job_check(job_val_holder.get_cur_value())
-            if new_job:
-                old_job = self._data.job_name
-                self._data.job_name = new_job
-                self._data.tableau = []
-                self._data.job_deck = []
-                self.refill_tableau()
-                # blow away earlier rep mods:
-                reputation_holder.set_to(3, "set to 3 for job switch")
-                if is_promo:
-                    self._schedule_promotion(old_job)
-                else:
-                    # also move some (more)
-                    move_eff = Effect(
-                        type=EffectType.TRANSPORT, value=3, subtype=None, is_cost=False
-                    )
-                    effects_split[(move_eff.type, move_eff.subtype is None)].append(
-                        move_eff
-                    )
-                events.append(
-                    Event.for_character(
-                        self._data.name,
-                        EffectType.MODIFY_JOB,
-                        None,
-                        old_job,
-                        new_job,
-                        [job_msg],
-                    )
-                )
-            else:
-                reputation_holder.add(-2, "-2 from job challenge: " + job_msg)
-
-        board = load_board()
-
-        draw_cnt = resource_draw_holder.get_cur_value()
-        if draw_cnt < 0:
-            cur_rs = [
-                nm for rs, cnt in self._data.resources.items() for nm in [rs] * cnt
-            ]
-            to_rm = (
-                random.sample(cur_rs, draw_cnt * -1)
-                if len(cur_rs) > draw_cnt * -1
-                else cur_rs
-            )
-            rcs = defaultdict(int)
-            for rt in to_rm:
-                rcs[rt] += 1
-            for rt, cnt in rcs.items():
-                resources_holder[rt].add(-cnt)
-        elif draw_cnt > 0:
-            loc = board.get_token_location(self.name)
-            comments = []
-            for _ in range(draw_cnt):
-                draw = board.draw_resource_card(loc)
-                if draw.value != 0:
-                    resources_holder[draw.type].add(draw.value)
-                comments.append(draw.name)
-            events.append(
-                Event.for_character(
-                    self.name, EffectType.MODIFY_RESOURCES, None, 0, draw_cnt, comments
-                )
-            )
-
-        action_cnt = action_holder.get_cur_value()
-        if action_cnt <= 0:
-            self._data.turn_flags.add(TurnFlags.ACTED)
-        else:
-            self._data.turn_flags.discard(TurnFlags.ACTED)
-
-        free_xp = free_xp_holder.get_cur_value()
-        if free_xp > 0:
-            self._distribute_free_xp(free_xp)
-
-        for eff in effects_split.pop((EffectType.TRANSPORT, True), []):
-            tp_mod = eff.value // 5 + 1
-            tp_min = clamp(eff.value - tp_mod, min=1)
-            tp_max = eff.value + tp_mod
-            old_location = board.get_token_location(self.name)
-            new_location = random.choice(
-                board.find_hexes_near_token(self.name, tp_min, tp_max)
-            )
-            board.move_token(
-                self.name,
-                new_location,
-                adjacent=False,
-                comments=[f"random {tp_min}-{tp_max} hex transport"],
-                events=events,
-            )
-
-        for eff in effects_split.pop((EffectType.MODIFY_LOCATION, False), []):
-            board.move_token(
-                self.name, eff.value, adjacent=False, comments=[], events=events
-            )
-
-        if effects_split:
-            raise Exception(f"Effects remaining unprocessed: {effects_split}")
-
-        action_holder.write(events)
-        coins_holder.write(events)
-        reputation_holder.write(events)
-        for v in xp_holder.values():
-            v.write(events)
-        free_xp_holder.write(events)
-        health_holder.write(events)
-        for v in resources_holder.values():
-            v.write(events)
-        quest_holder.write(events)
-        turn_holder.write(events)
-        speed_holder.write(events)
-
 
 class CharacterContext:
     def __init__(self, name: str) -> None:
@@ -937,6 +652,276 @@ class CharacterContext:
 
     def __exit__(self, *exc: Any) -> None:
         CharacterStorage.update(self._data)
+
+
+class DisruptJobMetaField(IntEntityField):
+    def __init__(self):
+        super().__init__(
+            "disrupt job",
+            EffectType.DISRUPT_JOB,
+            None,
+            init_v=lambda e: 0,
+            set_v=self._do_disrupt,
+        )
+
+    def _do_disrupt(self, entity: Entity, val: int) -> bool:
+        job_msg, new_job, is_promo = entity._job_check(val)
+        self._events.append(
+            Event(
+                Event.make_id(),
+                self._entity.ENTITY_TYPE,
+                self._entity.name,
+                self._type,
+                self._subtype,
+                0,
+                1 if new_job else 0,
+                [job_msg],
+            )
+        )
+
+        if new_job:
+            self._split_effects[(EffectType.MODIFY_JOB, None)].append(
+                Effect(EffectType.MODIFY_JOB, new_job, comment="job disruption")
+            )
+            if is_promo:
+                entity._schedule_promotion(entity.job_name)
+            else:
+                self._split_effects[(EffectType.TRANSPORT, None)].append(
+                    Effect(EffectType.TRANSPORT, 3, comment="job disruption")
+                )
+        else:
+            self._split_effects[(EffectType.MODIFY_REPUTATION, None)].append(
+                Effect(EffectType.MODIFY_REPUTATION, -2, comment="job disruption")
+            )
+
+        # we are handling the events ourselves
+        return False
+
+
+class ModifyJobField(EntityField):
+    def __init__(self):
+        super().__init__("job", EffectType.MODIFY_JOB, None)
+
+    def _update(self, effect: Effect, is_first: bool, is_last: bool) -> None:
+        # don't actually switch multiple times
+        if not is_last:
+            return
+        old_job = self._entity.job_name
+        self._entity._data.tableau = []
+        self._entity._data.job_deck = []
+        self._entity._data.job_name = effect.value
+        self._entity.refill_tableau()
+        self._split_effects[(EffectType.MODIFY_REPUTATION, None)].append(
+            Effect(
+                EffectType.MODIFY_REPUTATION,
+                3,
+                is_absolute=True,
+                comment="set from job switch",
+            )
+        )
+        self._events.append(
+            Event(
+                Event.make_id(),
+                self._entity.ENTITY_TYPE,
+                self._entity.name,
+                self._type,
+                self._subtype,
+                old_job,
+                self._entity.job_name,
+                [effect.comment] if effect.comment else [],
+            )
+        )
+
+
+class ResourceDrawMetaField(IntEntityField):
+    def __init__(self):
+        super().__init__(
+            "resource draws",
+            EffectType.MODIFY_RESOURCES,
+            None,
+            init_v=lambda e: 0,
+            set_v=self._do_both,
+        )
+
+    def _do_both(self, entity: Entity, val: int) -> bool:
+        if val < 0:
+            self._do_discard(entity, val)
+        elif val > 0:
+            self._do_draw(entity, val)
+        # if == 0, do nothing
+        return False
+
+    def _do_discard(self, entity: Entity, val: int) -> None:
+        cur_rs = [
+            nm for rs, cnt in self._entity._data.resources.items() for nm in [rs] * cnt
+        ]
+        to_rm = random.sample(cur_rs, val * -1) if len(cur_rs) > val * -1 else cur_rs
+        rcs = defaultdict(int)
+        for rt in to_rm:
+            rcs[rt] += 1
+        for rt, cnt in rcs.items():
+            self._split_effects[(EffectType.MODIFY_RESOURCES, rt)].append(
+                Effect(
+                    EffectType.MODIFY_RESOURCES,
+                    -cnt,
+                    subtype=rt,
+                    comment=f"random pick {-cnt}",
+                )
+            )
+        self._events.append(
+            Event(
+                Event.make_id(),
+                self._entity.ENTITY_TYPE,
+                self._entity.name,
+                self._type,
+                self._subtype,
+                0,
+                val,
+                [f"{k} x{v}" for k, v in rcs.items()],
+            )
+        )
+
+    def _do_draw(self, entity: Entity, val: int) -> None:
+        board = load_board()
+        loc = board.get_token_location(self._entity.name)
+        comments = []
+        for _ in range(val):
+            draw = board.draw_resource_card(loc)
+            if draw.value != 0:
+                self._split_effects[(EffectType.MODIFY_RESOURCES, draw.type)].append(
+                    Effect(
+                        EffectType.MODIFY_RESOURCES,
+                        draw.value,
+                        subtype=draw.type,
+                    )
+                )
+            comments.append(draw.name)
+        self._events.append(
+            Event(
+                Event.make_id(),
+                self._entity.ENTITY_TYPE,
+                self._entity.name,
+                self._type,
+                self._subtype,
+                0,
+                val,
+                comments,
+            )
+        )
+
+
+class TransportField(IntEntityField):
+    def __init__(self):
+        super().__init__(
+            "transport",
+            EffectType.TRANSPORT,
+            None,
+            init_v=lambda e: 0,
+            set_v=self._do_transport,
+        )
+
+    def _do_transport(self, entity: Entity, val: int) -> None:
+        board = load_board()
+        tp_mod = val // 5 + 1
+        tp_min = clamp(val - tp_mod, min=1)
+        tp_max = val + tp_mod
+        old_location = board.get_token_location(self._entity.name)
+        new_location = random.choice(
+            board.find_hexes_near_token(self._entity.name, tp_min, tp_max)
+        )
+        board.move_token(
+            self._entity.name,
+            new_location,
+            adjacent=False,
+            comments=[f"random {tp_min}-{tp_max} hex transport"],
+            events=self._events,
+        )
+
+
+class ModifyLocationField(EntityField):
+    def __init__(self):
+        super().__init__("location", EffectType.MODIFY_LOCATION, None)
+
+    def _update(self, effect: Effect, is_first: bool, is_last: bool) -> None:
+        # don't actually switch multiple times
+        if not is_last:
+            return
+        board.move_token(
+            self._entity.name,
+            effect.value,
+            adjacent=False,
+            comments=[],
+            events=self._events,
+        )
+
+
+class ModifyActionField(IntEntityField):
+    def __init__(self):
+        super().__init__(
+            "available action",
+            EffectType.MODIFY_ACTION,
+            None,
+            init_v=lambda e: 0
+            if TurnFlags.ACTED in self._entity._data.turn_flags
+            else 1,
+            set_v=self._do_action,
+        )
+
+    def _do_action(self, entity: Entity, val: int) -> None:
+        if val <= 0:
+            self._entity._data.turn_flags.add(TurnFlags.ACTED)
+        else:
+            self._entity._data.turn_flags.discard(TurnFlags.ACTED)
+
+
+class AddEmblemField(EntityField):
+    def __init__(self):
+        super().__init__("emblems", EffectType.ADD_EMBLEM, None)
+
+    def _update(self, effect: Effect, is_first: bool, is_last: bool) -> None:
+        old_idxs = [
+            idx
+            for idx in range(len(self._entity._data.emblems))
+            if self._entity._data.emblems[idx].name == effect.value.name
+        ]
+        if old_idxs:
+            old_emblem = self._entity._data.emblems.pop(old_idxs[0])
+            new_emblem = Emblem(
+                name=effect.value.name, feats=old_emblem.feats + effect.value.feats
+            )
+        else:
+            old_emblem = None
+            new_emblem = effect.value
+        self._entity._data.emblems.append(new_emblem)
+        self._events.append(
+            Event(
+                Event.make_id(),
+                self._entity.ENTITY_TYPE,
+                self._entity.name,
+                self._type,
+                self._subtype,
+                old_emblem,
+                new_emblem,
+                [],
+            )
+        )
+
+
+class ModifyFreeXpField(IntEntityField):
+    def __init__(self):
+        super().__init__(
+            "free xp",
+            EffectType.MODIFY_XP,
+            None,
+            init_v=lambda e: 0,
+            set_v=self._do_modify,
+        )
+
+    def _do_modify(self, entity: Entity, val: int) -> None:
+        if val <= 0:
+            raise Exception("Don't know how to subtract unassigned xp yet")
+        else:
+            self._entity._distribute_free_xp(val)
 
 
 # This class is not frozen, and also not exposed externally - it needs to be loaded every time

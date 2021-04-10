@@ -22,14 +22,7 @@ if __name__ == "__main__":
         location="random",
         job_name="Raider",
     )
-
-    loc = engine.get_character(
-        game_id=game_id, player_id=PLAYER_ID, character_name="Conan"
-    ).location
-    engine.create_project(
-        name="Quest for Sandwiches",
-        project_type="Monument",
-        location=loc,
+    engine.xyzzy(
         game_id=game_id,
         player_id=PLAYER_ID,
         character_name="Conan",

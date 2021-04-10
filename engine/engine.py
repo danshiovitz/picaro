@@ -1,6 +1,9 @@
 import dataclasses
+from collections import defaultdict
 from pathlib import Path
 from typing import List, Optional, Sequence
+
+from picaro.common.utils import with_s
 
 from .board import load_board
 from .character import Character, TurnFlags
@@ -15,9 +18,15 @@ from .snapshot import (
 from .storage import ConnectionManager, with_connection
 from .types import (
     Action,
+    Choice,
     Choices,
+    Effect,
+    EffectType,
+    Encounter,
     EncounterActions,
     EncounterContextType,
+    EncounterEffect,
+    EntityType,
     Event,
     Outcome,
     TemplateCard,
@@ -73,6 +82,34 @@ class Engine:
             return [s for s in snapshots if include_all or s.stages]
 
     @with_connection()
+    def xyzzy(
+        self,
+        *,
+        player_id: int,
+        game_id: int,
+        character_name: str,
+    ) -> None:
+        with Character.load(character_name) as ch:
+            loc = ch.get_snapshot().location
+            ch.apply_effects(
+                [
+                    Effect(type=EffectType.MODIFY_COINS, value=50),
+                    Effect(type=EffectType.MODIFY_RESOURCES, value=50),
+                ],
+                [],
+            )
+
+        project_name = "Quest for Sandwiches"
+        Project.create(project_name, "Monument", loc)
+        with Project.load(project_name) as proj:
+            from .types import ProjectStageType
+
+            proj.add_stage(ProjectStageType.RESOURCE)
+
+        with ProjectStage.load(project_name + " Stage 1") as stage:
+            stage.start(character_name, [])
+
+    @with_connection()
     def create_project(
         self,
         name: str,
@@ -84,21 +121,17 @@ class Engine:
         character_name: str,
     ) -> None:
         Project.create(name, project_type, location)
-        with Project.load(name) as proj:
-            from .types import ProjectStageType
-            proj.add_stage(ProjectStageType.DISCOVERY)
 
     @with_connection()
     def start_project_stage(
         self,
-        project_name: str,
-        stage_num: int,
+        project_stage_name: str,
         *,
         player_id: int,
         game_id: int,
         character_name: str,
     ) -> Outcome:
-        with ProjectStage.load(project_name, stage_num) as stage:
+        with ProjectStage.load(project_stage_name) as stage:
             with Character.load(character_name) as ch:
                 with ProjectStage.load_for_character(character_name) as current:
                     if len(current) >= ch.get_max_project_stages():
@@ -110,7 +143,7 @@ class Engine:
 
                 events: List[Event] = []
                 cost = [dataclasses.replace(ct, is_cost=True) for ct in stage.cost]
-                ch.apply_effects(cost, EncounterContextType.SYSTEM, events)
+                ch.apply_effects(cost, events)
 
                 stage.start(ch.name, events)
                 return Outcome(events=events)
@@ -118,14 +151,13 @@ class Engine:
     @with_connection()
     def return_project_stage(
         self,
-        project_name: str,
-        stage_num: int,
+        project_stage_name: str,
         *,
         player_id: int,
         game_id: int,
         character_name: str,
     ) -> Outcome:
-        with ProjectStage.load(project_name, stage_num) as stage:
+        with ProjectStage.load(project_stage_name) as stage:
             with Character.load(character_name) as ch:
                 events: List[Event] = []
                 stage.do_return(ch.name, events)
@@ -203,7 +235,15 @@ class Engine:
             new_loc = board.get_token_location(ch.name)
             with ProjectStage.load_for_character(ch.name) as current:
                 for cur in current:
-                    cur.hex_explored(new_loc, events)
+                    cur.apply_effects(
+                        [
+                            Effect(
+                                EffectType.EXPLORE,
+                                new_loc,
+                            )
+                        ],
+                        events,
+                    )
             ch.queue_travel_card(new_loc)
             if ch.acted_this_turn() and not ch.encounters:
                 self._finish_turn(ch, events)
@@ -231,8 +271,36 @@ class Engine:
             events: List[Event] = []
 
             encounter = ch.pop_encounter()
-            effects = ch.calc_effects(encounter, actions)
-            ch.apply_effects(effects, encounter.context_type, events)
+            effects = self._compute_encounter_effects(ch, encounter, actions)
+            effects = [
+                dataclasses.replace(
+                    e, entity_type=EntityType.CHARACTER, entity_name=ch.name
+                )
+                if e.entity_type is None
+                else e
+                for e in effects
+            ]
+
+            effects_split = defaultdict(list)
+            for effect in effects:
+                effects_split[(effect.entity_type, effect.entity_name)].append(effect)
+
+            for entity, cur_effects in effects_split.items():
+                entity_type, entity_name = entity
+                if entity_type == EntityType.CHARACTER:
+                    if entity_name == ch.name:
+                        ch.apply_effects(cur_effects, events)
+                    else:
+                        with Character.load(entity_name) as other_ch:
+                            other_ch.apply_effects(cur_effects, events)
+                elif entity_type == EntityType.PROJECT_STAGE:
+                    with ProjectStage.load(entity_name) as stage:
+                        stage.apply_effects(cur_effects, events)
+                else:
+                    raise Exception(
+                        f"Unexpected entity in effect: {entity_type} {entity_name}"
+                    )
+
             if ch.acted_this_turn() and not ch.encounters:
                 self._finish_turn(ch, events)
             return Outcome(events=events)
@@ -252,6 +320,159 @@ class Engine:
         if ch.acted_this_turn():
             raise IllegalMoveException(f"You can't move in a turn after having acted.")
 
+    # translate the results of the encounter into absolute modifications
+    def _compute_encounter_effects(
+        self, ch: Character, encounter: Encounter, actions: EncounterActions
+    ) -> List[Effect]:
+        rolls = self._replay_actions(ch, encounter, actions)
+        if actions.flee:
+            return []
+
+        ret = []
+
+        if encounter.card.checks:
+            ocs = defaultdict(int)
+            failures = 0
+
+            for idx, check in enumerate(encounter.card.checks):
+                if rolls[idx] >= check.target_number:
+                    ocs[check.reward] += 1
+                else:
+                    ocs[check.penalty] += 1
+                    failures += 1
+
+            mcs = defaultdict(int)
+
+            sum_til = lambda v: (v * v + v) // 2
+            for enc_eff, cnt in ocs.items():
+                if enc_eff == EncounterEffect.GAIN_COINS:
+                    ret.append(Effect(type=EffectType.MODIFY_COINS, value=sum_til(cnt)))
+                elif enc_eff == EncounterEffect.LOSE_COINS:
+                    ret.append(Effect(type=EffectType.MODIFY_COINS, value=-cnt))
+                elif enc_eff == EncounterEffect.GAIN_REPUTATION:
+                    ret.append(
+                        Effect(type=EffectType.MODIFY_REPUTATION, value=sum_til(cnt))
+                    )
+                elif enc_eff == EncounterEffect.LOSE_REPUTATION:
+                    ret.append(Effect(type=EffectType.MODIFY_REPUTATION, value=-cnt))
+                elif enc_eff == EncounterEffect.GAIN_HEALING:
+                    ret.append(Effect(type=EffectType.MODIFY_HEALTH, value=cnt * 3))
+                elif enc_eff == EncounterEffect.DAMAGE:
+                    ret.append(
+                        Effect(type=EffectType.MODIFY_HEALTH, value=-sum_til(cnt))
+                    )
+                elif enc_eff == EncounterEffect.GAIN_QUEST:
+                    ret.append(Effect(type=EffectType.MODIFY_QUEST, value=cnt))
+                elif enc_eff == EncounterEffect.GAIN_XP:
+                    ret.append(
+                        Effect(
+                            type=EffectType.MODIFY_XP,
+                            subtype=encounter.card.checks[0].skill,
+                            value=cnt * 5,
+                        )
+                    )
+                elif enc_eff == EncounterEffect.GAIN_RESOURCES:
+                    ret.append(Effect(type=EffectType.MODIFY_RESOURCES, value=cnt))
+                elif enc_eff == EncounterEffect.LOSE_RESOURCES:
+                    ret.append(Effect(type=EffectType.MODIFY_RESOURCES, value=-cnt))
+                elif enc_eff == EncounterEffect.GAIN_TURNS:
+                    ret.append(Effect(type=EffectType.MODIFY_TURNS, value=cnt))
+                elif enc_eff == EncounterEffect.LOSE_TURNS:
+                    ret.append(Effect(type=EffectType.MODIFY_TURNS, value=-cnt))
+                elif enc_eff == EncounterEffect.LOSE_SPEED:
+                    ret.append(Effect(type=EffectType.MODIFY_SPEED, value=-cnt))
+                elif enc_eff == EncounterEffect.TRANSPORT:
+                    ret.append(Effect(type=EffectType.TRANSPORT, value=cnt * 5))
+                elif enc_eff == EncounterEffect.DISRUPT_JOB:
+                    ret.append(Effect(type=EffectType.DISRUPT_JOB, value=-cnt))
+                elif enc_eff == EncounterEffect.NOTHING:
+                    pass
+                else:
+                    raise Exception(f"Unknown effect: {enc_eff}")
+            if failures > 0:
+                ret.append(
+                    Effect(
+                        type=EffectType.MODIFY_XP,
+                        subtype=encounter.card.checks[0].skill,
+                        value=failures,
+                    )
+                )
+
+        if actions.choices:
+            ret.extend(encounter.card.choices.benefit)
+            ret.extend(
+                dataclasses.replace(ct, is_cost=True)
+                for ct in encounter.card.choices.cost
+            )
+        for choice_idx, cnt in actions.choices.items():
+            choice = encounter.card.choices.choice_list[choice_idx]
+            for _ in range(cnt):
+                ret.extend(choice.benefit)
+                ret.extend(dataclasses.replace(ct, is_cost=True) for ct in choice.cost)
+        return ret
+
+    # note this does update luck as well as validating stuff
+    def _replay_actions(
+        self, ch: Character, encounter: Encounter, actions: EncounterActions
+    ) -> List[int]:
+        rolls = list(encounter.rolls[:])
+
+        if encounter.card.checks:
+            # validate the actions by rerunning them
+            for adj in actions.adjusts or []:
+                ch.spend_luck(1, "adjust")
+                rolls[adj] += 1
+
+            for from_c, to_c in actions.transfers or []:
+                if rolls[from_c] < 2:
+                    raise BadStateException("From not enough for transfer")
+                rolls[from_c] -= 2
+                rolls[to_c] += 1
+
+            if actions.flee:
+                ch.spend_luck(1, "flee")
+
+            rolls = tuple(rolls)
+            if (ch.luck, rolls) != (actions.luck, actions.rolls):
+                raise BadStateException("Computed luck/rolls doesn't match?")
+
+        if encounter.card.choices:
+            choices = encounter.card.choices
+            if choices.is_random:
+                rnd = defaultdict(int)
+                for v in encounter.rolls:
+                    rnd[v - 1] += 1
+                if rnd != actions.choices:
+                    raise BadStateException(
+                        f"Choice should match roll for random ({rnd}, {actions.choices})"
+                    )
+            tot = 0
+            for choice_idx, cnt in actions.choices.items():
+                if choice_idx < 0 or choice_idx >= len(choices.choice_list):
+                    raise BadStateException(f"Choice out of range: {choice_idx}")
+                choice = choices.choice_list[choice_idx]
+                tot += cnt
+                if cnt < choice.min_choices:
+                    raise IllegalMoveException(
+                        f"Must choose {choice.name or 'this'} at least {with_s(choice.min_choices, 'time')}."
+                    )
+                if cnt > choice.max_choices:
+                    raise IllegalMoveException(
+                        f"Must choose {choice.name or 'this'} at most {with_s(choice.max_choices, 'time')}."
+                    )
+            if tot < choices.min_choices:
+                raise IllegalMoveException(
+                    f"Must select at least {with_s(choices.min_choices, 'choice')}."
+                )
+            if tot > choices.max_choices:
+                raise IllegalMoveException(
+                    f"Must select at most {with_s(choices.max_choices, 'choice')}."
+                )
+        elif actions.choices:
+            raise BadStateException("Choices not allowed here.")
+
+        return rolls
+
     # currently we assume nothing in here adds to the current list of events,
     # to avoid confusing the player when additional stuff shows up in the
     # outcome, but there's probably nothing strictly wrong if it did
@@ -266,7 +487,15 @@ class Engine:
 
         with ProjectStage.load_for_character(ch.name) as current:
             for cur in current:
-                cur.turn_finished(events)
+                cur.apply_effects(
+                    [
+                        Effect(
+                            EffectType.TIME_PASSES,
+                            1,
+                        )
+                    ],
+                    events,
+                )
 
         ch.turn_reset()
 
@@ -309,9 +538,7 @@ class Engine:
 
     def _discard_resources(self, ch: Character) -> None:
         # discard down to correct number of resources
-        # (in the future should let player pick which to discard)
-        all_rs = [nm for rs, cnt in ch.resources.items() for nm in [rs] * cnt]
-        overage = len(all_rs) - ch.get_max_resources()
+        overage = sum(ch.resources.values()) - ch.get_max_resources()
         if overage <= 0:
             return
 
@@ -330,9 +557,11 @@ class Engine:
                             Effect(
                                 type=EffectType.MODIFY_RESOURCES, subtype=rs, value=-1
                             ),
-                        )
+                        ),
+                        max_choices=cnt,
                     )
-                    for rs in all_rs
+                    for rs, cnt in ch.resources.items()
+                    if cnt > 0
                 ],
             ),
         )

@@ -55,6 +55,9 @@ class EffectType(Enum):
     ADD_EMBLEM = enum_auto()
     MODIFY_LOCATION = enum_auto()
     MODIFY_JOB = enum_auto()
+    # effects mostly for projects
+    TIME_PASSES = enum_auto()
+    EXPLORE = enum_auto()
     # "complex" effects that trigger others
     DISRUPT_JOB = enum_auto()
     TRANSPORT = enum_auto()
@@ -62,12 +65,26 @@ class EffectType(Enum):
     START_PROJECT_STAGE = enum_auto()
     RETURN_PROJECT_STAGE = enum_auto()
 
+
+class EntityType(Enum):
+    HEX = enum_auto()
+    TOKEN = enum_auto()
+    CHARACTER = enum_auto()
+    PROJECT = enum_auto()
+    PROJECT_STAGE = enum_auto()
+
+
 @dataclass(frozen=True)
 class Effect(Generic[T]):
     type: EffectType
     value: Optional[Any]
+    is_absolute: bool = False
     subtype: Optional[str] = None
     is_cost: bool = False
+    comment: Optional[str] = None
+    # if the entity isn't provided, it defaults to "the current character"
+    entity_type: Optional[EntityType] = None
+    entity_name: Optional[str] = None
 
     @classmethod
     def type_field(cls) -> str:
@@ -127,16 +144,43 @@ class EncounterCheck:
 @dataclass(frozen=True)
 class Choice:
     name: Optional[str] = None
+    # this is the min/max times this particular choice can be selected
+    min_choices: int = 0
+    max_choices: int = 1
+    # this cost and benefit apply once per time the choice is selected
     cost: Sequence[Effect] = ()
     benefit: Sequence[Effect] = ()
 
 
+class SpecialChoiceType(Enum):
+    DELIVER = enum_auto()
+
+
 @dataclass(frozen=True)
 class Choices:
+    # this is the min/max overall selection count
     min_choices: int
     max_choices: int
     is_random: bool
     choice_list: Sequence[Choice]
+    # this cost and benefit apply (once) if you make any selections at all
+    cost: Sequence[Effect] = ()
+    benefit: Sequence[Effect] = ()
+    special_type: Optional[SpecialChoiceType] = None
+    special_entity: Optional[str] = None
+
+    @classmethod
+    def make_special(
+        cls, type: Optional[SpecialChoiceType], entity: Optional[str]
+    ) -> "Choices":
+        return Choices(
+            min_choices=0,
+            max_choices=0,
+            is_random=False,
+            choice_list=[],
+            special_type=type,
+            special_entity=entity,
+        )
 
 
 @dataclass(frozen=True)
@@ -196,7 +240,8 @@ class EncounterActions:
     flee: bool
     luck: int
     rolls: Sequence[int]
-    choices: Sequence[int]
+    # map of choice index -> times chosen
+    choices: Dict[int, int]
 
 
 @dataclass(frozen=True)
@@ -237,16 +282,9 @@ class ProjectStatus(Enum):
     FINISHED = enum_auto()
 
 
-class EntityType(Enum):
-    HEX = enum_auto()
-    TOKEN = enum_auto()
-    CHARACTER = enum_auto()
-    PROJECT = enum_auto()
-
-
 @dataclass(frozen=True)
 class Event(Generic[T]):
-    id: int
+    id: str
     entity_type: EntityType
     entity_name: str
     type: EffectType
@@ -266,7 +304,13 @@ class Event(Generic[T]):
 
         if type_val == EffectType.ADD_EMBLEM:
             return Emblem
-        elif type_val in (EffectType.MODIFY_JOB, EffectType.MODIFY_LOCATION):
+        elif type_val in (
+            EffectType.MODIFY_JOB,
+            EffectType.MODIFY_LOCATION,
+            EffectType.EXPLORE,
+            EffectType.START_PROJECT_STAGE,
+            EffectType.RETURN_PROJECT_STAGE,
+        ):
             return str
         else:
             return int
@@ -318,6 +362,27 @@ class Event(Generic[T]):
     ) -> "Event":
         return Event[T](
             cls.make_id(), EntityType.PROJECT, name, type, subtype, old, new, comments
+        )
+
+    @classmethod
+    def for_project_stage(
+        cls,
+        name: str,
+        type: EffectType,
+        subtype: Optional[str],
+        old: T,
+        new: T,
+        comments: List[str],
+    ) -> "Event":
+        return Event[T](
+            cls.make_id(),
+            EntityType.PROJECT_STAGE,
+            name,
+            type,
+            subtype,
+            old,
+            new,
+            comments,
         )
 
     @classmethod

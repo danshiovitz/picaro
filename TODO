@@ -96,37 +96,31 @@ Projects:
   - in addition, you can get the project encounter effect when a stage is active, which gives +1 xp to a random project's active stage
 - how long do we expect projects to take? it feels like a short project should take about a season, hence the 25 xp number
 
-Worldstate:
-Ok, I realized that the encounter outcome object isn't really good enough - it can't even handle character A giving to character B. So new theory, let's split out the worldstate from the rules, like we've been pushing for ages. The worldstate encompasses the characters, the hexes and tokens, and (soon) the projects. Each of these are essentially entities that can have outcomes (events?), like
-  @dataclass(frozen=True)
-  class Event:
-      id: int
-      entity_type: str
-      entity_name: str
-      type: EventType
-      subtype: Optional[str]
-      values: Values[Any]
-      comments: List[str]
+Having trouble working through delivery / challenge stuff, so let's talk about it
+delivery:
+- the token action gets marked as special action = deliver, special entity = <project name>
+- when you pick the action, it dynamically constructs the possible deliveries (1 wine to stage A)
+- the effects in that particular choice need to be tagged somehow that they are associated with the project
+- when applying the effects, it sees the modify_resources call and knows to call deliver to the project
+- or should effects have entities, and so the action would be Effect("Conan", MODIFY_RESOURCES, Wine, -1), Effect("A", MODIFY_RESOURCES, "Wine", +1)
+- the nice thing there obv is we could have other ways to apply effects to the project stage
 
-  @dataclass(frozen=True)
-  class Values(Generic[T]):
-    old: T
-    new: T
-
-So we can have a thing like
-  Event(entity_type="Character", entity_name="Conan", type=EventType.MODIFY_RESOURCES, subtype="Wine", values=Values(old=3, new=2), comments=["-1"]),
-  Event(entity_type="Character", entity_name="Taurus", type=EventType.MODIFY_RESOURCES, subtype="Wine", values=Values(old=1, new=2), comments=["+1"]),
-but also
-  Event(entity_type="Character", entity_name="Conan", type=EventType.MODIFY_RESOURCES, subtype="Wine", values=Values(old=3, new=2), comments=["-1"]),
-  Event(entity_type="ProjectStage", entity_name="asdb2623", type=EventType.MODIFY_RESOURCES, subtype="Wine", values=Values(old=0, new=1), comments=["+1"]),
-  Event(entity_type="ProjectStage", entity_name="asdb2623", type=EventType.MODIFY_XP, subtype=None, values=Values(old=5, new=10), comments=["+5"]),
-  Event(entity_type="ProjectStage", entity_name="asdb2623", type=EventType.MODIFY_STATE, subtype=None, values=Values(old=IN_PROGRESS, new=COMPLETED), comments=["xp bar filled"]),
-and, we note,
-  Event(entity_type="Character", entity_name="Conan", type=EventType.MODIFY_SPEED, subtype=None, values=Values(old=3, new=2), comments=["-1"]),
-  Event(entity_type="Token", entity_name="Conan", type=EventType.MODIFY_LOCATION, subtype=None, values=Values(old="AB32", new="AB33"), comments=[]),
-
-Though this latter raises the question, how do we distinguish between interesting and uninteresting event outcomes? It's not as simple as "was an encounter queued?" because what if they enter a spot and discover the project stage's secret hex? Maybe we should just have definitionally interesting or uninteresting:
-  @dataclass(frozen=True)
-  class Outcome:
-    events: List[Event]
-    interesting: bool
+So meters again, and what we seem to be calling entities. I guess meters are really a subtype of field, and we also
+have scalar fields for, eg, location or job. apply_effects first goes through and splits the effects up. then we go
+through and evaluate composite effects like disrupt_job, which may change other effects (nb modify_resources is not
+composite for character but arguably is for project since it may update xp), then we evaluate other effects. I guess
+it may be easier to just make it so we specify the evaluation order per-entity and all effects can modify other effects
+(let's just trust nobody creates any loops). we need I think four hooks per field - the init hook called at the beginning,
+the update hook is called as each individual effect is considered, the finish hook is called after all the individual
+effects have been considered (or perhaps this is a flag to the update hook?) and then the commit hook is called when we're
+done. now, question, why do we need four hooks?
+- in the simplest meter (say coins), we initialize the total and orig value from the entity field, we accumulate a
+  running total and comment list on each update, then when we have the last one we cap the min/max and write out
+  the local field and produce an event.
+- for location changes, we may actually want to produce an event for each change, or maybe we'd want to aggregate. the
+  read and write of the location are both going to involve custom code, though (arguably: instead of dealing with it
+  ourselves, we might instead say to evaluate it by applying new effects to another entity)
+- for job changes, we need to init the total with a constant, accmulate the running total, then when we have the last we
+  write out an event and conditionally update other events (nb this implies supporting set-value events vs modify-value)
+- for character resource card changes, we init with constant, accumulate total, then do a fancy thing and conditionally update. I guess this is the same.
+- I guess project resource changes are also the same.
