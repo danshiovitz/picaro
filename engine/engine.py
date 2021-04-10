@@ -9,7 +9,7 @@ from .board import load_board
 from .character import Character, TurnFlags
 from .exceptions import BadStateException, IllegalMoveException
 from .game import create_game
-from .project import Project, ProjectStage
+from .project import Project, Task
 from .snapshot import (
     Board as snapshot_Board,
     Character as snapshot_Character,
@@ -79,7 +79,7 @@ class Engine:
     ) -> List[snapshot_Project]:
         with Project.load_for_character(character_name) as projects:
             snapshots = (p.get_snapshot(character_name, include_all) for p in projects)
-            return [s for s in snapshots if include_all or s.stages]
+            return [s for s in snapshots if include_all or s.tasks]
 
     @with_connection()
     def xyzzy(
@@ -102,12 +102,12 @@ class Engine:
         project_name = "Quest for Sandwiches"
         Project.create(project_name, "Monument", loc)
         with Project.load(project_name) as proj:
-            from .types import ProjectStageType
+            from .types import TaskType
 
-            proj.add_stage(ProjectStageType.RESOURCE)
+            proj.add_task(TaskType.RESOURCE)
 
-        with ProjectStage.load(project_name + " Stage 1") as stage:
-            stage.start(character_name, [])
+        with Task.load(project_name + " Task 1") as task:
+            task.start(character_name, [])
 
     @with_connection()
     def create_project(
@@ -123,44 +123,44 @@ class Engine:
         Project.create(name, project_type, location)
 
     @with_connection()
-    def start_project_stage(
+    def start_task(
         self,
-        project_stage_name: str,
+        task_name: str,
         *,
         player_id: int,
         game_id: int,
         character_name: str,
     ) -> Outcome:
-        with ProjectStage.load(project_stage_name) as stage:
+        with Task.load(task_name) as task:
             with Character.load(character_name) as ch:
-                with ProjectStage.load_for_character(character_name) as current:
-                    if len(current) >= ch.get_max_project_stages():
+                with Task.load_for_character(character_name) as current:
+                    if len(current) >= ch.get_max_tasks():
                         raise IllegalMoveException(
-                            "You are already at your maximum number of active stages."
+                            "You are already at your maximum number of active tasks."
                         )
 
                 # other requirements could be checked here
 
                 events: List[Event] = []
-                cost = [dataclasses.replace(ct, is_cost=True) for ct in stage.cost]
+                cost = [dataclasses.replace(ct, is_cost=True) for ct in task.cost]
                 ch.apply_effects(cost, events)
 
-                stage.start(ch.name, events)
+                task.start(ch.name, events)
                 return Outcome(events=events)
 
     @with_connection()
-    def return_project_stage(
+    def return_task(
         self,
-        project_stage_name: str,
+        task_name: str,
         *,
         player_id: int,
         game_id: int,
         character_name: str,
     ) -> Outcome:
-        with ProjectStage.load(project_stage_name) as stage:
+        with Task.load(task_name) as task:
             with Character.load(character_name) as ch:
                 events: List[Event] = []
-                stage.do_return(ch.name, events)
+                task.do_return(ch.name, events)
                 return Outcome(events=events)
 
     @with_connection()
@@ -233,7 +233,7 @@ class Engine:
             ch.step(step, events)
             board = load_board()
             new_loc = board.get_token_location(ch.name)
-            with ProjectStage.load_for_character(ch.name) as current:
+            with Task.load_for_character(ch.name) as current:
                 for cur in current:
                     cur.apply_effects(
                         [
@@ -293,9 +293,9 @@ class Engine:
                     else:
                         with Character.load(entity_name) as other_ch:
                             other_ch.apply_effects(cur_effects, events)
-                elif entity_type == EntityType.PROJECT_STAGE:
-                    with ProjectStage.load(entity_name) as stage:
-                        stage.apply_effects(cur_effects, events)
+                elif entity_type == EntityType.TASK:
+                    with Task.load(entity_name) as task:
+                        task.apply_effects(cur_effects, events)
                 else:
                     raise Exception(
                         f"Unexpected entity in effect: {entity_type} {entity_name}"
@@ -485,7 +485,7 @@ class Engine:
         if ch.encounters:
             return
 
-        with ProjectStage.load_for_character(ch.name) as current:
+        with Task.load_for_character(ch.name) as current:
             for cur in current:
                 cur.apply_effects(
                     [

@@ -20,11 +20,11 @@ from .api_types import (
     ResolveEncounterResponse,
     JobRequest,
     JobResponse,
-    ReturnProjectStageRequest,
-    ReturnProjectStageResponse,
+    ReturnTaskRequest,
+    ReturnTaskResponse,
     SearchProjectsResponse,
-    StartProjectStageRequest,
-    StartProjectStageResponse,
+    StartTaskRequest,
+    StartTaskResponse,
     TokenActionRequest,
     TokenActionResponse,
     TravelRequest,
@@ -94,32 +94,28 @@ class Server:
         )
 
     @wrap_errors()
-    def start_project_stage(
-        self, game_id: int, character_name: str
-    ) -> StartProjectStageResponse:
+    def start_task(self, game_id: int, character_name: str) -> StartTaskResponse:
         player_id = self._extract_player_id()
-        req = self._read_body(StartProjectStageRequest)
-        outcome = self._engine.start_project_stage(
-            project_stage_name=req.project_stage_name,
+        req = self._read_body(StartTaskRequest)
+        outcome = self._engine.start_task(
+            task_name=req.task_name,
             player_id=player_id,
             game_id=game_id,
             character_name=character_name,
         )
-        return StartProjectStageResponse(outcome=outcome)
+        return StartTaskResponse(outcome=outcome)
 
     @wrap_errors()
-    def return_project_stage(
-        self, game_id: int, character_name: str
-    ) -> ReturnProjectStageResponse:
+    def return_task(self, game_id: int, character_name: str) -> ReturnTaskResponse:
         player_id = self._extract_player_id()
-        req = self._read_body(ReturnProjectStageRequest)
-        outcome = self._engine.return_project_stage(
-            project_stage_name=req.project_stage_name,
+        req = self._read_body(ReturnTaskRequest)
+        outcome = self._engine.return_task(
+            task_name=req.task_name,
             player_id=player_id,
             game_id=game_id,
             character_name=character_name,
         )
-        return ReturnProjectStageResponse(outcome=outcome)
+        return ReturnTaskResponse(outcome=outcome)
 
     @wrap_errors()
     def do_job(self, game_id: int, character_name: str) -> JobResponse:
@@ -206,12 +202,12 @@ class Server:
         bottle.route(
             path="/game/<game_id>/projects/<character_name>/start",
             method="POST",
-            callback=self.start_project_stage,
+            callback=self.start_task,
         )
         bottle.route(
             path="/game/<game_id>/projects/<character_name>/return",
             method="POST",
-            callback=self.return_project_stage,
+            callback=self.return_task,
         )
         bottle.route(
             path="/game/<game_id>/play/<character_name>/job",

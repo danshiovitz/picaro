@@ -18,8 +18,8 @@ from picaro.engine.types import (
     Feat,
     HookType,
     Outcome,
-    ProjectStageStatus,
-    ProjectStageType,
+    TaskStatus,
+    TaskType,
     TableauCard,
 )
 
@@ -36,22 +36,22 @@ class SearchProjectsResponse:
 
 
 @dataclass(frozen=True)
-class StartProjectStageRequest:
-    project_stage_name: str
+class StartTaskRequest:
+    task_name: str
 
 
 @dataclass(frozen=True)
-class StartProjectStageResponse:
+class StartTaskResponse:
     outcome: Outcome
 
 
 @dataclass(frozen=True)
-class ReturnProjectStageRequest:
-    project_stage_name: str
+class ReturnTaskRequest:
+    task_name: str
 
 
 @dataclass(frozen=True)
-class ReturnProjectStageResponse:
+class ReturnTaskResponse:
     outcome: Outcome
 
 

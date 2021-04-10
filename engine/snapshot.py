@@ -10,8 +10,8 @@ from picaro.engine.types import (
     Effect,
     Emblem,
     EncounterCheck,
-    ProjectStageStatus,
-    ProjectStageType,
+    TaskStatus,
+    TaskType,
     ProjectStatus,
 )
 
@@ -88,14 +88,14 @@ class Character:
 
 
 @dataclass()
-class ProjectStage:
+class Task:
     name: str
     project_name: str
-    stage_num: int
+    task_idx: int
     desc: Optional[str]
-    type: ProjectStageType
+    type: TaskType
     participants: List[str]
-    status: ProjectStageStatus
+    status: TaskStatus
     xp: int
     max_xp: int
     extra: Any
@@ -105,41 +105,41 @@ class ProjectStage:
         return "type"
 
     @classmethod
-    def any_type(cls, type_val: Union[ProjectStageType, str]) -> type:
+    def any_type(cls, type_val: Union[TaskType, str]) -> type:
         if type(type_val) is str:
-            type_val = ProjectStageType[type_val]
+            type_val = TaskType[type_val]
 
-        if type_val == ProjectStageType.CHALLENGE:
-            return ProjectStageChallenge
-        elif type_val == ProjectStageType.RESOURCE:
-            return ProjectStageResource
-        elif type_val == ProjectStageType.WAITING:
-            return ProjectStageWaiting
-        elif type_val == ProjectStageType.DISCOVERY:
-            return ProjectStageDiscovery
+        if type_val == TaskType.CHALLENGE:
+            return TaskExtraChallenge
+        elif type_val == TaskType.RESOURCE:
+            return TaskExtraResource
+        elif type_val == TaskType.WAITING:
+            return TaskExtraWaiting
+        elif type_val == TaskType.DISCOVERY:
+            return TaskExtraDiscovery
         else:
             raise Exception("Unknown type")
 
 
 @dataclass(frozen=True)
-class ProjectStageChallenge:
+class TaskExtraChallenge:
     base_skills: List[str]
     difficulty: int
 
 
 @dataclass(frozen=True)
-class ProjectStageResource:
+class TaskExtraResource:
     wanted_resources: Set[str]
     given_resources: Dict[str, int]
 
 
 @dataclass(frozen=True)
-class ProjectStageWaiting:
+class TaskExtraWaiting:
     turns_waited: int
 
 
 @dataclass(frozen=True)
-class ProjectStageDiscovery:
+class TaskExtraDiscovery:
     ref_hexes: List[Tuple[str, int]]
     possible_hexes: Set[str]
     explored_hexes: Set[str]
@@ -152,4 +152,4 @@ class Project:
     type: str
     status: ProjectStatus
     target_hex: str
-    stages: List[ProjectStage]
+    tasks: List[Task]

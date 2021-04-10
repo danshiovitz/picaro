@@ -62,8 +62,8 @@ class EffectType(Enum):
     DISRUPT_JOB = enum_auto()
     TRANSPORT = enum_auto()
     # display-only effects (at least for now)
-    START_PROJECT_STAGE = enum_auto()
-    RETURN_PROJECT_STAGE = enum_auto()
+    START_TASK = enum_auto()
+    RETURN_TASK = enum_auto()
 
 
 class EntityType(Enum):
@@ -71,7 +71,7 @@ class EntityType(Enum):
     TOKEN = enum_auto()
     CHARACTER = enum_auto()
     PROJECT = enum_auto()
-    PROJECT_STAGE = enum_auto()
+    TASK = enum_auto()
 
 
 @dataclass(frozen=True)
@@ -264,14 +264,14 @@ class Country:
     resources: Sequence[str]
 
 
-class ProjectStageType(Enum):
+class TaskType(Enum):
     CHALLENGE = enum_auto()
     RESOURCE = enum_auto()
     WAITING = enum_auto()
     DISCOVERY = enum_auto()
 
 
-class ProjectStageStatus(Enum):
+class TaskStatus(Enum):
     UNASSIGNED = enum_auto()
     IN_PROGRESS = enum_auto()
     FINISHED = enum_auto()
@@ -308,8 +308,8 @@ class Event(Generic[T]):
             EffectType.MODIFY_JOB,
             EffectType.MODIFY_LOCATION,
             EffectType.EXPLORE,
-            EffectType.START_PROJECT_STAGE,
-            EffectType.RETURN_PROJECT_STAGE,
+            EffectType.START_TASK,
+            EffectType.RETURN_TASK,
         ):
             return str
         else:
@@ -365,7 +365,7 @@ class Event(Generic[T]):
         )
 
     @classmethod
-    def for_project_stage(
+    def for_task(
         cls,
         name: str,
         type: EffectType,
@@ -376,7 +376,7 @@ class Event(Generic[T]):
     ) -> "Event":
         return Event[T](
             cls.make_id(),
-            EntityType.PROJECT_STAGE,
+            EntityType.TASK,
             name,
             type,
             subtype,

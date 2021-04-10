@@ -4,7 +4,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).absolute().parent.parent.parent))
 
 from picaro.engine import Engine
-from picaro.engine.types import ProjectStageType
+from picaro.engine.types import TaskType
 from picaro.server import Server
 
 if __name__ == "__main__":

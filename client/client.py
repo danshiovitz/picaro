@@ -51,15 +51,15 @@ from picaro.server.api_types import (
     JobRequest,
     JobResponse,
     Outcome,
-    ProjectStageStatus,
-    ProjectStageType,
+    TaskStatus,
+    TaskType,
     ResolveEncounterRequest,
     ResolveEncounterResponse,
-    ReturnProjectStageRequest,
-    ReturnProjectStageResponse,
+    ReturnTaskRequest,
+    ReturnTaskResponse,
     SearchProjectsResponse,
-    StartProjectStageRequest,
-    StartProjectStageResponse,
+    StartTaskRequest,
+    StartTaskResponse,
     TableauCard,
     Token,
     TokenActionRequest,
@@ -317,69 +317,66 @@ class Client:
                 f"* {project.name} ({project.type}, {project.status.name}) @ {project.target_hex}"
             )
             print(f"  {project.desc}")
-            print(f"  Stages:")
-            stages = project.stages
+            print(f"  Tasks:")
+            tasks = project.tasks
             if self.args.start:
-                stages = [
-                    s for s in stages if s.status == ProjectStageStatus.UNASSIGNED
-                ]
+                tasks = [s for s in tasks if s.status == TaskStatus.UNASSIGNED]
             elif self.args.do_return:
-                stages = [
+                tasks = [
                     s
-                    for s in stages
-                    if s.status == ProjectStageStatus.IN_PROGRESS
-                    and ch.name in s.participants
+                    for s in tasks
+                    if s.status == TaskStatus.IN_PROGRESS and ch.name in s.participants
                 ]
 
-            if not stages:
+            if not tasks:
                 print("  * None")
                 print()
                 continue
-            for stage in stages:
+            for task in tasks:
                 if self.args.start or self.args.do_return:
                     ltr = ascii_lowercase[len(choices)]
-                    choices.append(stage.name)
+                    choices.append(task.name)
                     print(
-                        f"  {ltr}. {stage.name} ({stage.type.name}) - {stage.xp}/{stage.max_xp}"
+                        f"  {ltr}. {task.name} ({task.type.name}) - {task.xp}/{task.max_xp}"
                     )
                 else:
                     print(
-                        f"  * {stage.name} ({stage.type.name}, {stage.status.name}) - {stage.xp}/{stage.max_xp} [{', '.join(stage.participants)}]"
+                        f"  * {task.name} ({task.type.name}, {task.status.name}) - {task.xp}/{task.max_xp} [{', '.join(task.participants)}]"
                     )
-                if stage.desc:
-                    print(f"    {stage.desc}")
-                if stage.type == ProjectStageType.CHALLENGE:
+                if task.desc:
+                    print(f"    {task.desc}")
+                if task.type == TaskType.CHALLENGE:
                     print(
-                        f"    Skills: {', '.join(sorted(stage.extra.base_skills))}; Difficulty: {stage.extra.difficulty}"
+                        f"    Skills: {', '.join(sorted(task.extra.base_skills))}; Difficulty: {task.extra.difficulty}"
                     )
-                elif stage.type == ProjectStageType.RESOURCE:
+                elif task.type == TaskType.RESOURCE:
                     print(
-                        f"    Wanted: {', '.join(sorted(stage.extra.wanted_resources))}; Given: {stage.extra.given_resources}"
+                        f"    Wanted: {', '.join(sorted(task.extra.wanted_resources))}; Given: {task.extra.given_resources}"
                     )
-                elif stage.type == ProjectStageType.WAITING:
-                    print(f"    Turns Waited: {stage.extra.turns_waited}")
-                elif stage.type == ProjectStageType.DISCOVERY:
+                elif task.type == TaskType.WAITING:
+                    print(f"    Turns Waited: {task.extra.turns_waited}")
+                elif task.type == TaskType.DISCOVERY:
                     print(
-                        f"    Possible Hexes: {', '.join(sorted(stage.extra.possible_hexes))}"
+                        f"    Possible Hexes: {', '.join(sorted(task.extra.possible_hexes))}"
                     )
                 else:
-                    print(f"    Unknown Stage Type: {stage.extra}")
+                    print(f"    Unknown Task Type: {task.extra}")
 
         if (self.args.start or self.args.do_return) and choices:
             verb = "start" if self.args.start else "return"
             while True:
-                print(f"Stage to {verb}? ", end="")
+                print(f"Task to {verb}? ", end="")
                 line = input().lower().strip()
                 if not line:
                     continue
 
                 if line[0] == "q":
-                    print(f"[Not {verb}ing any stage]")
+                    print(f"[Not {verb}ing any task]")
                     return
 
                 c_idx = ascii_lowercase.index(line[0])
                 if c_idx >= len(choices):
-                    print("No such stage!")
+                    print("No such task!")
                     print()
                     continue
 
@@ -387,14 +384,14 @@ class Client:
                     if self.args.start:
                         pargs = [
                             f"/projects/{ch.name}/start",
-                            StartProjectStageRequest(choices[c_idx]),
-                            StartProjectStageResponse,
+                            StartTaskRequest(choices[c_idx]),
+                            StartTaskResponse,
                         ]
                     else:
                         pargs = [
                             f"/projects/{ch.name}/return",
-                            ReturnProjectStageRequest(choices[c_idx]),
-                            ReturnProjectStageResponse,
+                            ReturnTaskRequest(choices[c_idx]),
+                            ReturnTaskResponse,
                         ]
 
                     resp = self._post(*pargs)
@@ -935,22 +932,22 @@ class Client:
                     line += f"lost in a leadership challenge"
                 else:
                     line += f"survived a leadership challenge"
-            elif event.type == EffectType.START_PROJECT_STAGE:
+            elif event.type == EffectType.START_TASK:
                 # in the event the project is the subject and the character is the
                 # object, but we want to display it the other way around
                 if event.new_value == ch.name:
                     line = f"* You have "
                 else:
                     line = f"* {event.new_value} has "
-                line += f"started the stage {event.entity_name}"
-            elif event.type == EffectType.RETURN_PROJECT_STAGE:
+                line += f"started the task {event.entity_name}"
+            elif event.type == EffectType.RETURN_TASK:
                 # in the event the project is the subject and the character is the
                 # object, but we want to display it the other way around
                 if event.new_value == ch.name:
                     line = f"* You have "
                 else:
                     line = f"* {event.new_value} has "
-                line += f"returned the stage {event.entity_name}"
+                line += f"returned the task {event.entity_name}"
             else:
                 line += f"UNKNOWN EVENT TYPE: {event}"
 

@@ -32,10 +32,10 @@ from .entity import (
 from .exceptions import BadStateException, IllegalMoveException
 from .job import load_job, load_jobs
 from .project import (
-    ProjectStage,
-    ProjectStageResource,
-    ProjectStageStatus,
-    ProjectStageType,
+    Task,
+    TaskExtraResource,
+    TaskStatus,
+    TaskType,
 )
 from .skills import load_skills
 from .snapshot import (
@@ -346,7 +346,7 @@ class Character(Entity, ReadOnlyWrapper):
             raise Exception(f"Unknown job type: {job.type}")
         return clamp(base_limit + self._calc_hook(HookType.MAX_RESOURCES), min=0)
 
-    def get_max_project_stages(self) -> int:
+    def get_max_tasks(self) -> int:
         return 3
 
     def get_skill_rank(self, skill_name: str) -> int:
@@ -439,17 +439,17 @@ class Character(Entity, ReadOnlyWrapper):
 
     def _make_special_choices(self, choices: Choices) -> Choices:
         if choices.special_type == SpecialChoiceType.DELIVER:
-            stage_rs: List[Tuple[str, str]] = []
-            with ProjectStage.load_for_character(self.name) as stages:
-                for stage in stages:
+            task_rs: List[Tuple[str, str]] = []
+            with Task.load_for_character(self.name) as tasks:
+                for task in tasks:
                     if (
-                        stage.project_name != choices.special_entity
-                        or stage.type != ProjectStageType.RESOURCE
-                        or stage.status != ProjectStageStatus.IN_PROGRESS
+                        task.project_name != choices.special_entity
+                        or task.type != TaskType.RESOURCE
+                        or task.status != TaskStatus.IN_PROGRESS
                     ):
                         continue
-                    extra = cast(ProjectStageResource, stage.extra)
-                    stage_rs.extend((stage.name, rs) for rs in extra.wanted_resources)
+                    extra = cast(TaskExtraResource, task.extra)
+                    task_rs.extend((task.name, rs) for rs in extra.wanted_resources)
             return Choices(
                 min_choices=0,
                 max_choices=99,
@@ -463,8 +463,8 @@ class Character(Entity, ReadOnlyWrapper):
                         ],
                         benefit=[
                             Effect(
-                                entity_type=EntityType.PROJECT_STAGE,
-                                entity_name=stage_name,
+                                entity_type=EntityType.TASK,
+                                entity_name=task_name,
                                 type=EffectType.MODIFY_RESOURCES,
                                 subtype=rs,
                                 value=1,
@@ -472,7 +472,7 @@ class Character(Entity, ReadOnlyWrapper):
                         ],
                         max_choices=self.resources.get(rs, 0),
                     )
-                    for stage_name, rs in stage_rs
+                    for task_name, rs in task_rs
                 ],
                 cost=[Effect(type=EffectType.MODIFY_ACTION, value=-1)],
             )
