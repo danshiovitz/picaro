@@ -10,6 +10,7 @@ from picaro.engine.types import (
     Effect,
     Emblem,
     EncounterCheck,
+    EntityType,
     TaskStatus,
     TaskType,
     ProjectStatus,
@@ -29,7 +30,7 @@ class Hex:
 @dataclass(frozen=True)
 class Token:
     name: str
-    type: str
+    type: EntityType
     location: str
     actions: Sequence[Action]
     route: Sequence[str]
@@ -39,6 +40,75 @@ class Token:
 class Board:
     hexes: Sequence[Hex]
     tokens: Sequence[Token]
+
+
+@dataclass()
+class Task:
+    name: str
+    project_name: str
+    task_idx: int
+    desc: Optional[str]
+    type: TaskType
+    cost: List[Effect]
+    difficulty: int
+    participants: List[str]
+    status: TaskStatus
+    xp: int
+    max_xp: int
+    extra: Any
+
+    @classmethod
+    def type_field(cls) -> str:
+        return "type"
+
+    @classmethod
+    def any_type(cls, type_val: Union[TaskType, str]) -> type:
+        if type(type_val) is str:
+            type_val = TaskType[type_val]
+
+        if type_val == TaskType.CHALLENGE:
+            return TaskExtraChallenge
+        elif type_val == TaskType.RESOURCE:
+            return TaskExtraResource
+        elif type_val == TaskType.WAITING:
+            return TaskExtraWaiting
+        elif type_val == TaskType.DISCOVERY:
+            return TaskExtraDiscovery
+        else:
+            raise Exception("Unknown type")
+
+
+@dataclass(frozen=True)
+class TaskExtraChallenge:
+    skills: List[str]
+
+
+@dataclass(frozen=True)
+class TaskExtraResource:
+    wanted_resources: Set[str]
+    given_resources: Dict[str, int]
+
+
+@dataclass(frozen=True)
+class TaskExtraWaiting:
+    turns_waited: int
+
+
+@dataclass(frozen=True)
+class TaskExtraDiscovery:
+    ref_hexes: List[Tuple[str, int]]
+    possible_hexes: Set[str]
+    explored_hexes: Set[str]
+
+
+@dataclass(frozen=True)
+class Project:
+    name: str
+    desc: str
+    type: str
+    status: ProjectStatus
+    target_hex: str
+    tasks: List[Task]
 
 
 @dataclass(frozen=True)
@@ -85,71 +155,4 @@ class Character:
     tableau: Sequence[TableauCard]
     encounters: Sequence[Encounter]
     emblems: Sequence[Emblem]
-
-
-@dataclass()
-class Task:
-    name: str
-    project_name: str
-    task_idx: int
-    desc: Optional[str]
-    type: TaskType
-    participants: List[str]
-    status: TaskStatus
-    xp: int
-    max_xp: int
-    extra: Any
-
-    @classmethod
-    def type_field(cls) -> str:
-        return "type"
-
-    @classmethod
-    def any_type(cls, type_val: Union[TaskType, str]) -> type:
-        if type(type_val) is str:
-            type_val = TaskType[type_val]
-
-        if type_val == TaskType.CHALLENGE:
-            return TaskExtraChallenge
-        elif type_val == TaskType.RESOURCE:
-            return TaskExtraResource
-        elif type_val == TaskType.WAITING:
-            return TaskExtraWaiting
-        elif type_val == TaskType.DISCOVERY:
-            return TaskExtraDiscovery
-        else:
-            raise Exception("Unknown type")
-
-
-@dataclass(frozen=True)
-class TaskExtraChallenge:
-    base_skills: List[str]
-    difficulty: int
-
-
-@dataclass(frozen=True)
-class TaskExtraResource:
-    wanted_resources: Set[str]
-    given_resources: Dict[str, int]
-
-
-@dataclass(frozen=True)
-class TaskExtraWaiting:
-    turns_waited: int
-
-
-@dataclass(frozen=True)
-class TaskExtraDiscovery:
-    ref_hexes: List[Tuple[str, int]]
-    possible_hexes: Set[str]
-    explored_hexes: Set[str]
-
-
-@dataclass(frozen=True)
-class Project:
-    name: str
-    desc: str
-    type: str
-    status: ProjectStatus
-    target_hex: str
-    tasks: List[Task]
+    tasks: Sequence[Task]

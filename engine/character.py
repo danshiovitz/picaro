@@ -159,7 +159,11 @@ class Character(Entity, ReadOnlyWrapper):
 
         board = load_board()
         board.add_token(
-            name=name, type="Character", location=location, actions=None, events=[]
+            name=name,
+            type=EntityType.CHARACTER,
+            location=location,
+            actions=None,
+            events=[],
         )
 
     @classmethod
@@ -179,6 +183,9 @@ class Character(Entity, ReadOnlyWrapper):
         board = load_board()
         location = board.get_token_location(self.name)
         routes = board.best_routes(location, [c.location for c in self._data.tableau])
+        with Task.load_for_character(self.name) as raw_tasks:
+            tasks = [t.get_snapshot() for t in raw_tasks]
+
         return snapshot_Character(
             name=self._data.name,
             player_id=self._data.player_id,
@@ -206,6 +213,7 @@ class Character(Entity, ReadOnlyWrapper):
                 self._encounter_snapshot(e) for e in self._data.encounters
             ),
             emblems=tuple(self._data.emblems),
+            tasks=tuple(tasks),
         )
 
     def _tableau_snapshot(
@@ -278,6 +286,9 @@ class Character(Entity, ReadOnlyWrapper):
         while len(self._data.tableau) < self.get_max_tableau_size():
             if not self._data.job_deck:
                 additional: List[TemplateCard] = []
+                with Task.load_for_character(self.name) as tasks:
+                    for task in tasks:
+                        additional.extend(task.get_templates())
                 self._data.job_deck = job.make_deck(additional=additional)
             card = self._data.job_deck.pop(0)
             dst = random.choice(job.encounter_distances)
@@ -295,6 +306,11 @@ class Character(Entity, ReadOnlyWrapper):
             raise BadStateException("There is no active encounter.")
 
         return self._data.encounters.pop(0)
+
+    def discard_job_card(self, num_cards: int) -> None:
+        if num_cards <= 0:
+            return
+        self._data.job_deck = self._data.job_deck[num_cards:]
 
     def turn_reset(self) -> None:
         # these are all expected, so not reporting them in events
@@ -422,7 +438,7 @@ class Character(Entity, ReadOnlyWrapper):
         if card.choices:
             if card.choices.special_type:
                 card = dataclasses.replace(
-                    card, choices=self._make_special_choices(card.choices)
+                    card, choices=self._make_special_choices(card.choices, card)
                 )
             if card.choices.is_random:
                 rolls.extend(
@@ -437,13 +453,13 @@ class Character(Entity, ReadOnlyWrapper):
             )
         )
 
-    def _make_special_choices(self, choices: Choices) -> Choices:
+    def _make_special_choices(self, choices: Choices, card: FullCard) -> Choices:
         if choices.special_type == SpecialChoiceType.DELIVER:
             task_rs: List[Tuple[str, str]] = []
             with Task.load_for_character(self.name) as tasks:
                 for task in tasks:
                     if (
-                        task.project_name != choices.special_entity
+                        task.project_name != card.entity_name
                         or task.type != TaskType.RESOURCE
                         or task.status != TaskStatus.IN_PROGRESS
                     ):

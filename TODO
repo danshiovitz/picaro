@@ -1,16 +1,5 @@
 - Add one time password / session cookie stuff
-- projects
-  - project and stage ownership?
-  - some notion of project & stage difficulty
-  - stage groups
-  - "project" reward type and modify_project_xp effect type
-  - some notion of "the project, if any, associated with this encounter card" (to make challenge stages work)
-  - *** wire in the stage hooks to character actions
-  - character-based requirements to start stages
-
-- events + actions
 - regional, country, and arch villains, and their moves
-- proposals/adjustments/whatever
 - artifacts
 - oracles
 - finishing the season
@@ -19,14 +8,17 @@
 - better engine unit testing
 - different mechanics for captain and king play ("tool" exhaustion?)
 - record all encounters + outcome + commentary and command to view history
-- spend coins on stuff (spend on xp or rep in camp, plus costs to start project stage)
 - being able to undo outcomes
 - death
+- creating projects
+- creating tasks
+- hidden tasks that get revealed (either sequentially or in groups)
+- character-based requirements to start tasks
 - fill in stuff:
   - more feat hooks
   - terrain decks
   - job decks
-  - camp deck
+  - camp deck (healing, spend coins on xp or rep, local hex encounter, job disrupt,
   - travel deck
 
 ok so
@@ -84,43 +76,3 @@ finish season:
 # not have those rumors take effect? or, like, you say 3 days for play, 1 day for rumors;
 # at the end of three days we finish play and cancel events (or sooner if everyone's done with play);
 # then after 1 day or when everyone's done with rumors, we publish rumors
-
-Projects:
-- projects have a type, a target hex, and a list of stages
-   - types are like Large Structure, Elaborate Device, Mystic Ritual, Deception, Popular Movement, Rebellion
-- stages have a status (active, finished, future) and an xp bar (say max 25xp) and a type
-  - search types pick a secret hex and give you clues about its location; when you do a search action in the secret hex, you get 25xp (on consideration, we pick a hex 15-25 hexes away from the target (~7 turns) and give you a radius of 4 to look in (37 hexes, so ~12 turns) but you search a hex just by entering it and it doesn't consume an action, so you can do 3/turn; further, after you search ~18 hexes unsuccessfully we give you a hint - note that this-all makes it so you can continue doing encounters as normal while working on the project, which makes it similar to other stage types)
-  - challenge types put encounter cards in your deck that let you earn ~5 xp per
-  - gather types require ~5 resources be delivered to the hex, and give you 5 xp per
-  - time types give you 1xp per turn the stage is active
-  - in addition, you can get the project encounter effect when a stage is active, which gives +1 xp to a random project's active stage
-- how long do we expect projects to take? it feels like a short project should take about a season, hence the 25 xp number
-
-Having trouble working through delivery / challenge stuff, so let's talk about it
-delivery:
-- the token action gets marked as special action = deliver, special entity = <project name>
-- when you pick the action, it dynamically constructs the possible deliveries (1 wine to stage A)
-- the effects in that particular choice need to be tagged somehow that they are associated with the project
-- when applying the effects, it sees the modify_resources call and knows to call deliver to the project
-- or should effects have entities, and so the action would be Effect("Conan", MODIFY_RESOURCES, Wine, -1), Effect("A", MODIFY_RESOURCES, "Wine", +1)
-- the nice thing there obv is we could have other ways to apply effects to the project stage
-
-So meters again, and what we seem to be calling entities. I guess meters are really a subtype of field, and we also
-have scalar fields for, eg, location or job. apply_effects first goes through and splits the effects up. then we go
-through and evaluate composite effects like disrupt_job, which may change other effects (nb modify_resources is not
-composite for character but arguably is for project since it may update xp), then we evaluate other effects. I guess
-it may be easier to just make it so we specify the evaluation order per-entity and all effects can modify other effects
-(let's just trust nobody creates any loops). we need I think four hooks per field - the init hook called at the beginning,
-the update hook is called as each individual effect is considered, the finish hook is called after all the individual
-effects have been considered (or perhaps this is a flag to the update hook?) and then the commit hook is called when we're
-done. now, question, why do we need four hooks?
-- in the simplest meter (say coins), we initialize the total and orig value from the entity field, we accumulate a
-  running total and comment list on each update, then when we have the last one we cap the min/max and write out
-  the local field and produce an event.
-- for location changes, we may actually want to produce an event for each change, or maybe we'd want to aggregate. the
-  read and write of the location are both going to involve custom code, though (arguably: instead of dealing with it
-  ourselves, we might instead say to evaluate it by applying new effects to another entity)
-- for job changes, we need to init the total with a constant, accmulate the running total, then when we have the last we
-  write out an event and conditionally update other events (nb this implies supporting set-value events vs modify-value)
-- for character resource card changes, we init with constant, accumulate total, then do a fancy thing and conditionally update. I guess this is the same.
-- I guess project resource changes are also the same.

@@ -32,6 +32,7 @@ class EncounterEffect(Enum):
     GAIN_RESOURCES = enum_auto()
     GAIN_QUEST = enum_auto()
     GAIN_TURNS = enum_auto()
+    GAIN_PROJECT_XP = enum_auto()
     LOSE_COINS = enum_auto()
     LOSE_REPUTATION = enum_auto()
     DAMAGE = enum_auto()
@@ -68,10 +69,11 @@ class EffectType(Enum):
 
 class EntityType(Enum):
     HEX = enum_auto()
-    TOKEN = enum_auto()
     CHARACTER = enum_auto()
     PROJECT = enum_auto()
     TASK = enum_auto()
+    CITY = enum_auto()
+    MINE = enum_auto()
 
 
 @dataclass(frozen=True)
@@ -152,6 +154,14 @@ class Choice:
     benefit: Sequence[Effect] = ()
 
 
+@dataclass(frozen=True)
+class Challenge:
+    skills: Sequence[str]
+    rewards: Sequence[EncounterEffect]
+    penalties: Sequence[EncounterEffect]
+    difficulty: Optional[int] = None
+
+
 class SpecialChoiceType(Enum):
     DELIVER = enum_auto()
 
@@ -167,19 +177,15 @@ class Choices:
     cost: Sequence[Effect] = ()
     benefit: Sequence[Effect] = ()
     special_type: Optional[SpecialChoiceType] = None
-    special_entity: Optional[str] = None
 
     @classmethod
-    def make_special(
-        cls, type: Optional[SpecialChoiceType], entity: Optional[str]
-    ) -> "Choices":
+    def make_special(cls, type: SpecialChoiceType) -> "Choices":
         return Choices(
             min_choices=0,
             max_choices=0,
             is_random=False,
             choice_list=[],
             special_type=type,
-            special_entity=entity,
         )
 
 
@@ -188,11 +194,11 @@ class TemplateCard:
     copies: int
     name: str
     desc: str
-    skills: Sequence[str] = ()
-    rewards: Sequence[EncounterEffect] = ()
-    penalties: Sequence[EncounterEffect] = ()
+    challenge: Optional[Challenge] = None
     choices: Optional[Choices] = None
     unsigned: bool = False
+    entity_type: Optional[EntityType] = None
+    entity_name: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -203,6 +209,8 @@ class FullCard:
     checks: Sequence[EncounterCheck]
     choices: Optional[Choices]
     signs: Sequence[str]
+    entity_type: Optional[EntityType] = None
+    entity_name: Optional[str] = None
 
 
 @dataclass(frozen=True)

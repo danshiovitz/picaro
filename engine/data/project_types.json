@@ -2,7 +2,7 @@
   {
     "name": "Monument",
     "desc": "A building, statue, or other large piece of architecture.",
-    "base_skills": ["Might", "Climb", "Architecture"],
+    "skills": ["Might", "Climb", "Architecture"],
     "resources": ["Stone", "Timber"]
   }
 ]

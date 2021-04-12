@@ -38,15 +38,18 @@ from .snapshot import (
 from .storage import ObjectStorageBase, ReadOnlyWrapper
 from .types import (
     Action,
+    Challenge,
     Choices,
     Effect,
     EffectType,
+    EncounterEffect,
     EntityType,
     Event,
     TaskStatus,
     TaskType,
     ProjectStatus,
     SpecialChoiceType,
+    TemplateCard,
 )
 
 
@@ -66,13 +69,13 @@ class Task(Entity, ReadOnlyWrapper):
         name: Optional[str],
         project_name: str,
         task_idx: int,
-        base_skills: List[str],
-        difficulty: int,
         cost: List[Effect],
+        difficulty: int,
+        skills: List[str],
     ) -> None:
-        extra = TaskExtraChallenge(base_skills=base_skills, difficulty=difficulty)
+        extra = TaskExtraChallenge(skills=skills)
         cls._create_common(
-            name, project_name, task_idx, TaskType.CHALLENGE, extra, cost
+            name, project_name, task_idx, TaskType.CHALLENGE, cost, difficulty, extra
         )
 
     @classmethod
@@ -81,18 +84,28 @@ class Task(Entity, ReadOnlyWrapper):
         name: Optional[str],
         project_name: str,
         task_idx: int,
-        wanted_resources: Set[str],
         cost: List[Effect],
+        difficulty: int,
+        wanted_resources: Set[str],
     ) -> None:
         extra = TaskExtraResource(wanted_resources=wanted_resources, given_resources={})
-        cls._create_common(name, project_name, task_idx, TaskType.RESOURCE, extra, cost)
+        cls._create_common(
+            name, project_name, task_idx, TaskType.RESOURCE, cost, difficulty, extra
+        )
 
     @classmethod
     def create_waiting(
-        cls, name: Optional[str], project_name: str, task_idx: int, cost: List[Effect]
+        cls,
+        name: Optional[str],
+        project_name: str,
+        task_idx: int,
+        cost: List[Effect],
+        difficulty: int,
     ) -> None:
         extra = TaskExtraWaiting(turns_waited=0)
-        cls._create_common(name, project_name, task_idx, TaskType.WAITING, extra, cost)
+        cls._create_common(
+            name, project_name, task_idx, TaskType.WAITING, cost, difficulty, extra
+        )
 
     @classmethod
     def create_discovery(
@@ -100,9 +113,10 @@ class Task(Entity, ReadOnlyWrapper):
         name: Optional[str],
         project_name: str,
         task_idx: int,
+        cost: List[Effect],
+        difficulty: int,
         start_hex: Optional[str],
         secret_hex: Optional[str],
-        cost: List[Effect],
     ) -> None:
         if (start_hex is None) == (secret_hex is None):
             raise Exception("Exactly one of start hex and secret hex must be given.")
@@ -135,7 +149,7 @@ class Task(Entity, ReadOnlyWrapper):
             explored_hexes=set(),
         )
         cls._create_common(
-            name, project_name, task_idx, TaskType.DISCOVERY, extra, cost
+            name, project_name, task_idx, TaskType.DISCOVERY, cost, difficulty, extra
         )
 
     @classmethod
@@ -145,8 +159,9 @@ class Task(Entity, ReadOnlyWrapper):
         project_name: str,
         task_idx: int,
         type: TaskType,
-        extra: Any,
         cost: List[Effect],
+        difficulty: int,
+        extra: Any,
     ) -> None:
         if name is None:
             name = f"{project_name} Task {task_idx}"
@@ -157,6 +172,7 @@ class Task(Entity, ReadOnlyWrapper):
             desc="...",
             type=type,
             cost=cost,
+            difficulty=difficulty,
             participants=[],
             status=TaskStatus.UNASSIGNED,
             xp=0,
@@ -179,9 +195,7 @@ class Task(Entity, ReadOnlyWrapper):
     def get_snapshot(self) -> snapshot_Task:
         if self._data.type == TaskType.CHALLENGE:
             extra = cast(TaskExtraChallenge, self._data.extra)
-            snapshot_extra = snapshot_TaskExtraChallenge(
-                base_skills=tuple(extra.base_skills), difficulty=extra.difficulty
-            )
+            snapshot_extra = snapshot_TaskExtraChallenge(skills=tuple(extra.skills))
         elif self._data.type == TaskType.RESOURCE:
             extra = cast(TaskExtraResource, self._data.extra)
             snapshot_extra = snapshot_TaskExtraResource(
@@ -207,6 +221,8 @@ class Task(Entity, ReadOnlyWrapper):
             task_idx=self._data.task_idx,
             desc=self._data.desc,
             type=self._data.type,
+            cost=self._data.cost,
+            difficulty=self._data.difficulty,
             participants=self._data.participants,
             status=self._data.status,
             xp=self._data.xp,
@@ -246,6 +262,29 @@ class Task(Entity, ReadOnlyWrapper):
                 [],
             )
         )
+
+    def get_templates(self) -> List[TemplateCard]:
+        if self.status != TaskStatus.IN_PROGRESS:
+            return []
+        if self.type == TaskType.CHALLENGE:
+            extra = cast(TaskExtraChallenge, self._data.extra)
+            return [
+                TemplateCard(
+                    copies=2,
+                    name=f"A {self.name} Challenge!",
+                    desc=f"A new development in this task.",
+                    challenge=Challenge(
+                        skills=extra.skills + extra.skills,
+                        rewards=[EncounterEffect.GAIN_PROJECT_XP] * 4,
+                        penalties=[EncounterEffect.DAMAGE, EncounterEffect.LOSE_COINS],
+                        difficulty=self._data.difficulty,
+                    ),
+                    entity_type=EntityType.TASK,
+                    entity_name=self.name,
+                )
+            ]
+        else:
+            return []
 
 
 class TaskContext:
@@ -418,15 +457,13 @@ class Project(ReadOnlyWrapper):
 
         board = load_board()
         board.add_token(
-            name=f"Site: {name}",
-            type="Other",
+            name=name,
+            type=EntityType.PROJECT,
             location=target_hex,
             actions=[
                 Action(
                     name="Deliver",
-                    choices=Choices.make_special(
-                        type=SpecialChoiceType.DELIVER, entity=name
-                    ),
+                    choices=Choices.make_special(type=SpecialChoiceType.DELIVER),
                 ),
             ],
             events=[],
@@ -467,19 +504,15 @@ class Project(ReadOnlyWrapper):
 
         task_name = kwargs.get("name", None)
 
+        # difficulty should come off some combo of base project difficulty (?) and number of tasks so far
+        difficulty = kwargs.get("difficulty", None) or 3
+
+        common_args = (task_name, self.name, len(cur_tasks) + 1, cost, difficulty)
+
         if task_type == TaskType.CHALLENGE:
             project_type = ProjectTypeStorage.load_by_name(self.type)
-            base_skills = kwargs.get("base_skills", None) or project_type.base_skills
-            # difficulty should come off some combo of base project difficulty (?) and number of tasks so far
-            difficulty = kwargs.get("difficulty", None) or 3
-            Task.create_challenge(
-                task_name,
-                self.name,
-                len(cur_tasks) + 1,
-                base_skills,
-                difficulty,
-                cost,
-            )
+            skills = kwargs.get("skills", None) or project_type.skills
+            Task.create_challenge(*common_args, skills)
         elif task_type == TaskType.RESOURCE:
             board = load_board()
             all_resources = list(board.get_base_resources())
@@ -488,23 +521,16 @@ class Project(ReadOnlyWrapper):
             resources = set(
                 kwargs.get("resources", None) or random.sample(all_resources, 2)
             )
-            Task.create_resource(
-                task_name, self.name, len(cur_tasks) + 1, resources, cost
-            )
+            Task.create_resource(*common_args, resources)
         elif task_type == TaskType.WAITING:
-            Task.create_waiting(task_name, self.name, len(cur_tasks) + 1, cost)
+            Task.create_waiting(*common_args)
         elif task_type == TaskType.DISCOVERY:
             start_hex = kwargs.get("start_hex", None)
             secret_hex = kwargs.get("secret_hex", None)
             if not start_hex and not secret_hex:
                 start_hex = self.target_hex
             Task.create_discovery(
-                task_name,
-                self.name,
-                len(cur_tasks) + 1,
-                start_hex=start_hex,
-                secret_hex=secret_hex,
-                cost=cost,
+                *common_args, start_hex=start_hex, secret_hex=secret_hex
             )
         else:
             raise Exception(f"Bad task type: {task_type}")
@@ -512,7 +538,7 @@ class Project(ReadOnlyWrapper):
     def finish(self) -> None:
         self._data.status = ProjectStatus.FINISHED
         board = load_board()
-        board.remove_token(f"Site: {self.name}")
+        board.remove_token(self.name)
 
 
 class ProjectContext:
@@ -548,6 +574,7 @@ class TaskData:
     desc: Optional[str]
     type: TaskType
     cost: List[Effect]
+    difficulty: int
     participants: List[str]
     status: TaskStatus
     xp: int
@@ -577,8 +604,7 @@ class TaskData:
 
 @dataclass()
 class TaskExtraChallenge:
-    base_skills: List[str]
-    difficulty: int
+    skills: List[str]
 
 
 @dataclass()
@@ -604,7 +630,7 @@ class TaskExtraDiscovery:
 class ProjectType:
     name: str
     desc: str
-    base_skills: List[str]
+    skills: List[str]
     resources: List[str]
 
 

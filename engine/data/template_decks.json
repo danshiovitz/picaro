@@ -7,57 +7,71 @@
         "copies": 4,
         "name": "Caravan Raid",
         "desc": "...",
-        "skills": ["Shoot", "Speed", "Command"],
-        "rewards": ["GAIN_COINS", "GAIN_RESOURCES"],
-        "penalties": ["DAMAGE", "LOSE_REPUTATION"]
+        "challenge": {
+          "skills": ["Shoot", "Speed", "Command"],
+          "rewards": ["GAIN_COINS", "GAIN_RESOURCES"],
+          "penalties": ["DAMAGE", "LOSE_REPUTATION"]
+        }
       },
       {
         "copies": 2,
         "name": "Scouting Mission",
         "desc": "...",
-        "skills": ["Observation", "Climb", "Appraisal"],
-        "rewards": ["GAIN_XP", "GAIN_REPUTATION"],
-        "penalties": ["DAMAGE", "TRANSPORT"]
+        "challenge": {
+          "skills": ["Observation", "Climb", "Appraisal"],
+          "rewards": ["GAIN_XP", "GAIN_REPUTATION"],
+          "penalties": ["DAMAGE", "TRANSPORT"]
+        }
       },
       {
         "copies": 2,
         "name": "Guard Patrol",
         "desc": "...",
-        "skills": ["Stealth", "Formation Fighting", "Speed"],
-        "rewards": ["GAIN_COINS", "GAIN_REPUTATION"],
-        "penalties": ["DAMAGE", "DISRUPT_JOB"]
+        "challenge": {
+          "skills": ["Stealth", "Formation Fighting", "Speed"],
+          "rewards": ["GAIN_COINS", "GAIN_REPUTATION"],
+          "penalties": ["DAMAGE", "DISRUPT_JOB"]
+        }
       },
       {
         "copies": 1,
         "name": "Another Band",
         "desc": "...",
-        "skills": ["Might", "Carousing", "Debate"],
-        "rewards": ["GAIN_RESOURCES", "GAIN_QUEST"],
-        "penalties": ["LOSE_RESOURCES", "LOSE_REPUTATION"]
+        "challenge": {
+          "skills": ["Might", "Carousing", "Debate"],
+          "rewards": ["GAIN_RESOURCES", "GAIN_QUEST"],
+          "penalties": ["LOSE_RESOURCES", "LOSE_REPUTATION"]
+        }
       },
       {
         "copies": 1,
         "name": "Hunting Expedition",
         "desc": "...",
-        "skills": ["Speed", "Shoot", "Observation"],
-        "rewards": ["GAIN_XP", "GAIN_RESOURCES"],
-        "penalties": ["DAMAGE", "LOSE_REPUTATION"]
+        "challenge": {
+          "skills": ["Speed", "Shoot", "Observation"],
+          "rewards": ["GAIN_XP", "GAIN_RESOURCES"],
+          "penalties": ["DAMAGE", "LOSE_REPUTATION"]
+        }
       },
       {
         "copies": 1,
         "name": "Test of Skill",
         "desc": "...",
-        "skills": ["Shoot", "Animal Training", "Ride"],
-        "rewards": ["GAIN_HEALING", "GAIN_REPUTATION"],
-        "penalties": ["DAMAGE", "LOSE_COINS"]
+        "challenge": {
+          "skills": ["Shoot", "Animal Training", "Ride"],
+          "rewards": ["GAIN_HEALING", "GAIN_REPUTATION"],
+          "penalties": ["DAMAGE", "LOSE_COINS"]
+        }
       },
       {
         "copies": 1,
         "name": "Victory Celebration",
         "desc": "...",
-        "skills": ["Carousing", "Charm", "Acrobatics"],
-        "rewards": ["GAIN_COINS", "GAIN_HEALING"],
-        "penalties": ["NOTHING", "LOSE_COINS"]
+        "challenge": {
+          "skills": ["Carousing", "Charm", "Acrobatics"],
+          "rewards": ["GAIN_COINS", "GAIN_HEALING"],
+          "penalties": ["NOTHING", "LOSE_COINS"]
+        }
       }
     ]
   },
@@ -69,49 +83,61 @@
         "copies": 2,
         "name": "Oasis",
         "desc": "...",
-        "skills": ["Carousing", "Observation", "Doctor"],
-        "rewards": ["GAIN_COINS", "GAIN_HEALING"],
-        "penalties": ["DAMAGE", "LOSE_COINS"]
+        "challenge": {
+          "skills": ["Carousing", "Observation", "Doctor"],
+          "rewards": ["GAIN_COINS", "GAIN_HEALING"],
+          "penalties": ["DAMAGE", "LOSE_COINS"]
+        }
       },
       {
         "copies": 2,
         "name": "Sandstorm",
         "desc": "...",
-        "skills": ["Navigation", "Endurance", "Might"],
-        "rewards": ["GAIN_XP", "NOTHING"],
-        "penalties": ["DAMAGE", "LOSE_REPUTATION"]
+        "challenge": {
+          "skills": ["Navigation", "Endurance", "Might"],
+          "rewards": ["GAIN_XP", "NOTHING"],
+          "penalties": ["DAMAGE", "LOSE_REPUTATION"]
+        }
       },
       {
         "copies": 2,
         "name": "Desert Beast",
         "desc": "...",
-        "skills": ["Charm", "Stealth", "Animal Training"],
-        "rewards": ["GAIN_COINS", "GAIN_RESOURCES"],
-        "penalties": ["DAMAGE", "LOSE_RESOURCES"]
+        "challenge": {
+          "skills": ["Charm", "Stealth", "Animal Training"],
+          "rewards": ["GAIN_COINS", "GAIN_RESOURCES"],
+          "penalties": ["DAMAGE", "LOSE_RESOURCES"]
+        }
       },
       {
         "copies": 2,
         "name": "Ancient Structure",
         "desc": "...",
-        "skills": ["Endurance", "Endurance", "Desert Lore"],
-        "rewards": ["GAIN_COINS", "GAIN_RESOURCES"],
-        "penalties": ["DAMAGE", "LOSE_REPUTATION"]
+        "challenge": {
+          "skills": ["Endurance", "Endurance", "Desert Lore"],
+          "rewards": ["GAIN_COINS", "GAIN_RESOURCES"],
+          "penalties": ["DAMAGE", "LOSE_REPUTATION"]
+        }
       },
       {
         "copies": 2,
         "name": "Strange Constellations",
         "desc": "...",
-        "skills": ["Spirit Binding", "Navigation", "Mesmerism"],
-        "rewards": ["GAIN_QUEST", "GAIN_XP"],
-        "penalties": ["DAMAGE", "DISRUPT_JOB"]
+        "challenge": {
+          "skills": ["Spirit Binding", "Navigation", "Mesmerism"],
+          "rewards": ["GAIN_QUEST", "GAIN_XP"],
+          "penalties": ["DAMAGE", "DISRUPT_JOB"]
+        }
       },
       {
         "copies": 2,
         "name": "Mirage",
         "desc": "...",
-        "skills": ["Observation", "Architecture", "Mesmerism"],
-        "rewards": ["GAIN_COINS", "NOTHING"],
-        "penalties": ["TRANSPORT", "LOSE_REPUTATION"]
+        "challenge": {
+          "skills": ["Observation", "Architecture", "Mesmerism"],
+          "rewards": ["GAIN_COINS", "NOTHING"],
+          "penalties": ["TRANSPORT", "LOSE_REPUTATION"]
+        }
       }
     ]
   },
@@ -123,49 +149,61 @@
         "copies": 2,
         "name": "Chasm",
         "desc": "...",
-        "skills": ["Acrobatics", "Throw", "Navigation"],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": ["Acrobatics", "Throw", "Navigation"],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Avalance",
         "desc": "...",
-        "skills": ["Might", "Speed", "Acrobatics"],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": ["Might", "Speed", "Acrobatics"],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Mountain Shrine",
         "desc": "...",
-        "skills": ["Spirit Binding", "Research", "Mechanisms"],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": ["Spirit Binding", "Research", "Mechanisms"],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Creatures of the Mountain",
         "desc": "...",
-        "skills": ["Debate", "Pickpocket", "Might"],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": ["Debate", "Pickpocket", "Might"],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Dark Cave",
         "desc": "...",
-        "skills": ["Architecture", "Navigation", "Thaumaturgy"],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": ["Architecture", "Navigation", "Thaumaturgy"],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Icy Wind",
         "desc": "...",
-        "skills": ["Endurance", "Acrobatics", "Mesmerism"],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": ["Endurance", "Acrobatics", "Mesmerism"],
+          "rewards": [],
+          "penalties": []
+        }
       }
     ]
   },
@@ -177,49 +215,61 @@
         "copies": 2,
         "name": "Storm",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Dangerous Rocks",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Whirlpool",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Aquatic Beast",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Ghost Ship",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Becalmed",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
       }
     ]
   },
@@ -231,49 +281,61 @@
         "copies": 2,
         "name": "Circling Birds",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Strange Vegetation",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Distant Riders",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Sudden Storm",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Beasts of the Plains",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Ley Lines",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
       }
     ]
   },
@@ -285,49 +347,61 @@
         "copies": 2,
         "name": "Street Market",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Wandering Prophet",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Tavern Brawl",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Statuary Garden",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Tipped Wagon",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
       },
       {
         "copies": 2,
         "name": "Maze of Alleys",
         "desc": "...",
-        "skills": [],
-        "rewards": [],
-        "penalties": []
+        "challenge": {
+          "skills": [],
+          "rewards": [],
+          "penalties": []
+        }
       }
     ]
   },

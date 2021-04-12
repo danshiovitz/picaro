@@ -94,7 +94,7 @@ class Engine:
             ch.apply_effects(
                 [
                     Effect(type=EffectType.MODIFY_COINS, value=50),
-                    Effect(type=EffectType.MODIFY_RESOURCES, value=50),
+                    Effect(type=EffectType.MODIFY_RESOURCES, value=10),
                 ],
                 [],
             )
@@ -104,7 +104,7 @@ class Engine:
         with Project.load(project_name) as proj:
             from .types import TaskType
 
-            proj.add_task(TaskType.RESOURCE)
+            proj.add_task(TaskType.CHALLENGE)
 
         with Task.load(project_name + " Task 1") as task:
             task.start(character_name, [])
@@ -144,6 +144,12 @@ class Engine:
                 events: List[Event] = []
                 cost = [dataclasses.replace(ct, is_cost=True) for ct in task.cost]
                 ch.apply_effects(cost, events)
+
+                # if it's a challenge card, we discard a bunch of cards to refresh the
+                # deck faster, and get to the point where we're rebuilding the deck with
+                # challenge cards sooner
+                if task.type == TaskType.CHALLENGE:
+                    ch.discard_job_cards(6)
 
                 task.start(ch.name, events)
                 return Outcome(events=events)
@@ -196,21 +202,27 @@ class Engine:
                 raise IllegalMoveException(
                     f"You must be in hex {token_location} to perform that action."
                 )
-            action = board.get_token_action(token_name, action_name)
+            action, token_type, token_name = board.get_token_action(
+                token_name, action_name
+            )
             ch.queue_template(
-                self._action_to_template(action),
+                self._action_to_template(action, token_type, token_name),
                 context_type=EncounterContextType.ACTION,
             )
             if ch.acted_this_turn() and not ch.encounters:
                 self._finish_turn(ch, events)
             return Outcome(events=events)
 
-    def _action_to_template(self, action: Action) -> TemplateCard:
+    def _action_to_template(
+        self, action: Action, entity_type: EntityType, entity_name: str
+    ) -> TemplateCard:
         return TemplateCard(
             copies=1,
             name=action.name,
-            desc="...",
+            desc="Choose your action:",
             choices=action.choices,
+            entity_type=entity_type,
+            entity_name=entity_name,
         )
 
     @with_connection()
@@ -385,6 +397,28 @@ class Engine:
                     ret.append(Effect(type=EffectType.TRANSPORT, value=cnt * 5))
                 elif enc_eff == EncounterEffect.DISRUPT_JOB:
                     ret.append(Effect(type=EffectType.DISRUPT_JOB, value=-cnt))
+                elif enc_eff == EncounterEffect.GAIN_PROJECT_XP:
+                    entity_name: Optional[str] = None
+                    if (
+                        encounter.card.entity_type is not None
+                        and encounter.card.entity_type == EntityType.TASK
+                    ):
+                        entity_name = encounter.card.entity_name
+                    else:
+                        with Task.load_for_character(character_name) as tasks:
+                            if tasks:
+                                task = random.choice(tasks)
+                                entity_name = task.name
+                    if entity_name:
+                        ret.append(
+                            Effect(
+                                entity_type=EntityType.TASK,
+                                entity_name=entity_name,
+                                type=EffectType.MODIFY_XP,
+                                value=cnt * 3,
+                            )
+                        )
+
                 elif enc_eff == EncounterEffect.NOTHING:
                     pass
                 else:

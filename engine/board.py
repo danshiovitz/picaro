@@ -22,6 +22,7 @@ from .types import (
     Effect,
     EffectType,
     EncounterContextType,
+    EntityType,
     Event,
     FullCard,
     ResourceCard,
@@ -51,7 +52,7 @@ class ActiveBoard:
     def add_token(
         self,
         name: str,
-        type: str,
+        type: EntityType,
         location: str,
         actions: Optional[Sequence[Action]],
         events: List[Event],
@@ -64,8 +65,6 @@ class ActiveBoard:
             pass
         if found:
             raise IllegalMoveException(f"Token name {name} already in use")
-        if type not in TokenTypes:
-            raise Exception(f"Unknown token type {type}")
         if actions is None:
             actions = []
         TokenStorage.create(
@@ -112,7 +111,9 @@ class ActiveBoard:
         token = dataclasses.replace(token, location=to)
         TokenStorage.update(token)
         events.append(
-            Event.for_token(
+            Event(
+                Event.make_id(),
+                token.type,
                 token.name,
                 EffectType.MODIFY_LOCATION,
                 None,
@@ -128,11 +129,13 @@ class ActiveBoard:
     def get_token_location(self, token_name: str) -> str:
         return TokenStorage.load_by_name(token_name).location
 
-    def get_token_action(self, token_name: str, action_name: str) -> Action:
+    def get_token_action(
+        self, token_name: str, action_name: str
+    ) -> Tuple[Action, EntityType, str]:
         token = TokenStorage.load_by_name(token_name)
         for action in token.actions:
             if action.name == action_name:
-                return action
+                return (action, token.type, token.name)
         raise BadStateException(f"No such action {action_name} on token {token_name}.")
 
     def _translate_token(self, token: "Token", route: Sequence[str]) -> snapshot_Token:
@@ -403,7 +406,7 @@ class ActiveBoard:
                 ]
                 token = Token(
                     name=city_names.pop(0),
-                    type="City",
+                    type=EntityType.CITY,
                     location=hx.name,
                     actions=actions,
                 )
@@ -436,7 +439,7 @@ class ActiveBoard:
                 ]
                 token = Token(
                     name=f"{mine_rs[hx.country]} Source",
-                    type="Mine",
+                    type=EntityType.MINE,
                     location=hx.name,
                     actions=actions,
                 )
@@ -512,7 +515,7 @@ class ResourceDeck:
 @dataclass
 class Token:
     name: str
-    type: str
+    type: EntityType
     location: str
     actions: List[Action]
 

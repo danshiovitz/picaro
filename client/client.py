@@ -228,20 +228,29 @@ class Client:
         for tok in board.tokens:
             tokens[tok.location].append(tok)
 
+        flagged_hexes = set()
+        for task in ch.tasks:
+            if task.type == TaskType.DISCOVERY:
+                flagged_hexes |= set(task.extra.possible_hexes)
+
         def display(coord: OffsetCoordinate) -> str:
             hx = coords[coord]
 
-            rev = colors.reverse if False else ""
+            rev = colors.reverse if hx.name in flagged_hexes else ""
 
             if hx.name in tokens:
-                if tokens[hx.name][0].type == "Character":
+                if tokens[hx.name][0].type == EntityType.CHARACTER:
                     return colors.bold + "@" + colors.reset
-                elif tokens[hx.name][0].type == "City":
+                elif tokens[hx.name][0].type == EntityType.CITY:
                     return colors.fg.red + rev + "#" + colors.reset
-                elif tokens[hx.name][0].type == "Mine":
+                elif tokens[hx.name][0].type == EntityType.MINE:
                     return (
                         colors.bg.magenta + colors.fg.black + rev + "*" + colors.reset
                     )
+                elif tokens[hx.name][0].type == EntityType.PROJECT:
+                    return colors.bold + colors.bg.orange + rev + "P" + colors.reset
+                elif tokens[hx.name][0].type == EntityType.TASK:
+                    return colors.bold + colors.bg.orange + rev + "T" + colors.reset
                 else:
                     return colors.bold + colors.fg.green + rev + "?" + colors.reset
             elif encounters is not None and hx.name in encounters:
@@ -866,7 +875,7 @@ class Client:
             line = "* "
             subj = event.entity_name
             if (
-                event.entity_type in (EntityType.CHARACTER, EntityType.TOKEN)
+                event.entity_type == EntityType.CHARACTER
                 and event.entity_name == ch.name
             ):
                 line += "Your "
@@ -966,6 +975,7 @@ class Client:
             EncounterEffect.GAIN_RESOURCES: "+resources",
             EncounterEffect.GAIN_QUEST: "+quest",
             EncounterEffect.GAIN_TURNS: "+turns",
+            EncounterEffect.GAIN_PROJECT_XP: "+project",
             EncounterEffect.LOSE_COINS: "-coins",
             EncounterEffect.LOSE_REPUTATION: "-reputation",
             EncounterEffect.DAMAGE: "-damage",

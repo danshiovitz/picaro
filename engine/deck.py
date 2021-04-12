@@ -7,6 +7,7 @@ from .exceptions import IllegalMoveException
 from .skills import load_skills
 from .storage import ObjectStorageBase
 from .types import (
+    Challenge,
     Choices,
     EncounterCheck,
     EncounterContextType,
@@ -49,22 +50,28 @@ class TemplateDeck:
     def make_card(
         self, val: TemplateCard, difficulty: int, context: EncounterContextType
     ) -> FullCard:
-        if not val.skills:
-            checks = []
+        checks: List[EncounterCheck] = []
+        choices: Optional[Choices] = None
+        if val.choices:
             choices = val.choices
-        else:
-            choices = None
+        elif val.challenge:
             skill_bag = []
             # the number of copies of the core skills only matters on the third check,
             # where we add in all the skills (let's assume there are 36) and want to
             # have the copy number such that we pick a core skill (let's assume there
             # are 6) say 50% of the time and an unusual skill 50% of the time
-            skill_bag.extend(self.base_skills * 6)
-            skill_bag.extend(val.skills * 6)
+            sk = (
+                list(val.challenge.skills)
+                + list(self.base_skills)
+                + list(self.base_skills)
+            )[0:6]
+            skill_bag.extend(sk * 6)
 
             all_skills = load_skills()
-            reward_bag = self._make_reward_bag(val, context)
-            penalty_bag = self._make_penalty_bag(val, context)
+            reward_bag = self._make_reward_bag(val.challenge, context)
+            penalty_bag = self._make_penalty_bag(val.challenge, context)
+            if val.challenge.difficulty is not None:
+                difficulty = val.challenge.difficulty
             checks = [
                 self._make_check(difficulty, skill_bag, reward_bag, penalty_bag),
                 self._make_check(difficulty, skill_bag, reward_bag, penalty_bag),
@@ -84,6 +91,8 @@ class TemplateDeck:
             checks=checks,
             choices=choices,
             signs=signs,
+            entity_type=val.entity_type,
+            entity_name=val.entity_name,
         )
 
     def _make_check(
@@ -121,18 +130,19 @@ class TemplateDeck:
 
     # originally had this as a deck, but I think it works better to have more hot/cold variance
     def _make_reward_bag(
-        self, template_card: TemplateCard, context: EncounterContextType
+        self, challenge: Challenge, context: EncounterContextType
     ) -> List[EncounterEffect]:
         reward_bag = []
         reward_bag.extend(
             [EncounterEffect.GAIN_COINS, EncounterEffect.GAIN_REPUTATION] * 4
         )
-        reward_bag.extend(template_card.rewards * 4)
+        reward_bag.extend(challenge.rewards * 4)
         reward_bag.extend(
             [
                 EncounterEffect.GAIN_RESOURCES,
                 EncounterEffect.GAIN_HEALING,
                 EncounterEffect.GAIN_QUEST,
+                EncounterEffect.GAIN_PROJECT_XP,
                 EncounterEffect.NOTHING,
             ]
             * 1
@@ -140,7 +150,7 @@ class TemplateDeck:
         return reward_bag
 
     def _make_penalty_bag(
-        self, template_card: TemplateCard, context: EncounterContextType
+        self, challenge: Challenge, context: EncounterContextType
     ) -> List[EncounterEffect]:
         penalty_bag = []
         if context == EncounterContextType.TRAVEL:
@@ -148,7 +158,7 @@ class TemplateDeck:
             penalty_bag.extend([EncounterEffect.DAMAGE] * 4)
         else:
             penalty_bag.extend([EncounterEffect.DAMAGE] * 12)
-        penalty_bag.extend(template_card.penalties * 6)
+        penalty_bag.extend(challenge.penalties * 6)
         penalty_bag.extend(
             [
                 EncounterEffect.NOTHING,
