@@ -120,6 +120,7 @@ class TableauCard:
     age: int
     location: str
     route: Sequence[str]
+    is_extra: bool
 
 
 @dataclass(frozen=True)

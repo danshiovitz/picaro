@@ -18,7 +18,7 @@
   - more feat hooks
   - terrain decks
   - job decks
-  - camp deck (healing, spend coins on xp or rep, local hex encounter, job disrupt,
+  - camp deck (healing, spend coins on xp or rep, local hex encounter, job disrupt, a few bad things)
   - travel deck
 
 ok so
@@ -76,3 +76,11 @@ finish season:
 # not have those rumors take effect? or, like, you say 3 days for play, 1 day for rumors;
 # at the end of three days we finish play and cancel events (or sooner if everyone's done with play);
 # then after 1 day or when everyone's done with rumors, we publish rumors
+
+oracles, ok
+- interventions (restored per season)
+- make an oracle
+  - oracles have creator, request, get assigned
+- replying to oracle
+  - response message and event
+- creator can accept or reject

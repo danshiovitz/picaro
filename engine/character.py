@@ -228,6 +228,7 @@ class Character(Entity, ReadOnlyWrapper):
             age=card.age,
             location=card.location,
             route=tuple(route),
+            is_extra=card.is_extra,
         )
 
     def _encounter_snapshot(self, encounter: Encounter) -> Sequence[snapshot_Encounter]:
@@ -283,7 +284,7 @@ class Character(Entity, ReadOnlyWrapper):
 
     def refill_tableau(self) -> None:
         job = load_job(self._data.job_name)
-        while len(self._data.tableau) < self.get_max_tableau_size():
+        while sum(c for c in self._data.tableau if not c.is_extra) < self.get_max_tableau_size():
             if not self._data.job_deck:
                 additional: List[TemplateCard] = []
                 with Task.load_for_character(self.name) as tasks:
@@ -298,8 +299,16 @@ class Character(Entity, ReadOnlyWrapper):
             )
 
             self._data.tableau.append(
-                TableauCard(card=card, location=location, age=self.get_init_card_age())
+                TableauCard(card=card, location=location, age=self.get_init_card_age(), is_extra=False)
             )
+
+    def add_extra_to_tableau(self, template_card: TemplateCard, location: str, age: int) -> None:
+        job = load_job(self._data.job_name)
+        job_deck = load_deck(job.deck_name)
+        full_card = job_deck.make_single(template_card)
+        self._data.tableau.append(
+            TableauCard(card=full_card, location=location, age=age, is_extra=True)
+        )
 
     def pop_encounter(self) -> Encounter:
         if not self._data.encounters:
@@ -320,7 +329,7 @@ class Character(Entity, ReadOnlyWrapper):
 
     def age_tableau(self, near: Set[str]) -> None:
         def is_valid(card: TableauCard) -> bool:
-            return card.age > 1 and card.location in near
+            return card.age > 1 and (card.location in near or card.is_extra)
 
         self._data.tableau = [
             dataclasses.replace(c, age=c.age - 1)

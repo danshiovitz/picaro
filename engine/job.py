@@ -26,6 +26,13 @@ class Job:
             self.rank + 1, EncounterContextType.JOB, additional
         )
 
+    def make_single(self, single: TemplateCard) -> FullCard:
+        # template_deck = load_deck(self.deck_name)
+        template_deck = load_deck("Raider")
+        return template_deck.make_card(
+            single self.rank + 1, EncounterContextType.JOB
+        )
+
     def fits_hex(self, hx: Hex) -> bool:
         # later: some jobs filter by country and/or terrain type
         return True

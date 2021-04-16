@@ -218,6 +218,7 @@ class TableauCard:
     card: FullCard
     age: int
     location: str
+    is_extra: bool = False  # don't count against limit of tableau size
 
 
 @dataclass(frozen=True)
