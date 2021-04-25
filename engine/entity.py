@@ -4,7 +4,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 from picaro.common.utils import clamp
 
 from .exceptions import BadStateException, IllegalMoveException
-from .types import Effect, EffectType, EntityType, Event
+from .types import Effect, EffectType, EntityType, Event, make_id
 
 # the assumed usage of these classes is something like
 #   coins_maker = lambda: IntEntityField(EffectType.MODIFY_COINS, None, ...)
@@ -97,7 +97,7 @@ class IntEntityField(EntityField):
         if add_event:
             self._events.append(
                 Event(
-                    Event.make_id(),
+                    make_id(),
                     self._entity.ENTITY_TYPE,
                     self._entity.name,
                     self._type,
@@ -170,7 +170,7 @@ class SimpleDictIntEntityField(IntEntityField):
     ) -> List[EntityField]:
         subtypes = [k[1] for k in split_effects if k[0] == type and k[1] is not None]
         return [
-            cls(f"{name_pfx}_{subtype}", field_name, type, subtype, **kwargs)
+            cls(f"{subtype} {name_pfx}", field_name, type, subtype, **kwargs)
             for subtype in subtypes
         ]
 

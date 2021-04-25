@@ -474,8 +474,8 @@ class Project(ReadOnlyWrapper):
         return ProjectContext(name)
 
     @classmethod
-    def load_for_character(cls, character_name: str) -> "ProjectsContext":
-        return ProjectsContext(lambda: list(ProjectStorage.load()))
+    def load_in_progress(cls) -> "ProjectsContext":
+        return ProjectsContext(lambda: list(ProjectStorage.load_by_status(ProjectStatus.IN_PROGRESS)))
 
     def get_snapshot(self, character_name: str, include_all: bool) -> snapshot_Project:
         tasks = [
@@ -643,67 +643,6 @@ class ProjectData:
     target_hex: str
 
 
-# what if instead you declare your task count when you start a project and that's just it,
-# so the player interaction is just picking up tasks. GMs and/or the system might still require
-# being able to add tasks, though. Use cases:
-# 1) Player creates a project, specifying type etc, and the number of tasks; actual tasks are autogenned
-# 2) GM creates a project, specifying type etc, and if they want, also the explicit tasks
-# 3) Player picks up a task / puts back a task
-# 4) Tick some xp for a task
-# 5) GM updates random bits on a project
-# 6) GM updates random bits on a task
-# 7) get a project (by name) and all its tasks
-# 8) get all projects with their tasks
-# 9) see all the tasks owned by a character
-
-# type-specific task data is like:
-# for resource type tasks, the hex to deliver resources to (and the resources that have been collected, and the resources that are required?)
-# for discovery tasks, the secret hex, I guess the clues, and the remaining possible hexes
-# for challenge tasks, the preferred skills (?), the base difficulty
-# for time tasks, nothing extra
-
-# character drives all the logic?
-# what drives -> when xp is ticked, if more than max, move task to finished
-# what drives -> character travels to square X, search any tasks of type travel that are there
-
-
-class ProjectManager:  # heh
-    # this class is stateless, it just loads stuff as needed
-
-    def create_project(self, project: Project) -> None:
-        # validate project and task details
-        pass
-
-    def take_task(self, task_name: str, project_name: str, character_name: str) -> None:
-        # assigns character to task, but does not validate additional requirements
-        pass
-
-    def get_tasks_for_character(self, character_name: str) -> List["Task"]:
-        pass
-
-    def search_hex(
-        self, task_name: str, project_name: str, character_name: str, hex_name: str
-    ) -> bool:
-        # returns whether this was the secret hex or not
-        pass
-
-    def deliver_resource(
-        self,
-        task_name: str,
-        project_name: str,
-        character_name: str,
-        resource_name: str,
-    ) -> bool:
-        # returns whether the resource was accepted or not
-        pass
-
-    def add_xp(
-        self, task_name: str, project_name: str, character_name: str, xp: int
-    ) -> bool:
-        # returns whether the task is now finished or not
-        pass
-
-
 class TaskStorage(ObjectStorageBase[TaskData]):
     TABLE_NAME = "task"
     PRIMARY_KEYS = {"project_name", "task_idx"}
@@ -746,11 +685,15 @@ class ProjectStorage(ObjectStorageBase[ProjectData]):
         return cls._select_helper([], {})
 
     @classmethod
-    def load_by_name(cls, name) -> ProjectData:
+    def load_by_name(cls, name: str) -> ProjectData:
         projects = cls._select_helper(["name = :name"], {"name": name})
         if not projects:
             raise IllegalMoveException(f"No such project: {name}")
         return projects[0]
+
+    @classmethod
+    def load_by_status(cls, status: ProjectStatus) -> List[ProjectData]:
+        return cls._select_helper(["status = :status"], {"status": status})
 
     @classmethod
     def create(cls, project: ProjectData) -> int:

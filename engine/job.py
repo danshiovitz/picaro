@@ -30,7 +30,7 @@ class Job:
         # template_deck = load_deck(self.deck_name)
         template_deck = load_deck("Raider")
         return template_deck.make_card(
-            single self.rank + 1, EncounterContextType.JOB
+            single, self.rank + 1, EncounterContextType.JOB
         )
 
     def fits_hex(self, hx: Hex) -> bool:

@@ -23,6 +23,10 @@ Terrains = [
 T = TypeVar("T")
 
 
+def make_id() -> str:
+    return "".join(random.choice(ascii_lowercase) for _ in range(12))
+
+
 class EncounterEffect(Enum):
     NOTHING = enum_auto()
     GAIN_COINS = enum_auto()
@@ -291,6 +295,13 @@ class ProjectStatus(Enum):
     FINISHED = enum_auto()
 
 
+class OracleStatus(Enum):
+    WAITING = enum_auto()
+    ANSWERED = enum_auto()
+    CONFIRMED = enum_auto()
+    REJECTED = enum_auto()
+
+
 @dataclass(frozen=True)
 class Event(Generic[T]):
     id: str
@@ -335,7 +346,7 @@ class Event(Generic[T]):
         comments: List[str],
     ) -> "Event":
         return Event[T](
-            cls.make_id(),
+            make_id(),
             EntityType.TOKEN,
             name,
             type,
@@ -356,7 +367,7 @@ class Event(Generic[T]):
         comments: List[str],
     ) -> "Event":
         return Event[T](
-            cls.make_id(), EntityType.CHARACTER, name, type, subtype, old, new, comments
+            make_id(), EntityType.CHARACTER, name, type, subtype, old, new, comments
         )
 
     @classmethod
@@ -370,7 +381,7 @@ class Event(Generic[T]):
         comments: List[str],
     ) -> "Event":
         return Event[T](
-            cls.make_id(), EntityType.PROJECT, name, type, subtype, old, new, comments
+            make_id(), EntityType.PROJECT, name, type, subtype, old, new, comments
         )
 
     @classmethod
@@ -384,7 +395,7 @@ class Event(Generic[T]):
         comments: List[str],
     ) -> "Event":
         return Event[T](
-            cls.make_id(),
+            make_id(),
             EntityType.TASK,
             name,
             type,
@@ -393,10 +404,6 @@ class Event(Generic[T]):
             new,
             comments,
         )
-
-    @classmethod
-    def make_id(cls) -> str:
-        return "".join(random.choice(ascii_lowercase) for _ in range(12))
 
 
 @dataclass(frozen=True)

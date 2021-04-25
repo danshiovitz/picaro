@@ -7,29 +7,7 @@ from picaro.engine import Engine
 from picaro.engine.exceptions import IllegalMoveException, BadStateException
 
 from . import bottle
-from .api_types import (
-    Board,
-    CampRequest,
-    CampResponse,
-    Character,
-    EndTurnRequest,
-    EndTurnResponse,
-    ErrorResponse,
-    ErrorType,
-    ResolveEncounterRequest,
-    ResolveEncounterResponse,
-    JobRequest,
-    JobResponse,
-    ReturnTaskRequest,
-    ReturnTaskResponse,
-    SearchProjectsResponse,
-    StartTaskRequest,
-    StartTaskResponse,
-    TokenActionRequest,
-    TokenActionResponse,
-    TravelRequest,
-    TravelResponse,
-)
+from .api_types import *
 
 
 def wrap_errors() -> Callable[[Callable[..., Any]], Callable[..., bottle.HTTPResponse]]:
@@ -118,6 +96,71 @@ class Server:
         return ReturnTaskResponse(outcome=outcome)
 
     @wrap_errors()
+    def get_oracles(self, game_id: int, character_name: str) -> SearchOraclesResponse:
+        player_id = self._extract_player_id()
+        free = bottle.request.query.free or False
+        return SearchOraclesResponse(
+            oracles=self._engine.get_oracles(
+                free=free,
+                player_id=player_id,
+                game_id=game_id,
+                character_name=character_name,
+            )
+        )
+
+
+    @wrap_errors()
+    def get_oracle_cost(self, game_id: int, character_name: str) -> GetOracleCostResponse:
+        player_id = self._extract_player_id()
+        cost = self._engine.get_oracle_cost(
+            player_id=player_id,
+            game_id=game_id,
+            character_name=character_name,
+        )
+        return GetOracleCostResponse(cost=cost)
+
+
+    @wrap_errors()
+    def create_oracle(self, game_id: int, character_name: str) -> CreateOracleResponse:
+        player_id = self._extract_player_id()
+        req = self._read_body(CreateOracleRequest)
+        id, outcome = self._engine.create_oracle(
+            request=req.request,
+            payment_selections=req.payment_selections,
+            player_id=player_id,
+            game_id=game_id,
+            character_name=character_name,
+        )
+        return CreateOracleResponse(id=id, outcome=outcome)
+
+    @wrap_errors()
+    def answer_oracle(self, game_id: int, character_name: str) -> AnswerOracleResponse:
+        player_id = self._extract_player_id()
+        req = self._read_body(AnswerOracleRequest)
+        outcome = self._engine.answer_oracle(
+            oracle_id=req.id,
+            response=req.response,
+            proposal=req.proposal,
+            player_id=player_id,
+            game_id=game_id,
+            character_name=character_name,
+        )
+        return AnswerOracleResponse(outcome=outcome)
+
+    @wrap_errors()
+    def confirm_oracle(self, game_id: int, character_name: str) -> ConfirmOracleResponse:
+        player_id = self._extract_player_id()
+        req = self._read_body(ConfirmOracleRequest)
+        outcome = self._engine.confirm_oracle(
+            oracle_id=req.id,
+            confirm=req.confirm,
+            player_id=player_id,
+            game_id=game_id,
+            character_name=character_name,
+        )
+        return ConfirmOracleResponse(outcome=outcome)
+
+    @wrap_errors()
     def do_job(self, game_id: int, character_name: str) -> JobResponse:
         player_id = self._extract_player_id()
         req = self._read_body(JobRequest)
@@ -189,53 +232,78 @@ class Server:
 
     def run(self) -> None:
         bottle.route(
-            path="/game/<game_id>/board/<character_name>", callback=self.get_board
+            path="/game/<game_id>/<character_name>/board", callback=self.get_board
         )
         bottle.route(
-            path="/game/<game_id>/character/<character_name>",
+            path="/game/<game_id>/<character_name>/character",
             callback=self.get_character,
         )
         bottle.route(
-            path="/game/<game_id>/projects/<character_name>",
+            path="/game/<game_id>/<character_name>/projects",
             callback=self.get_projects,
         )
         bottle.route(
-            path="/game/<game_id>/projects/<character_name>/start",
+            path="/game/<game_id>/<character_name>/projects/start",
             method="POST",
             callback=self.start_task,
         )
         bottle.route(
-            path="/game/<game_id>/projects/<character_name>/return",
+            path="/game/<game_id>/<character_name>/projects/return",
             method="POST",
             callback=self.return_task,
         )
         bottle.route(
-            path="/game/<game_id>/play/<character_name>/job",
+            path="/game/<game_id>/<character_name>/oracles",
+            method="GET",
+            callback=self.get_oracles,
+        )
+        bottle.route(
+            path="/game/<game_id>/<character_name>/oracles/cost",
+            method="GET",
+            callback=self.get_oracle_cost,
+        )
+        bottle.route(
+            path="/game/<game_id>/<character_name>/oracles/create",
+            method="POST",
+            callback=self.create_oracle,
+        )
+        bottle.route(
+            path="/game/<game_id>/<character_name>/oracles/answer",
+            method="POST",
+            callback=self.answer_oracle,
+        )
+        bottle.route(
+            path="/game/<game_id>/<character_name>/oracles/confirm",
+            method="POST",
+            callback=self.confirm_oracle,
+        )
+        bottle.route(
+            path="/game/<game_id>/<character_name>/play/job",
             method="POST",
             callback=self.do_job,
         )
         bottle.route(
-            path="/game/<game_id>/play/<character_name>/token_action",
+            path="/game/<game_id>/<character_name>/play/token_action",
             method="POST",
             callback=self.token_action,
         )
         bottle.route(
-            path="/game/<game_id>/play/<character_name>/travel",
+            path="/game/<game_id>/<character_name>/play/travel",
             method="POST",
             callback=self.travel,
         )
         bottle.route(
-            path="/game/<game_id>/play/<character_name>/camp",
+            path="/game/<game_id>/<character_name>/play/camp",
             method="POST",
             callback=self.camp,
         )
         bottle.route(
-            path="/game/<game_id>/play/<character_name>/resolve_encounter",
+            path="/game/<game_id>/<character_name>/play/resolve_encounter",
             method="POST",
             callback=self.resolve_encounter,
         )
         bottle.route(
-            path="/game/<game_id>/play/<character_name>/end_turn",
+            path="/game/<game_id>/<character_name>/play/end_turn",
             method="POST",
             callback=self.end_turn,
         )

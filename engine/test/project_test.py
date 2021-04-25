@@ -6,7 +6,6 @@ sys.path.append(str(pathlib.Path(__file__).absolute().parent.parent.parent.paren
 from dataclasses import dataclass
 from typing import Dict, List, cast
 from unittest import TestCase, main
-from unittest.mock import Mock, patch
 
 from picaro.engine.board import load_board
 from picaro.engine.exceptions import IllegalMoveException

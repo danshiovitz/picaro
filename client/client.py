@@ -27,46 +27,7 @@ from picaro.common.hexmap.display import (
     render_large,
 )
 from picaro.common.serializer import deserialize, serialize
-from picaro.server.api_types import (
-    Action,
-    Board,
-    CampRequest,
-    CampResponse,
-    Character,
-    Choices,
-    Effect,
-    EffectType,
-    EncounterEffect,
-    Emblem,
-    EncounterCheck,
-    EncounterActions,
-    EndTurnRequest,
-    EndTurnResponse,
-    EntityType,
-    ErrorResponse,
-    ErrorType,
-    Event,
-    Feat,
-    HookType,
-    JobRequest,
-    JobResponse,
-    Outcome,
-    TaskStatus,
-    TaskType,
-    ResolveEncounterRequest,
-    ResolveEncounterResponse,
-    ReturnTaskRequest,
-    ReturnTaskResponse,
-    SearchProjectsResponse,
-    StartTaskRequest,
-    StartTaskResponse,
-    TableauCard,
-    Token,
-    TokenActionRequest,
-    TokenActionResponse,
-    TravelRequest,
-    TravelResponse,
-)
+from picaro.server.api_types import *
 
 
 S = TypeVar("S")
@@ -98,12 +59,12 @@ class Client:
         parser = ArgumentParser()
         parser.add_argument("--host", type=str, default="http://localhost:8080")
         parser.add_argument("--game_id", type=int, default=1)
+        parser.add_argument("--name", type=str, required=True)
         parser.set_defaults(cmd=lambda cli: parser.print_help())
         subparsers = parser.add_subparsers()
 
         get_board_parser = subparsers.add_parser("board")
         get_board_parser.set_defaults(cmd=lambda cli: cli.get_board())
-        get_board_parser.add_argument("name", type=str)
         get_board_parser.add_argument("--country", "--countries", action="store_true")
         get_board_parser.add_argument("--region", "--regions", action="store_true")
         get_board_parser.add_argument("--large", action="store_true")
@@ -111,19 +72,27 @@ class Client:
 
         get_character_parser = subparsers.add_parser("character")
         get_character_parser.set_defaults(cmd=lambda cli: cli.get_character())
-        get_character_parser.add_argument("name", type=str)
         get_character_parser.add_argument("--all", action="store_true")
 
-        get_projects_parser = subparsers.add_parser("projects")
-        get_projects_parser.set_defaults(cmd=lambda cli: cli.get_projects())
-        get_projects_parser.add_argument("name", type=str)
-        get_projects_parser.add_argument("--all", action="store_true")
-        get_projects_parser.add_argument("--start", action="store_true")
-        get_projects_parser.add_argument("--do_return", "--return", action="store_true")
+        do_projects_parser = subparsers.add_parser("projects")
+        do_projects_parser.set_defaults(cmd=lambda cli: cli.do_projects())
+        do_projects_parser.add_argument("--all", action="store_true")
+        do_projects_parser.add_argument("--start", action="store_true")
+        do_projects_parser.add_argument("--do_return", "--return", action="store_true")
+
+        do_oracle_parser = subparsers.add_parser("oracle")
+        oracle_subparsers = do_oracle_parser.add_subparsers()
+        create_oracle_parser = oracle_subparsers.add_parser("create")
+        create_oracle_parser.set_defaults(cmd=lambda cli: cli.create_oracle())
+        answer_oracle_parser = oracle_subparsers.add_parser("answer")
+        answer_oracle_parser.set_defaults(cmd=lambda cli: cli.answer_oracle())
+        confirm_oracle_parser = oracle_subparsers.add_parser("confirm")
+        confirm_oracle_parser.set_defaults(cmd=lambda cli: cli.confirm_oracle())
+        list_oracle_parser = oracle_subparsers.add_parser("list")
+        list_oracle_parser.set_defaults(cmd=lambda cli: cli.list_oracles())
 
         play_parser = subparsers.add_parser("play")
         play_parser.set_defaults(cmd=lambda cli: cli.play())
-        play_parser.add_argument("name", type=str)
         play_parser.add_argument("--season", action="store_true")
 
         return parser.parse_args()
@@ -149,8 +118,8 @@ class Client:
         self.opener = build_opener(NonThrowingHTTPErrorProcessor)
 
     def get_board(self) -> None:
-        ch = self._get(f"/character/{self.args.name}", Character)
-        board = self._get(f"/board/{ch.name}", Board)
+        ch = self._get(f"/character", Character)
+        board = self._get(f"/board", Board)
         coords = {hx.coordinate: hx for hx in board.hexes}
 
         tokens: Dict[str, List[Token]] = defaultdict(list)
@@ -266,7 +235,7 @@ class Client:
         return render_simple(set(coords), 1, display, center=center, radius=radius)
 
     def get_character(self) -> None:
-        ch = self._get(f"/character/{self.args.name}", Character)
+        ch = self._get(f"/character", Character)
         print(f"{ch.name} ({ch.player_id}) - a {ch.job} [{ch.location}]")
         print(
             f"Health: {ch.health}   Coins: {ch.coins}   Reputation: {ch.reputation}   Quest: {ch.quest}"
@@ -309,11 +278,11 @@ class Client:
             name = feat.subtype + " " + name
         return f"{feat.value:+} {name}"
 
-    def get_projects(self) -> None:
-        ch = self._get(f"/character/{self.args.name}", Character)
+    def do_projects(self) -> None:
+        ch = self._get(f"/character", Character)
 
         is_all = "?all=true" if self.args.all or self.args.start else ""
-        resp = self._get(f"/projects/{ch.name}{is_all}", SearchProjectsResponse)
+        resp = self._get(f"/projects{is_all}", SearchProjectsResponse)
         projects = resp.projects
         print(f"All Current Projects:" if is_all else "Your Current Projects:")
         if not projects:
@@ -392,20 +361,20 @@ class Client:
                 try:
                     if self.args.start:
                         pargs = [
-                            f"/projects/{ch.name}/start",
+                            f"/projects/start",
                             StartTaskRequest(choices[c_idx]),
                             StartTaskResponse,
                         ]
                     else:
                         pargs = [
-                            f"/projects/{ch.name}/return",
+                            f"/projects/return",
                             ReturnTaskRequest(choices[c_idx]),
                             ReturnTaskResponse,
                         ]
 
                     resp = self._post(*pargs)
                     if resp.outcome.events:
-                        self._display_outcome(ch, resp.outcome)
+                        self._display_events(ch, resp.outcome.events)
                         print("[Hit return]")
                         input()
                     return
@@ -413,6 +382,173 @@ class Client:
                     print(e)
                     print()
                     continue
+
+    def create_oracle(self) -> None:
+        ch = self._get(f"/character", Character)
+        resp = self._get(f"/oracles/cost", GetOracleCostResponse)
+        print(f"How will you pay for the oracle?")
+        selections = self._read_selections(resp.cost, [])
+        request = self._read_input("Describe the request you make:", textbox=True)
+        try:
+            resp = self._post(
+                f"/oracles/create",
+                CreateOracleRequest(request=request, payment_selections=selections),
+                CreateOracleResponse,
+            )
+        except IllegalMoveException as e:
+            print(e)
+            print()
+            return False
+
+        if resp.outcome.events:
+            self._display_events(ch, resp.outcome.events)
+            print("[Hit return]")
+            input()
+        else:
+            print("Your request has been sent")
+
+    def answer_oracle(self) -> None:
+        ch = self._get(f"/character", Character)
+        resp = self._get(f"/oracles?free=true", SearchOraclesResponse)
+        oracles = resp.oracles
+
+        print("Oracles awaiting answers:")
+        if not oracles:
+            print(" * None")
+            return
+        for idx, oracle in enumerate(oracles):
+            self._display_oracle_item(oracle, bullet=f"{ascii_lowercase[idx]}.")
+        print(" q. Quit")
+        while True:
+            print("Which? ", end="")
+            line = input().strip().lower()
+            if not line:
+                continue
+            if line[0] == "q":
+                return
+            oidx = ascii_lowercase.find(line[0])
+            if oidx < 0 or oidx >= len(oracles):
+                print("No such oracle?")
+                continue
+            oracle = oracles[oidx]
+            break
+
+        print(f"Petitioner: {oracle.petitioner}")
+        print(oracle.request)
+        response = self._read_input("Give your response:", textbox=True)
+        proposal = [Effect(type=EffectType.MODIFY_COINS, value=-5, is_cost=True)]
+        try:
+            resp = self._post(
+                f"/oracles/answer",
+                AnswerOracleRequest(id=oracle.id, response=response, proposal=proposal),
+                AnswerOracleResponse,
+            )
+        except IllegalMoveException as e:
+            print(e)
+            print()
+            return False
+
+        if resp.outcome.events:
+            self._display_events(ch, resp.outcome.events)
+            print("[Hit return]")
+            input()
+        else:
+            print("Your response has been sent")
+
+    def confirm_oracle(self) -> None:
+        ch = self._get(f"/character", Character)
+        resp = self._get(f"/oracles", SearchOraclesResponse)
+        oracles = [o for o in resp.oracles if o.status == OracleStatus.ANSWERED]
+
+        print("Oracles awaiting confirmation:")
+        if not oracles:
+            print(" * None")
+            return
+        for idx, oracle in enumerate(oracles):
+            self._display_oracle_item(oracle, bullet=f"{ascii_lowercase[idx]}.")
+        print(" q. Quit")
+        while True:
+            print("Which? ", end="")
+            line = input().strip().lower()
+            if not line:
+                continue
+            if line[0] == "q":
+                return
+            oidx = ascii_lowercase.find(line[0])
+            if oidx < 0 or oidx >= len(oracles):
+                print("No such oracle?")
+                continue
+            oracle = oracles[oidx]
+            break
+
+        print("The request:")
+        print(oracle.request)
+        print()
+        print("The response:")
+        print(oracle.response)
+        for eff in oracle.proposal:
+            print(f" * {self._render_effect(eff)}")
+
+        confirm = None
+        while True:
+            print("You can confirm, reject, or quit: ", end="")
+            line = input().strip().lower()
+            if not line:
+                continue
+            if line[0] == "q":
+                return
+            elif line[0] == "c":
+                confirm = True
+                break
+            elif line[0] == "r":
+                confirm = False
+                break
+            else:
+                print("???")
+                continue
+
+        try:
+            resp = self._post(
+                f"/oracles/confirm",
+                ConfirmOracleRequest(id=oracle.id, confirm=confirm),
+                ConfirmOracleResponse,
+            )
+        except IllegalMoveException as e:
+            print(e)
+            print()
+            return False
+
+        if resp.outcome.events:
+            self._display_events(ch, resp.outcome.events)
+            print("[Hit return]")
+            input()
+        else:
+            print(f"You have {'confirm' if confirm else 'reject'}ed this oracle.")
+
+    def list_oracles(self) -> None:
+        ch = self._get(f"/character", Character)
+        resp = self._get(f"/oracles", SearchOraclesResponse)
+        oracles = resp.oracles
+
+        print("Current Oracles:")
+        if not oracles:
+            print(" * None")
+            return
+        for oracle in oracles:
+            self._display_oracle_item(oracle)
+
+    def _display_oracle_item(self, oracle: Oracle, bullet: str = "*") -> None:
+        if len(oracle.request) > 70:
+            rt = oracle.request[0:70] + "..."
+        else:
+            rt = oracle.request
+        print(f" {bullet} {rt}")
+        sp = " " * len(bullet)
+        print(f" {sp} Petitioner: {oracle.petitioner}   Granter: {oracle.granter or '<none>'}   Status: {oracle.status.name.lower()}")
+
+    def _read_input(self, prompt: str, textbox: bool = False) -> str:
+        print(prompt + " ", end="")
+        return input().strip()
 
     def play(self) -> None:
         while True:
@@ -422,7 +558,7 @@ class Client:
                 print(e)
                 print()
                 continue
-            ch = self._get(f"/character/{self.args.name}", Character)
+            ch = self._get(f"/character", Character)
             if not self.args.season or ch.remaining_turns <= 0:
                 return
             else:
@@ -431,7 +567,7 @@ class Client:
 
     def _play_turn(self) -> None:
         while True:
-            ch = self._get(f"/character/{self.args.name}", Character)
+            ch = self._get(f"/character", Character)
             if ch.encounters:
                 print()
                 self._encounter(ch)
@@ -446,7 +582,7 @@ class Client:
             return
 
     def _display_play(self, ch: Character) -> None:
-        board = self._get(f"/board/{ch.name}", Board)
+        board = self._get(f"/board", Board)
         encounters = {card.location for card in ch.tableau}
 
         ch_hex = [hx for hx in board.hexes if hx.name == ch.location][0]
@@ -524,7 +660,7 @@ class Client:
 
     def _input_play_action(self) -> bool:
         while True:
-            ch = self._get(f"/character/{self.args.name}", Character)
+            ch = self._get(f"/character", Character)
             if ch.encounters:
                 return False
             print("Action? ", end="")
@@ -542,7 +678,7 @@ class Client:
                     continue
             elif line[0] in "jklmnop":
                 c_idx = "jklmnop".index(line[0])
-                board = self._get(f"/board/{ch.name}", Board)
+                board = self._get(f"/board", Board)
                 actions = self._available_actions(board)
                 if c_idx < len(actions):
                     token, action = actions[c_idx]
@@ -573,7 +709,7 @@ class Client:
 
     def _job(self, card: TableauCard, ch: Character) -> bool:
         self._travel_route(card.route, ch)
-        ch = self._get(f"/character/{self.args.name}", Character)
+        ch = self._get(f"/character", Character)
         # if we didn't make it to the card's location uneventfully,
         # then exit to let the player deal with the encounter and
         # perhaps then make another choice for their main action
@@ -584,7 +720,7 @@ class Client:
         # otherwise start the main job
         try:
             resp = self._post(
-                f"/play/{ch.name}/job",
+                f"/play/job",
                 JobRequest(card_id=card.id),
                 JobResponse,
             )
@@ -594,7 +730,7 @@ class Client:
             return False
 
         if resp.outcome.events:
-            self._display_outcome(ch, resp.outcome)
+            self._display_events(ch, resp.outcome.events)
             print("[Hit return]")
             input()
             return True
@@ -602,7 +738,7 @@ class Client:
 
     def _token_action(self, token: Token, action: Action, ch: Character) -> bool:
         self._travel_route(token.route, ch)
-        ch = self._get(f"/character/{self.args.name}", Character)
+        ch = self._get(f"/character", Character)
         # if we didn't make it to the token's location uneventfully,
         # then exit to let the player deal with the encounter and
         # perhaps then make another choice for their main action
@@ -613,7 +749,7 @@ class Client:
         # otherwise start the action
         try:
             resp = self._post(
-                f"/play/{ch.name}/token_action",
+                f"/play/token_action",
                 TokenActionRequest(token=token.name, action=action.name),
                 TokenActionResponse,
             )
@@ -622,7 +758,7 @@ class Client:
             print()
             return False
         if resp.outcome.events:
-            self._display_outcome(ch, resp.outcome)
+            self._display_events(ch, resp.outcome.events)
             print("[Hit return]")
             input()
             return True
@@ -631,14 +767,14 @@ class Client:
     def _camp(self, ch: Character) -> bool:
         try:
             resp = self._post(
-                f"/play/{ch.name}/camp", CampRequest(rest=True), CampResponse
+                f"/play/camp", CampRequest(rest=True), CampResponse
             )
         except IllegalMoveException as e:
             print(e)
             print()
             return False
         if resp.outcome.events:
-            self._display_outcome(ch, resp.outcome)
+            self._display_events(ch, resp.outcome.events)
             print("[Hit return]")
             input()
             return True
@@ -669,7 +805,7 @@ class Client:
 
         try:
             resp = self._post(
-                f"/play/{ch.name}/resolve_encounter",
+                f"/play/resolve_encounter",
                 ResolveEncounterRequest(actions=actions),
                 ResolveEncounterResponse,
             )
@@ -679,7 +815,7 @@ class Client:
             return False
         print()
         print(f"The outcome of your encounter:")
-        self._display_outcome(ch, resp.outcome)
+        self._display_events(ch, resp.outcome.events)
         print("[Hit return]")
         input()
         return True
@@ -763,15 +899,26 @@ class Client:
     def _input_encounter_choices(
         self, ch: Character, choices: Choices, rolls: Sequence[int]
     ) -> EncounterActions:
-        user_choices = defaultdict(int)
+        selections = self._read_selections(choices, rolls)
+        return EncounterActions(
+            flee=False,
+            transfers=[],
+            adjusts=[],
+            luck=ch.luck,
+            rolls=rolls,
+            choices={k: v for k, v in selections.items() if v > 0},
+        )
+
+    def _read_selections(self, choices: Choices, rolls: Sequence[int]) -> Dict[int, int]:
+        selections = defaultdict(int)
         can_choose = True
         if choices.is_random:
             for v in rolls:
-                user_choices[v - 1] += 1
+                selections[v - 1] += 1
             can_choose = False
         elif choices.min_choices >= sum(c.max_choices for c in choices.choice_list):
             for idx, c in enumerate(choices.choice_list):
-                user_choices[idx] = c.max_choices
+                selections[idx] = c.max_choices
             can_choose = False
 
         while True:
@@ -788,12 +935,12 @@ class Client:
                     else:
                         line += str(idx + 1) + ". "
                 else:
-                    line += "* " if idx in user_choices else "- "
+                    line += "* " if idx in selections else "- "
 
                 line += ", ".join(
                     self._render_effect(eff) for eff in choice.benefit + choice.cost
                 )
-                line += f" [{user_choices[idx]}/{choice.max_choices}]"
+                line += f" [{selections[idx]}/{choice.max_choices}]"
                 print(line)
 
             if not can_choose:
@@ -811,7 +958,7 @@ class Client:
             if not line:
                 continue
             if line[0] == "z":
-                if sum(user_choices.values()) >= choices.min_choices:
+                if sum(selections.values()) >= choices.min_choices:
                     break
                 else:
                     print("You must make another selection.")
@@ -830,37 +977,29 @@ class Client:
             if c_val is None:
                 # if this is a once-only choice, then entering the choice with no
                 # count toggles, otherwise it always adds 1
-                if choices.choice_list[c_idx].max_choices == 1 and user_choices[c_idx]:
+                if choices.choice_list[c_idx].max_choices == 1 and selections[c_idx]:
                     c_val = -1
                 else:
                     c_val = 1
             cc = choices.choice_list[c_idx]
-            if user_choices[c_idx] + c_val < cc.min_choices:
+            if selections[c_idx] + c_val < cc.min_choices:
                 print(
                     f"That would be lower than the allowed minimum ({cc.min_choices}) for the choice."
                 )
                 continue
-            if user_choices[c_idx] + c_val > cc.max_choices:
+            if selections[c_idx] + c_val > cc.max_choices:
                 print(
                     f"That would be higher than the allowed maximum ({cc.max_choices}) for the choice."
                 )
                 continue
-            user_choices[c_idx] += c_val
+            selections[c_idx] += c_val
 
-            if sum(user_choices.values()) >= choices.max_choices:
+            if sum(selections.values()) >= choices.max_choices:
                 break
+        return selections
 
-        return EncounterActions(
-            flee=False,
-            transfers=[],
-            adjusts=[],
-            luck=ch.luck,
-            rolls=rolls,
-            choices={k: v for k, v in user_choices.items() if v > 0},
-        )
-
-    def _display_outcome(self, ch: Character, outcome: Outcome) -> None:
-        if not outcome.events:
+    def _display_events(self, ch: Character, events: List[Event]) -> None:
+        if not events:
             return
 
         def render_single_int(event: Event) -> str:
@@ -871,7 +1010,7 @@ class Client:
             else:
                 return f"remained at {event.new_value}"
 
-        for event in outcome.events:
+        for event in events:
             line = "* "
             subj = event.entity_name
             if (
@@ -1037,7 +1176,7 @@ class Client:
             print()
             return False
 
-        board = self._get(f"/board/{ch.name}", Board)
+        board = self._get(f"/board", Board)
 
         cubes = {
             CubeCoordinate.from_row_col(hx.coordinate.row, hx.coordinate.column): hx
@@ -1083,15 +1222,15 @@ class Client:
         for step in route:
             try:
                 resp = self._post(
-                    f"/play/{ch.name}/travel", TravelRequest(step=step), TravelResponse
+                    f"/play/travel", TravelRequest(step=step), TravelResponse
                 )
             except IllegalMoveException as e:
                 print(e)
                 print()
                 return False
-            ch = self._get(f"/character/{self.args.name}", Character)
+            ch = self._get(f"/character", Character)
             if resp.outcome.events:
-                self._display_outcome(ch, resp.outcome)
+                self._display_events(ch, resp.outcome.events)
                 print("[Hit return]")
                 input()
                 return True
@@ -1106,14 +1245,14 @@ class Client:
     def _end_turn(self, ch: Character) -> bool:
         try:
             resp = self._post(
-                f"/play/{ch.name}/end_turn", EndTurnRequest(), EndTurnResponse
+                f"/play/end_turn", EndTurnRequest(), EndTurnResponse
             )
         except IllegalMoveException as e:
             print(e)
             print()
             return False
         if resp.outcome.events:
-            self._display_outcome(ch, resp.outcome)
+            self._display_events(ch, resp.outcome.events)
             print("[Hit return]")
             input()
             return True
@@ -1121,14 +1260,14 @@ class Client:
 
     def _get(self, path: str, cls: Type[T]) -> T:
         url = self.base_url
-        url += f"/game/{self.args.game_id}"
+        url += f"/game/{self.args.game_id}/{self.args.name}"
         url += path
         request = Request(url)
         return self._http_common(request, cls)
 
     def _post(self, path: str, input_val: S, cls: Type[T]) -> T:
         url = self.base_url
-        url += f"/game/{self.args.game_id}"
+        url += f"/game/{self.args.game_id}/{self.args.name}"
         url += path
         request = Request(url, data=serialize(input_val).encode("utf-8"))
         return self._http_common(request, cls)

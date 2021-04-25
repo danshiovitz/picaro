@@ -65,6 +65,7 @@ from .types import (
     SpecialChoiceType,
     TableauCard,
     TemplateCard,
+    make_id,
 )
 
 
@@ -284,7 +285,7 @@ class Character(Entity, ReadOnlyWrapper):
 
     def refill_tableau(self) -> None:
         job = load_job(self._data.job_name)
-        while sum(c for c in self._data.tableau if not c.is_extra) < self.get_max_tableau_size():
+        while sum(1 for c in self._data.tableau if not c.is_extra) < self.get_max_tableau_size():
             if not self._data.job_deck:
                 additional: List[TemplateCard] = []
                 with Task.load_for_character(self.name) as tasks:
@@ -372,6 +373,9 @@ class Character(Entity, ReadOnlyWrapper):
         return clamp(base_limit + self._calc_hook(HookType.MAX_RESOURCES), min=0)
 
     def get_max_tasks(self) -> int:
+        return 3
+
+    def get_max_oracles(self) -> int:
         return 3
 
     def get_skill_rank(self, skill_name: str) -> int:
@@ -693,7 +697,7 @@ class DisruptJobMetaField(IntEntityField):
         job_msg, new_job, is_promo = entity._job_check(val)
         self._events.append(
             Event(
-                Event.make_id(),
+                make_id(),
                 self._entity.ENTITY_TYPE,
                 self._entity.name,
                 self._type,
@@ -746,7 +750,7 @@ class ModifyJobField(EntityField):
         )
         self._events.append(
             Event(
-                Event.make_id(),
+                make_id(),
                 self._entity.ENTITY_TYPE,
                 self._entity.name,
                 self._type,
@@ -795,7 +799,7 @@ class ResourceDrawMetaField(IntEntityField):
             )
         self._events.append(
             Event(
-                Event.make_id(),
+                make_id(),
                 self._entity.ENTITY_TYPE,
                 self._entity.name,
                 self._type,
@@ -823,7 +827,7 @@ class ResourceDrawMetaField(IntEntityField):
             comments.append(draw.name)
         self._events.append(
             Event(
-                Event.make_id(),
+                make_id(),
                 self._entity.ENTITY_TYPE,
                 self._entity.name,
                 self._type,
@@ -920,7 +924,7 @@ class AddEmblemField(EntityField):
         self._entity._data.emblems.append(new_emblem)
         self._events.append(
             Event(
-                Event.make_id(),
+                make_id(),
                 self._entity.ENTITY_TYPE,
                 self._entity.name,
                 self._type,

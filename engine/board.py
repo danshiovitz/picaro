@@ -28,6 +28,7 @@ from .types import (
     ResourceCard,
     TemplateCard,
     Terrains,
+    make_id,
 )
 
 
@@ -112,7 +113,7 @@ class ActiveBoard:
         TokenStorage.update(token)
         events.append(
             Event(
-                Event.make_id(),
+                make_id(),
                 token.type,
                 token.name,
                 EffectType.MODIFY_LOCATION,

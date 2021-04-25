@@ -11,6 +11,7 @@ from picaro.engine.types import (
     Emblem,
     EncounterCheck,
     EntityType,
+    OracleStatus,
     TaskStatus,
     TaskType,
     ProjectStatus,
@@ -109,6 +110,17 @@ class Project:
     status: ProjectStatus
     target_hex: str
     tasks: List[Task]
+
+
+@dataclass(frozen=True)
+class Oracle:
+    id: str
+    status: OracleStatus
+    petitioner: str
+    request: str
+    granter: Optional[str]
+    response: Optional[str]
+    proposal: Optional[List[Effect]]
 
 
 @dataclass(frozen=True)

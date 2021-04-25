@@ -198,7 +198,6 @@ class StorageBase(ABC, Generic[T]):
         sql = f"SELECT * FROM {cls.TABLE_NAME}"
         if where_clauses:
             sql += " WHERE (" + ") AND (".join(where_clauses) + ")"
-
         ret: Dict[Sequence[Any], List[T]] = defaultdict(list)
         rows = list(session.connection.execute(sql, params))
         all_secondaries = cls._select_secondaries(rows)
@@ -389,6 +388,11 @@ class ObjectStorageBase(StorageBase[T]):
     @classmethod
     def _construct_val(cls, row: Dict[str, Any]) -> T:
         val_type = cls._get_val_type()
+        # there's some subtly different behavior between the row object
+        # (which is a sqlite3.Row) and a real dict which are causing problems
+        # (in particular stuff around nullable fields and "key in row"), so just
+        # converting to a regular dict before deserializing
+        row = {k: row[k] for k in row.keys()}
         return recursive_from_dict(row, val_type)
 
     @classmethod
@@ -445,14 +449,24 @@ class ReadOnlyWrapper:
             val = getattr(self._data, name)
             ut = self._fields[name].type
             cls_base = getattr(ut, "__origin__", ut)
+            if cls_base == Union:
+                if val is None:
+                    return None
+                # pull out the first type which is assumed to be the non-none type
+                ut = ut.__args__[0]
+                cls_base = getattr(ut, "__origin__", ut)
             if cls_base == Any:
                 indicator = self._data.type_field()
                 cls_base = self._data.any_type(getattr(self._data, indicator))
-            if issubclass(cls_base, Dict):
-                return MappingProxyType(val)
-            elif cls_base not in (str, tuple) and issubclass(cls_base, Iterable):
-                return tuple(val)
-            else:
-                return val
+            try:
+                if issubclass(cls_base, Dict):
+                    return MappingProxyType(val)
+                elif cls_base not in (str, tuple) and issubclass(cls_base, Iterable):
+                    return tuple(val)
+                else:
+                    return val
+            except Exception:
+                print(f"Bad type reading field {name} ({ut}, {cls_base}, {val})")
+                raise
         else:
             raise Exception(f"No such field: {name}")

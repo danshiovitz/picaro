@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from picaro.common.hexmap.types import OffsetCoordinate
-from picaro.engine.snapshot import Board, Character, Encounter, Hex, Project, Token
+from picaro.engine.snapshot import Board, Character, Encounter, Hex, Oracle, Project, Token
 from picaro.engine.types import (
     Action,
     Choices,
@@ -17,6 +17,7 @@ from picaro.engine.types import (
     Event,
     Feat,
     HookType,
+    OracleStatus,
     Outcome,
     TaskStatus,
     TaskType,
@@ -52,6 +53,56 @@ class ReturnTaskRequest:
 
 @dataclass(frozen=True)
 class ReturnTaskResponse:
+    outcome: Outcome
+
+
+@dataclass(frozen=True)
+class SearchOraclesResponse:
+    oracles: List[Oracle]
+
+
+@dataclass(frozen=True)
+class GetOracleCostRequest:
+    pass
+
+
+@dataclass(frozen=True)
+class GetOracleCostResponse:
+    cost: Choices
+
+
+@dataclass(frozen=True)
+class CreateOracleRequest:
+    request: str
+    payment_selections: Dict[int, int]
+
+
+@dataclass(frozen=True)
+class CreateOracleResponse:
+    id: str
+    outcome: Outcome
+
+
+@dataclass(frozen=True)
+class AnswerOracleRequest:
+    id: str
+    response: str
+    proposal: List[Effect]
+
+
+@dataclass(frozen=True)
+class AnswerOracleResponse:
+    outcome: Outcome
+
+
+@dataclass(frozen=True)
+class ConfirmOracleRequest:
+    id: str
+    confirm: bool
+
+
+@dataclass(frozen=True)
+class ConfirmOracleResponse:
     outcome: Outcome
 
 

@@ -22,6 +22,13 @@ if __name__ == "__main__":
         location="random",
         job_name="Raider",
     )
+    engine.add_character(
+        game_id=game_id,
+        player_id=PLAYER_ID + 1,
+        character_name="Taurus",
+        location="random",
+        job_name="Merchant",
+    )
     engine.xyzzy(
         game_id=game_id,
         player_id=PLAYER_ID,

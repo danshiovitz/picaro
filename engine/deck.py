@@ -1,6 +1,5 @@
 import random
 from dataclasses import dataclass
-from string import ascii_lowercase
 from typing import Generic, List, Sequence, Tuple, TypeVar
 
 from .exceptions import IllegalMoveException
@@ -14,6 +13,7 @@ from .types import (
     EncounterEffect,
     FullCard,
     TemplateCard,
+    make_id,
 )
 from .zodiacs import load_zodiacs
 
@@ -83,7 +83,7 @@ class TemplateDeck:
         all_zodiacs = load_zodiacs()
         signs = random.sample(all_zodiacs, 2) if not val.unsigned else []
 
-        card_id = "".join(random.choice(ascii_lowercase) for _ in range(12))
+        card_id = make_id()
         return FullCard(
             id=card_id,
             name=val.name,
