@@ -29,17 +29,12 @@ from picaro.common.hexmap.display import (
 from picaro.common.serializer import deserialize, serialize
 from picaro.server.api_types import *
 
+from .common import BadStateException, IllegalMoveException
+from .read import ComplexReader, read_selections, read_text
+from .render import render_effect, render_emblem, render_encounter_effect, render_event
 
 S = TypeVar("S")
 T = TypeVar("T")
-
-
-class IllegalMoveException(Exception):
-    pass
-
-
-class BadStateException(Exception):
-    pass
 
 
 class NonThrowingHTTPErrorProcessor(HTTPErrorProcessor):
@@ -251,32 +246,10 @@ class Client:
         print()
         print("Emblems:")
         for emblem in ch.emblems:
-            print(f"* {self._render_emblem(emblem)}")
+            print(f"* {render_emblem(emblem)}")
         if not ch.emblems:
             print("* None")
         print()
-
-    def _render_emblem(self, emblem: Emblem) -> str:
-        ret = emblem.name
-        if emblem.feats:
-            ret += f" ({', '.join(self._render_feat(f) for f in emblem.feats)})"
-        return ret
-
-    def _render_feat(self, feat: Feat) -> str:
-        names = {
-            HookType.INIT_SPEED: "speed",
-            HookType.INIT_CARD_AGE: "age",
-            HookType.INIT_TURNS: "turns",
-            HookType.MAX_HEALTH: "health",
-            HookType.MAX_LUCK: "luck",
-            HookType.MAX_TABLEAU_SIZE: "tableau",
-            HookType.SKILL_RANK: "rank",
-            HookType.RELIABLE_SKILL: "reliability",
-        }
-        name = names.get(feat.hook, feat.hook.name)
-        if feat.subtype:
-            name = feat.subtype + " " + name
-        return f"{feat.value:+} {name}"
 
     def do_projects(self) -> None:
         ch = self._get(f"/character", Character)
@@ -387,8 +360,8 @@ class Client:
         ch = self._get(f"/character", Character)
         resp = self._get(f"/oracles/cost", GetOracleCostResponse)
         print(f"How will you pay for the oracle?")
-        selections = self._read_selections(resp.cost, [])
-        request = self._read_input("Describe the request you make:", textbox=True)
+        selections = read_selections(resp.cost, [])
+        request = read_text("Describe the request you make:", textbox=True)
         try:
             resp = self._post(
                 f"/oracles/create",
@@ -433,10 +406,14 @@ class Client:
             oracle = oracles[oidx]
             break
 
-        print(f"Petitioner: {oracle.petitioner}")
+        payment = ", ".join(render_effect(e) for e in oracle.payment)
+        print(f"Petitioner: {oracle.petitioner}    Payment: {payment}    [{', '.join(oracle.signs)}]")
         print(oracle.request)
-        response = self._read_input("Give your response:", textbox=True)
-        proposal = [Effect(type=EffectType.MODIFY_COINS, value=-5, is_cost=True)]
+        response = read_text("Give your response:", textbox=True)
+        board = self._get(f"/board", Board)
+        reader = ComplexReader(default_entity=(EntityType.CHARACTER, oracle.petitioner), board=board)
+        proposal = reader.read_effects("Propose mechanics for this oracle:", [])
+        print(f"XXX DEBUG: {proposal}")
         try:
             resp = self._post(
                 f"/oracles/answer",
@@ -487,7 +464,7 @@ class Client:
         print("The response:")
         print(oracle.response)
         for eff in oracle.proposal:
-            print(f" * {self._render_effect(eff)}")
+            print(f" * {render_effect(eff)}")
 
         confirm = None
         while True:
@@ -542,13 +519,10 @@ class Client:
             rt = oracle.request[0:70] + "..."
         else:
             rt = oracle.request
+        rt = rt.replace("\n", " ")
         print(f" {bullet} {rt}")
         sp = " " * len(bullet)
         print(f" {sp} Petitioner: {oracle.petitioner}   Granter: {oracle.granter or '<none>'}   Status: {oracle.status.name.lower()}")
-
-    def _read_input(self, prompt: str, textbox: bool = False) -> str:
-        print(prompt + " ", end="")
-        return input().strip()
 
     def play(self) -> None:
         while True:
@@ -651,8 +625,8 @@ class Client:
         return actions
 
     def _check_str(self, check: EncounterCheck, ch: Character) -> str:
-        reward_name = self._render_encounter_effect(check.reward)
-        penalty_name = self._render_encounter_effect(check.penalty)
+        reward_name = render_encounter_effect(check.reward)
+        penalty_name = render_encounter_effect(check.penalty)
         return (
             f"{check.skill} (1d8{ch.skills[check.skill]:+}) vs {check.target_number} "
             f"({reward_name} / {penalty_name})"
@@ -899,7 +873,7 @@ class Client:
     def _input_encounter_choices(
         self, ch: Character, choices: Choices, rolls: Sequence[int]
     ) -> EncounterActions:
-        selections = self._read_selections(choices, rolls)
+        selections = read_selections(choices, rolls)
         return EncounterActions(
             flee=False,
             transfers=[],
@@ -909,266 +883,12 @@ class Client:
             choices={k: v for k, v in selections.items() if v > 0},
         )
 
-    def _read_selections(self, choices: Choices, rolls: Sequence[int]) -> Dict[int, int]:
-        selections = defaultdict(int)
-        can_choose = True
-        if choices.is_random:
-            for v in rolls:
-                selections[v - 1] += 1
-            can_choose = False
-        elif choices.min_choices >= sum(c.max_choices for c in choices.choice_list):
-            for idx, c in enumerate(choices.choice_list):
-                selections[idx] = c.max_choices
-            can_choose = False
-
-        while True:
-            if choices.benefit or choices.cost:
-                line = " ** Overall: " + ", ".join(
-                    self._render_effect(eff) for eff in choices.benefit + choices.cost
-                )
-                print(line)
-            for idx, choice in enumerate(choices.choice_list):
-                line = " "
-                if can_choose:
-                    if len(choices.choice_list) < 15:
-                        line += ascii_lowercase[idx] + ". "
-                    else:
-                        line += str(idx + 1) + ". "
-                else:
-                    line += "* " if idx in selections else "- "
-
-                line += ", ".join(
-                    self._render_effect(eff) for eff in choice.benefit + choice.cost
-                )
-                line += f" [{selections[idx]}/{choice.max_choices}]"
-                print(line)
-
-            if not can_choose:
-                break
-
-            inline = "Make your choice"
-
-            if choices.min_choices != 1 or choices.max_choices != 1:
-                print(" z. Finish")
-                inline += f" ({choices.min_choices} - {choices.max_choices} items)"
-            inline += ": "
-            print(inline, end="")
-
-            line = input().lower().strip()
-            if not line:
-                continue
-            if line[0] == "z":
-                if sum(selections.values()) >= choices.min_choices:
-                    break
-                else:
-                    print("You must make another selection.")
-                    continue
-            choice_m = re.match(r"^([0-9]+|[a-z])(?:\s+(-?[0-9]+))?", line)
-            if not choice_m:
-                print("Invalid input?")
-                continue
-            c_idx = ascii_lowercase.find(choice_m.group(1))
-            if c_idx == -1:
-                c_idx = int(choice_m.group(1)) - 1
-            c_val = int(choice_m.group(2)) if choice_m.group(2) else None
-            if c_idx < 0 or c_idx >= len(choices.choice_list):
-                print("Not a valid choice?")
-                continue
-            if c_val is None:
-                # if this is a once-only choice, then entering the choice with no
-                # count toggles, otherwise it always adds 1
-                if choices.choice_list[c_idx].max_choices == 1 and selections[c_idx]:
-                    c_val = -1
-                else:
-                    c_val = 1
-            cc = choices.choice_list[c_idx]
-            if selections[c_idx] + c_val < cc.min_choices:
-                print(
-                    f"That would be lower than the allowed minimum ({cc.min_choices}) for the choice."
-                )
-                continue
-            if selections[c_idx] + c_val > cc.max_choices:
-                print(
-                    f"That would be higher than the allowed maximum ({cc.max_choices}) for the choice."
-                )
-                continue
-            selections[c_idx] += c_val
-
-            if sum(selections.values()) >= choices.max_choices:
-                break
-        return selections
-
     def _display_events(self, ch: Character, events: List[Event]) -> None:
         if not events:
             return
 
-        def render_single_int(event: Event) -> str:
-            if event.new_value > event.old_value:
-                return f"increased to {event.new_value}"
-            elif event.new_value < event.old_value:
-                return f"decreased to {event.new_value}"
-            else:
-                return f"remained at {event.new_value}"
-
         for event in events:
-            line = "* "
-            subj = event.entity_name
-            if (
-                event.entity_type == EntityType.CHARACTER
-                and event.entity_name == ch.name
-            ):
-                line += "Your "
-                subj = "You"
-            else:
-                line += event.entity_name + "'s "
-
-            if event.type == EffectType.MODIFY_ACTION:
-                if event.new_value <= 0 and event.old_value > 0:
-                    line += "action was used"
-                elif event.new_value > 0 and event.old_value <= 0:
-                    line += "action was refreshed"
-                else:
-                    line += "action is unchanged"
-            elif event.type == EffectType.MODIFY_HEALTH:
-                line += "health has " + render_single_int(event)
-            elif event.type == EffectType.MODIFY_COINS:
-                line += "coins have " + render_single_int(event)
-            elif event.type == EffectType.MODIFY_REPUTATION:
-                line += "reputation has " + render_single_int(event)
-            elif event.type == EffectType.MODIFY_XP:
-                line += f"{event.subtype or 'unassigned'} xp has " + render_single_int(
-                    event
-                )
-            elif event.type == EffectType.MODIFY_RESOURCES:
-                if event.subtype is None:
-                    line = f"* {subj} gained {event.new_value} resource draws"
-                else:
-                    line += f"{event.subtype} resources have " + render_single_int(
-                        event
-                    )
-            elif event.type == EffectType.MODIFY_QUEST:
-                line += "quest points have " + render_single_int(event)
-            elif event.type == EffectType.MODIFY_TURNS:
-                line += "remaining turns have " + render_single_int(event)
-            elif event.type == EffectType.MODIFY_SPEED:
-                line += "speed has " + render_single_int(event)
-            elif event.type == EffectType.ADD_EMBLEM:
-                if event.old_value:
-                    line += (
-                        f"emblem was updated to {self._render_emblem(event.new_value)}."
-                    )
-                else:
-                    line = f"* {subj} gained the emblem {self._render_emblem(event.new_value)}"
-            elif event.type == EffectType.MODIFY_LOCATION:
-                if subj == "You":
-                    line = f"* {subj} are "
-                else:
-                    line = f"* {subj} is "
-                line += f"now in hex {event.new_value}"
-            elif event.type == EffectType.MODIFY_JOB:
-                if subj == "You":
-                    line = f"* {subj} have "
-                else:
-                    line = f"* {subj} has "
-                line += f"become a {event.new_value}"
-            elif event.type == EffectType.DISRUPT_JOB:
-                if subj == "You":
-                    line = f"* {subj} have "
-                else:
-                    line = f"* {subj} has "
-                if event.new_value:
-                    line += f"lost in a leadership challenge"
-                else:
-                    line += f"survived a leadership challenge"
-            elif event.type == EffectType.START_TASK:
-                # in the event the project is the subject and the character is the
-                # object, but we want to display it the other way around
-                if event.new_value == ch.name:
-                    line = f"* You have "
-                else:
-                    line = f"* {event.new_value} has "
-                line += f"started the task {event.entity_name}"
-            elif event.type == EffectType.RETURN_TASK:
-                # in the event the project is the subject and the character is the
-                # object, but we want to display it the other way around
-                if event.new_value == ch.name:
-                    line = f"* You have "
-                else:
-                    line = f"* {event.new_value} has "
-                line += f"returned the task {event.entity_name}"
-            else:
-                line += f"UNKNOWN EVENT TYPE: {event}"
-
-            if event.comments:
-                line += " (" + ", ".join(event.comments) + ")"
-            line += "."
-            print(line)
-
-    def _render_encounter_effect(self, eff: EncounterEffect) -> str:
-        names = {
-            EncounterEffect.NOTHING: "nothing",
-            EncounterEffect.GAIN_COINS: "+coins",
-            EncounterEffect.GAIN_XP: "+xp",
-            EncounterEffect.GAIN_REPUTATION: "+reputation",
-            EncounterEffect.GAIN_HEALING: "+healing",
-            EncounterEffect.GAIN_RESOURCES: "+resources",
-            EncounterEffect.GAIN_QUEST: "+quest",
-            EncounterEffect.GAIN_TURNS: "+turns",
-            EncounterEffect.GAIN_PROJECT_XP: "+project",
-            EncounterEffect.LOSE_COINS: "-coins",
-            EncounterEffect.LOSE_REPUTATION: "-reputation",
-            EncounterEffect.DAMAGE: "-damage",
-            EncounterEffect.LOSE_RESOURCES: "-resources",
-            EncounterEffect.LOSE_TURNS: "-turns",
-            EncounterEffect.LOSE_SPEED: "-speed",
-            EncounterEffect.DISRUPT_JOB: "-job",
-            EncounterEffect.TRANSPORT: "-transport",
-        }
-        return names.get(eff, eff.name)
-
-    def _render_effect(self, eff: Effect) -> str:
-        def _with_s(word: str, word_s: Optional[str] = None) -> str:
-            if eff.value == 1 or eff.value == -1:
-                return f"{eff.value:+} {word}"
-            elif word_s is None:
-                return f"{eff.value:+} {word}s"
-            else:
-                return f"{eff.value:+} {word_s}"
-
-        entity = ""
-        if eff.entity_name:
-            entity = f" for {eff.entity_name}"
-
-        if eff.type == EffectType.MODIFY_COINS:
-            return _with_s("coin") + entity
-        elif eff.type == EffectType.MODIFY_XP:
-            return f"{eff.value:+} {eff.subtype or 'unassigned'} xp{entity}"
-        elif eff.type == EffectType.MODIFY_REPUTATION:
-            return f"{eff.value:+} reputation{entity}"
-        elif eff.type == EffectType.MODIFY_HEALTH:
-            return f"{eff.value:+} health{entity}"
-        elif eff.type == EffectType.MODIFY_RESOURCES:
-            return (
-                _with_s("resource draw")
-                if eff.subtype is None
-                else _with_s(f"{eff.subtype} resource")
-            ) + entity
-        elif eff.type == EffectType.MODIFY_QUEST:
-            return f"{eff.value:+} quest{entity}"
-        elif eff.type == EffectType.MODIFY_TURNS:
-            return _with_s("turn") + entity
-        elif eff.type == EffectType.MODIFY_SPEED:
-            return f"{eff.value:+} speed{entity}"
-        elif eff.type == EffectType.DISRUPT_JOB:
-            return f"job turmoil ({eff.value:+}){entity}"
-        elif eff.type == EffectType.TRANSPORT:
-            return f"random transport ({eff.value:+}){entity}"
-        elif eff.type == EffectType.MODIFY_ACTION:
-            return ("use action" if eff.value <= 0 else "refresh action") + entity
-        elif eff.type == EffectType.ADD_EMBLEM:
-            return "add an emblem (" + self._render_emblem(eff.value) + ")" + entity
-        else:
-            return eff
+            print(render_event(ch, event))
 
     def _travel(self, dirs: str, ch: Character) -> bool:
         if not dirs:
