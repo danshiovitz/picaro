@@ -41,6 +41,7 @@ class Token:
 class Board:
     hexes: Sequence[Hex]
     tokens: Sequence[Token]
+    resources: Sequence[str]
 
 
 @dataclass()
@@ -116,7 +117,9 @@ class Project:
 class Oracle:
     id: str
     status: OracleStatus
+    signs: Sequence[str]
     petitioner: str
+    payment: Sequence[Effect]
     request: str
     granter: Optional[str]
     response: Optional[str]

@@ -192,16 +192,19 @@ class Engine:
         character_name: str,
     ) -> Choices:
         with Character.load(character_name) as ch:
-            rss = {rs for rs, v in ch.resources.items() if v > 0}
-            choices = Choices(
-                min_choices=1,
-                max_choices=1,
-                is_random=False,
-                choice_list=tuple(Choice(
-                    cost=(Effect(type=EffectType.MODIFY_RESOURCES, subtype=rs, value=-1, is_cost=True),)
-                ) for rs in rss),
-            )
-            return choices
+            return self._get_oracle_cost(ch)
+
+    def _get_oracle_cost(self, ch: Character) -> Choices:
+        rss = {rs for rs, v in ch.resources.items() if v > 0}
+        choices = Choices(
+            min_choices=1,
+            max_choices=1,
+            is_random=False,
+            choice_list=tuple(Choice(
+                cost=(Effect(type=EffectType.MODIFY_RESOURCES, subtype=rs, value=-1, is_cost=True),)
+            ) for rs in rss),
+        )
+        return choices
 
     @with_connection()
     def create_oracle(
@@ -221,11 +224,10 @@ class Engine:
                     )
 
             events: List[Event] = []
-            # handle payment:
-            occ = self.get_oracle_cost(player_id=player_id, game_id=game_id, character_name=character_name)
-            ch.apply_effects(self._eval_choices(occ, [], payment_selections, events), events)
-
-            id = Oracle.create(ch.name, request)
+            occ = self._get_oracle_cost(ch)
+            payment = self._eval_choices(occ, [], payment_selections, events)
+            ch.apply_effects(payment, events)
+            id = Oracle.create(ch.name, payment, request)
             return id, Outcome(events=events)
 
     @with_connection()

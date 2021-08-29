@@ -14,6 +14,11 @@
 - creating tasks
 - hidden tasks that get revealed (either sequentially or in groups)
 - character-based requirements to start tasks
+- evaluating projects
+- rename job disrupt -> check_leadership
+- get rid of quest points
+- make is_cost a thing like enforce_cost that happens when you apply the effects, not in the effects themselves
+- change the name of either "actions" you can take (like Trade or Mine) and your "action" for the turn
 - fill in stuff:
   - more feat hooks
   - terrain decks
@@ -77,10 +82,99 @@ finish season:
 # at the end of three days we finish play and cancel events (or sooner if everyone's done with play);
 # then after 1 day or when everyone's done with rumors, we publish rumors
 
-oracles, ok
-- interventions (restored per season)
-- make an oracle
-  - oracles have creator, request, get assigned
-- replying to oracle
-  - response message and event
-- creator can accept or reject
+Thinking a bit about villains etc. I have this theory that regional villains kind of come and go, kingdom-level rulers are somewhat more static, and when the imperial villain is vanquished that's the end of the game. Effect-wise, I think regional villains make all encounters +1 difficult, and have a slot, initially empty, for one effect. Kingdom villains make all encounters +1 difficult in the kingdom (stacking with regional), and have maybe two slots. I don't think imperial villains should make it +1 difficult again though, but they do have three slots or so. Effects are things like dangerous (further +1 difficulty), greedy (-2 to all coins rewards), suppressive (-1 speed, or first hex of the turn takes 2 speed or whatever), toxic (-1 damage each turn), -1 reputation each turn, etc. Then, ok, more things. What if a player wants to go to war with a villain? What if a character wants to take over a region or kingdom? My inclination is to say regional folks are band-sized, kingdoms are kingdom-sized, imperial are empire-sized, and you flat-out can't directly fight someone unless you lead a group that's at least the right size. Futher, I think there's some notion of "supports" you have to knock away before you can engage the person.
+
+Kind of spiralling here into other stuff, but for me personally I want to do this bricolage/recombinatory thing where you build up a library of things - people, artifacts, places, etc - over time, and then as new challenges come up, you end up invoking existing things to help solve those. You introduce Evinar the Sage, Master of Demons at some point, and then whenever you have a demons-research problem you pull him up again. And then maybe he gets kidnapped and you have to rescue him, etc. So it feels like
+  1) there's this set of NPCs (+ places, creatures, artifacts?) that can grow over time
+  2) there's some way to invoke them as part of a project-like thing
+  2a) it seems like this would require arbitration to allow the degree of relevance (though you can also imagine like the project can get tagged 'demons', and Evinar can add 5xp to any stage on a project tagged demons, so the arbitration would just be "hey, you forgot to tag this 'demons'")
+  2b) there is probably some price that goes along here too (Evinar the Sage demands wine)
+  3) when NPCs get used or mentioned, they accumulate xp
+  4) they lose xp over time, and if they lose all their xp they drop out of the list
+  5) if they have a lot of xp, they are more likely to get picked for subplots at end of season
+
+For projects, we're playing with this notion of special encounters, which take one turn, and projects, which take 1 season per stage and usually 3 stages, so around 60 turns. It seems like there's a need for things that are 5-10 turns, but I'm not exactly sure how to fit this in. The need here is for stuff like, say Evinar is kidnapped. You perhaps want to start a Rescue Evinar project (I guess associated with Evinar?), but you can't really take three seasons for that, it's too much. You can imagine a player in the area might be like "I tell my bandits to scour the area he was taken and look for clues", and that might just be a three-turn wait, and then it's like "ok, he's been taken by the Emerald Leaf Cult at their hideout in XYZ", and then someone is like "ok, I invade the cult headquarters" and that's a couple encounters, and somehow we evaluate how the player did and determine what happens with Evinar. So like that is about six turns and it feels like a mini project. Also, how does adjudication work here? Note that this is roughly implying adjudication after each stage, including at the beginning to get started and at the end wrapping the project. Maybe we should just be cool with projects being like 1-25 turns and the person answering the oracle or setting the doom or whatever has a lot of latitude based on how they feel like it's going. Or they're setting a difficulty, or the game does - "a bad thing is happening to <picks> Evinar the Sage with <picks> difficulty 5" and the person thinks "well, obviously he's been kidnapped, so remove his token from the board and I put up a project describing the situation" and when someone says "ok, I search for him" they think that is a reasonable but not exceptional approach, so it continues to be difficulty 5 and the arbitrator thinks this is a waiting stage, so it's difficulty 5 x waiting -> 1d6+2 .. 3 turns to wait. Or whatever.
+
+Now ok what about villains? Villains have natures (ie, front type from apocalypse world, like warlord or hive queen or whatever) and power level. They accumulate karma over time, and when they get activated, they do a thing depending on their nature and based on their power level. Things can be like "they steal an artifact" or do some other immediate thing like damage everyone in an area, or they create an ongoing effect (they have a limited number of ongoing effects).
+
+Approaching this from the other side, what happens during the rumors phase? Proposal:
+* Each player gets assigned another player to write to
+* When each player carries out this phase, they do a rumor draw and a villain draw
+* The rumor draw is a neutral/positive set of things - "an artifact has appeared around hex <some hex within 20 hexes or so of recipient>", "travel is easier in <recipient's kingdom> this upcoming season", "there's demand for <city near recipient> for Steel" - I guess these are all positive, I'm not sure what's neutral (maybe something where steel is now more in-demand and wine in less demand)
+* The villain draw
+
+-----
+
+Current Effects:
+1. +3 coins
+2. change job to Bandit
+
+Effect command:
+a. modify_coins
+b. modify_quest
+c. modify_resource
+...
+x. delete
+z. finished
+
+Command? a +2
+Added effect: +2 coins
+Command? b
+modify_quest
+Value? -2
+Added effect: -2 quest
+Command? c +1 Iron
+Added effect: +1 Iron resource
+Command? x 2
+
+In other words, different commands have different expected parameters, and if you don't provide them on the line, it prompts for them.
+
+-----
+
+Hokay so. In the game we have entities (characters, cities, mines, etc, but also projects and tasks). Entities have stats. They have zero or more associated tokens. They have stories (tentative title). Stories can also appear "loose" - I guess in that case they're associated to a secret World entity, and are probably called rumors. Anyway, stories are an overlay on top of entities, basically. Since all entities have an implicit story that lasts as long as they do, I guess we can say it's the stories that provide the tokens and stats and other stuff.
+
+Anyway, stories can provide: 1) effects, which have some range (globally, in country X, within X hexes of a particular token or of any token for the entity) 2) actions you can perform 3) other stuff.
+
+Oh, and there's this new thing, a "mystery", which you can flip with a skill check.
+
+Things I'm thinking about (these are all things that get created in the rumor phase):
+- A new world story: The king of Pithon proclaims a festival of skill and cunning. This has the following effects: 1) An action that can be used globally, spend 2 coins + action to travel to the festival's hex 2) a special encounter with infinite reuses in the hex for people going to the festival 3) a mystery, why are people disappearing at the festival. This story has an end-of-season effect that destroys it (ie the festival lasts for the turn)
+- A new world story: The monk Alphonse has been kidnapped. Or I guess you might attach this to the entity for the monk Alphonse. In any case, it has the effects that 1) the monk loses all its tokens and actions 2) a mystery, where's the monk. And it has an end-of-season effect that the Alphonse entity is destroyed and so is the story. Conceivably (let us say the mystery is Alphonse has been kidnapped by the bandits of the emerald reach and is in hex A12) the mystery might itself have a special encounter that is only available to people of rank captain+ to invade the base (people of solo rank would have to start a project to rescue Alphonse) - note this implies some way to accumulate "successes" in encounters.
+- A story for the imperial villain the Western Empire: A tax has been levied, if 100 coins are not paid in three seasons, five cities will be burnt to the ground. I think "a tax" is just another thing a story can provide - in this case it's probably like you can fill in 100 coins, three seasons, and an effect that's probably "GM adjudication required" via the oracle mechanic.
+
+Do stories ever get created outside the rumor phase? I guess we could, like somebody could have a project to help Alphonse learn how to commune astrally, and part of resolving that project adds a story to Alphonse that adds an action to spend a resource to make Alphonse commune or whatever.
+
+And how do successes in encounters work? I think the theory is encounters can have a success counter and required success count, one kind of reward type if they do is a success, and if you get the number of successes something happens (?). I don't know if it requires adjudication or you can specify an effect - I guess we're now saying there is an effect type for "requires adjudication" so there you go. Anyway, can people collaborate on these encounters or does everyone get their own copy? I guess for simplicity let's just say everyone always collaborates.
+
+----
+
+So, ok, given the prev stuff, it feels like during the rumors phase (perhaps the events phase, I dunno), each person draws once or twice from a deck that has like:
+* <an enemy> does something (template instantiated to an enemy on draw)
+  * It uses its ability (ability is based on type, like Warlord or Hive Queen)
+  * It adds an event/story (maybe based on type)
+  * It increases/decreases its rank
+  * It changes its type
+* the empire does something
+  * It creates an enemy
+  * It adds an event/story
+  * Advance the threat clock
+* something happens to a character
+  * this is either instantiated with the something, or with the character (if the something, then there's an option to introduce a new character)
+  * kidnapped/vanished/imprisoned
+  * corrupted
+  * has a weird +/- change
+  * offers an adventure
+  * increases/decreases its rank
+  * works on a project (starts one or advances their counter)
+    * character projects are just simple clocks; you name them when they start and resolve when they finish
+* <a kind of event> happens in <a location>
+  * location is globally, a country, a city, a hex
+  * a change in trade prices (it probably suggests what they are)
+  * a change in resource availability (maybe a mine moves around? or switches what it produces?)
+  * a festival with encounter/adventure
+  * an artifact appears with encounter (?)
+  * a weird thing happens with encounter
+
+For all of these, it'll instantiate part and suggest for the rest but you can change it, like "The dread necromancer makes a move. Suggestion: the city of Tarnsdale is suborned".
+
+Note implicitly we only have two kinds of things now, "enemies" and "the empire" - there's not a hierarchy of solo/company/kingdom/empire size villains, although enemies do have a size as part of them, and this does have some effect (maybe enemies increase the hex danger level based on their rank, and the radius is based on their size).

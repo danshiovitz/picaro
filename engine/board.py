@@ -48,7 +48,13 @@ class ActiveBoard:
         snap_tokens = tuple(
             self._translate_token(tok, routes[tok.location]) for tok in tokens
         )
-        return snapshot_Board(hexes=snap_hexes, tokens=snap_tokens)
+        countries = CountryStorage.load()
+        resources = set()
+        for c in countries:
+            resources |= set(c.resources)
+        snap_resources = tuple(resources)
+
+        return snapshot_Board(hexes=snap_hexes, tokens=snap_tokens, resources=snap_resources)
 
     def add_token(
         self,

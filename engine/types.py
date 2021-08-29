@@ -103,6 +103,8 @@ class Effect(Generic[T]):
 
         if type_val == EffectType.ADD_EMBLEM:
             return Emblem
+        elif type_val in (EffectType.MODIFY_LOCATION, EffectType.MODIFY_JOB):
+            return str
         else:
             return int
 
@@ -115,7 +117,7 @@ class JobType(Enum):
 
 
 class HookType(Enum):
-    INIT_CARD_AGE = enum_auto()
+    INIT_TABLEAU_AGE = enum_auto()
     INIT_TURNS = enum_auto()
     MAX_HEALTH = enum_auto()
     MAX_LUCK = enum_auto()

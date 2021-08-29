@@ -300,7 +300,7 @@ class Character(Entity, ReadOnlyWrapper):
             )
 
             self._data.tableau.append(
-                TableauCard(card=card, location=location, age=self.get_init_card_age(), is_extra=False)
+                TableauCard(card=card, location=location, age=self.get_init_tableau_age(), is_extra=False)
             )
 
     def add_extra_to_tableau(self, template_card: TemplateCard, location: str, age: int) -> None:
@@ -352,8 +352,8 @@ class Character(Entity, ReadOnlyWrapper):
     def get_max_tableau_size(self) -> int:
         return clamp(3 + self._calc_hook(HookType.MAX_TABLEAU_SIZE), min=1)
 
-    def get_init_card_age(self) -> int:
-        return clamp(3 + self._calc_hook(HookType.INIT_CARD_AGE), min=1)
+    def get_init_tableau_age(self) -> int:
+        return clamp(3 + self._calc_hook(HookType.INIT_TABLEAU_AGE), min=1)
 
     def get_max_health(self) -> int:
         return clamp(20 + self._calc_hook(HookType.MAX_HEALTH), min=1)

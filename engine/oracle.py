@@ -1,3 +1,4 @@
+import random
 from dataclasses import dataclass
 from typing import Any, Callable, List, Optional
 
@@ -5,14 +6,19 @@ from .exceptions import BadStateException, IllegalMoveException
 from .snapshot import Oracle as snapshot_Oracle
 from .storage import ObjectStorageBase, ReadOnlyWrapper
 from .types import Effect, Event, OracleStatus, make_id
+from .zodiacs import load_zodiacs
 
 class Oracle(ReadOnlyWrapper):
     @classmethod
-    def create(cls, character_name: str, request: str) -> str:
+    def create(cls, character_name: str, payment: List[Effect], request: str) -> str:
+        all_zodiacs = load_zodiacs()
+        signs = random.sample(all_zodiacs, 2)
         data = OracleData(
             guid=make_id(),
             status=OracleStatus.WAITING,
+            signs=signs,
             petitioner=character_name,
+            payment=payment,
             request=request,
             granter=None,
             response=None,
@@ -42,7 +48,9 @@ class Oracle(ReadOnlyWrapper):
         return snapshot_Oracle(
             id=self.guid,
             status=self.status,
+            signs=self.signs,
             petitioner=self.petitioner,
+            payment=self.payment,
             request=self.request,
             granter=self.granter,
             response=self.response,
@@ -98,7 +106,9 @@ class OraclesContext:
 class OracleData:
     guid: str
     status: OracleStatus
+    signs: List[str]
     petitioner: str
+    payment: List[Effect]
     request: str
     granter: Optional[str]
     response: Optional[str]
