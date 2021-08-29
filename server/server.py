@@ -72,6 +72,30 @@ class Server:
         )
 
     @wrap_errors()
+    def get_skills(self, game_id: int, character_name: str) -> SearchSkillsResponse:
+        player_id = self._extract_player_id()
+        include_all = bottle.request.query.all or False
+        return SearchSkillsResponse(
+            skills=self._engine.get_skills(
+                player_id=player_id,
+                game_id=game_id,
+                character_name=character_name,
+            )
+        )
+
+    @wrap_errors()
+    def get_jobs(self, game_id: int, character_name: str) -> SearchJobsResponse:
+        player_id = self._extract_player_id()
+        include_all = bottle.request.query.all or False
+        return SearchJobsResponse(
+            jobs=self._engine.get_jobs(
+                player_id=player_id,
+                game_id=game_id,
+                character_name=character_name,
+            )
+        )
+
+    @wrap_errors()
     def start_task(self, game_id: int, character_name: str) -> StartTaskResponse:
         player_id = self._extract_player_id()
         req = self._read_body(StartTaskRequest)
@@ -251,6 +275,14 @@ class Server:
             path="/game/<game_id>/<character_name>/projects/return",
             method="POST",
             callback=self.return_task,
+        )
+        bottle.route(
+            path="/game/<game_id>/<character_name>/skills",
+            callback=self.get_skills,
+        )
+        bottle.route(
+            path="/game/<game_id>/<character_name>/jobs",
+            callback=self.get_jobs,
         )
         bottle.route(
             path="/game/<game_id>/<character_name>/oracles",

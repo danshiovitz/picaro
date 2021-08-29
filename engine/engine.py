@@ -9,8 +9,10 @@ from .board import load_board
 from .character import Character, TurnFlags
 from .exceptions import BadStateException, IllegalMoveException
 from .game import create_game
+from .job import Job, load_jobs
 from .oracle import Oracle
 from .project import Project, Task
+from .skills import load_skills
 from .snapshot import (
     Board as snapshot_Board,
     Character as snapshot_Character,
@@ -170,6 +172,18 @@ class Engine:
                 events: List[Event] = []
                 task.do_return(ch.name, events)
                 return Outcome(events=events)
+
+    @with_connection()
+    def get_skills(
+        self, *, player_id: int, game_id: int, character_name: str
+    ) -> List[str]:
+        return load_skills()
+
+    @with_connection()
+    def get_jobs(
+        self, *, player_id: int, game_id: int, character_name: str
+    ) -> List[Job]:
+        return load_jobs()
 
     @with_connection()
     def get_oracles(
@@ -402,7 +416,10 @@ class Engine:
                 entity_type, entity_name = entity
                 if entity_type == EntityType.CHARACTER:
                     if entity_name == ch.name:
-                        ch.apply_outcome(cur_effects, events)
+                        if encounter.context_type == EncounterContextType.ACTION:
+                            ch.apply_bargain(cur_effects, events)
+                        else:
+                            ch.apply_outcome(cur_effects, events)
                     else:
                         with Character.load(entity_name) as other_ch:
                             other_ch.apply_outcome(cur_effects, events)

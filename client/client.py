@@ -411,9 +411,10 @@ class Client:
         print(oracle.request)
         response = read_text("Give your response:", textbox=True)
         board = self._get(f"/board", Board)
-        reader = ComplexReader(default_entity=(EntityType.CHARACTER, oracle.petitioner), board=board)
+        skills = self._get(f"/skills", SearchSkillsResponse).skills
+        jobs = self._get(f"/jobs", SearchJobsResponse).jobs
+        reader = ComplexReader(default_entity=(EntityType.CHARACTER, oracle.petitioner), board=board, skills=skills, jobs=jobs)
         proposal = reader.read_effects("Propose mechanics for this oracle:", [])
-        print(f"XXX DEBUG: {proposal}")
         try:
             resp = self._post(
                 f"/oracles/answer",

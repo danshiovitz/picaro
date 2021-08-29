@@ -58,18 +58,22 @@ class ComplexReader:
         self,
         default_entity: Optional[Tuple[EntityType, str]],
         board: Board,
+        skills: List[str],
+        jobs: List[Job],
     ):
         self.default_entity = default_entity
         self.board = board
+        self.skills = skills
+        self.jobs = jobs
 
     def read_effects(
         self,
         prompt: str,
         init: List[Effect],
     ) -> List[Effect]:
-        skills = ["Stealth", "Punching", "Eating"]
+        skills = self.skills
         resources = self.board.resources
-        job_names = []
+        job_names = [j.name for j in self.jobs]
         hexes = [h.name for h in self.board.hexes]
         fixup = lambda v: (v[0], True, v[1])
         effect_choices = [
@@ -95,7 +99,7 @@ class ComplexReader:
         prompt: str,
         init: List[Feat],
     ) -> List[Feat]:
-        skills = ["Stealth", "Punching", "Eating"]
+        skills = self.skills
         feat_choices = [
             ("Modify init tableau age <amount>", lambda ln, e: self._lparse_feat(HookType.INIT_TABLEAU_AGE, e, ln)),
             ("Modify init turns <amount>", lambda ln, e: self._lparse_feat(HookType.INIT_TURNS, e, ln)),
@@ -295,6 +299,7 @@ def read_selections(choices: Choices, rolls: Sequence[int]) -> Dict[int, int]:
                 render_effect(eff) for eff in choices.benefit + choices.cost
             )
             print(line)
+        selected = 0
         for idx, choice in enumerate(choices.choice_list):
             line = " "
             if can_choose:
@@ -309,6 +314,7 @@ def read_selections(choices: Choices, rolls: Sequence[int]) -> Dict[int, int]:
                 render_effect(eff) for eff in list(choice.benefit) + list(choice.cost)
             )
             line += f" [{selections[idx]}/{choice.max_choices}]"
+            selected += selections[idx]
             print(line)
 
         if not can_choose:
@@ -318,7 +324,13 @@ def read_selections(choices: Choices, rolls: Sequence[int]) -> Dict[int, int]:
 
         if choices.min_choices != 1 or choices.max_choices != 1:
             print(" z. Finish")
-            inline += f" ({choices.min_choices} - {choices.max_choices} items)"
+            if choices.min_choices == choices.max_choices:
+                inline += f" ({choices.min_choices} items"
+            else:
+                inline += f" ({choices.min_choices}-{choices.max_choices} items"
+            if choices.max_choices < 100:
+                inline += f", {choices.max_choices - selected} remaining"
+            inline += ")"
         inline += ": "
         print(inline, end="")
 

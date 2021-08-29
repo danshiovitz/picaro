@@ -19,6 +19,7 @@
 - change the name of either "actions" you can take (like Trade or Mine) and your "action" for the turn
 - add "corrections" that are GM-initiated and can be done any time (and get assigned to random person for signoff)
 - rumors turn is now the world turn, I think
+- rename events to loglines or something to free up event name
 - fill in stuff:
   - more feat hooks
   - terrain decks
@@ -178,3 +179,5 @@ So, ok, given the prev stuff, it feels like during the rumors phase (perhaps the
 For all of these, it'll instantiate part and suggest for the rest but you can change it, like "The dread necromancer makes a move. Suggestion: the city of Tarnsdale is suborned".
 
 Note implicitly we only have two kinds of things now, "enemies" and "the empire" - there's not a hierarchy of solo/company/kingdom/empire size villains, although enemies do have a size as part of them, and this does have some effect (maybe enemies increase the hex danger level based on their rank, and the radius is based on their size).
+
+----

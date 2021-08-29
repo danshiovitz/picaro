@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from picaro.common.hexmap.types import OffsetCoordinate
+from picaro.engine.job import Job
 from picaro.engine.snapshot import Board, Character, Encounter, Hex, Oracle, Project, Token
 from picaro.engine.types import (
     Action,
@@ -54,6 +55,16 @@ class ReturnTaskRequest:
 @dataclass(frozen=True)
 class ReturnTaskResponse:
     outcome: Outcome
+
+
+@dataclass(frozen=True)
+class SearchSkillsResponse:
+    skills: List[str]
+
+
+@dataclass(frozen=True)
+class SearchJobsResponse:
+    jobs: List[Job]
 
 
 @dataclass(frozen=True)
