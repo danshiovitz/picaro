@@ -103,7 +103,7 @@ class CharacterTest(TestCase):
 
         effects = [Effect(type=EffectType.MODIFY_COINS, value=1)]
         events = []
-        outcome = ch.apply_effects(effects, EncounterContextType.JOB, events)
+        outcome = ch.apply_outcome(effects, EncounterContextType.JOB, events)
         self.assertEqual(ch.coins, 4)
         ec = [e for e in events if e.type == EffectType.MODIFY_COINS]
         self.assertEqual(len(ec), 1)
@@ -115,7 +115,7 @@ class CharacterTest(TestCase):
             Effect(type=EffectType.MODIFY_COINS, value=4),
         ]
         events = []
-        outcome = ch.apply_effects(effects, EncounterContextType.JOB, events)
+        outcome = ch.apply_outcome(effects, EncounterContextType.JOB, events)
         self.assertEqual(ch.coins, 14)
         ec = [e for e in events if e.type == EffectType.MODIFY_COINS]
         self.assertEqual(len(ec), 1)
@@ -130,7 +130,7 @@ class CharacterTest(TestCase):
             Effect(type=EffectType.MODIFY_XP, subtype="Fishing", value=1),
         ]
         events = []
-        outcome = ch.apply_effects(effects, EncounterContextType.JOB, events)
+        outcome = ch.apply_outcome(effects, EncounterContextType.JOB, events)
         ec = [e for e in events if e.type == EffectType.MODIFY_XP]
         self.assertEqual(len(ec), 1)
         self.assertEqual(ec[0].subtype, "Fishing")

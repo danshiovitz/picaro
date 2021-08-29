@@ -39,7 +39,7 @@
         "desc": "...",
         "challenge": {
           "skills": ["Might", "Carousing", "Debate"],
-          "rewards": ["GAIN_RESOURCES", "GAIN_QUEST"],
+          "rewards": ["GAIN_RESOURCES", "GAIN_XP"],
           "penalties": ["LOSE_RESOURCES", "LOSE_REPUTATION"]
         }
       },
@@ -125,7 +125,7 @@
         "desc": "...",
         "challenge": {
           "skills": ["Spirit Binding", "Navigation", "Mesmerism"],
-          "rewards": ["GAIN_QUEST", "GAIN_XP"],
+          "rewards": ["GAIN_SPEED", "GAIN_XP"],
           "penalties": ["DAMAGE", "DISRUPT_JOB"]
         }
       },

@@ -141,8 +141,8 @@ class TemplateDeck:
             [
                 EncounterEffect.GAIN_RESOURCES,
                 EncounterEffect.GAIN_HEALING,
-                EncounterEffect.GAIN_QUEST,
                 EncounterEffect.GAIN_PROJECT_XP,
+                EncounterEffect.GAIN_SPEED,
                 EncounterEffect.NOTHING,
             ]
             * 1

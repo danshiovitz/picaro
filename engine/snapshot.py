@@ -161,7 +161,6 @@ class Character:
     resources: Dict[str, int]
     max_resources: int
     reputation: int
-    quest: int
     location: str
     remaining_turns: int
     acted_this_turn: bool

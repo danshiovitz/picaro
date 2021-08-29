@@ -50,7 +50,7 @@ class Engine:
     ) -> None:
         with Character.load(character_name) as ch:
             loc = ch.get_snapshot().location
-            ch.apply_effects(
+            ch.apply_outcome(
                 [
                     Effect(type=EffectType.MODIFY_COINS, value=50),
                     Effect(type=EffectType.MODIFY_RESOURCES, value=10),
@@ -145,8 +145,7 @@ class Engine:
                 # other requirements could be checked here
 
                 events: List[Event] = []
-                cost = [dataclasses.replace(ct, is_cost=True) for ct in task.cost]
-                ch.apply_effects(cost, events)
+                ch.apply_bargain(task.cost, events)
 
                 # if it's a challenge card, we discard a bunch of cards to refresh the
                 # deck faster, and get to the point where we're rebuilding the deck with
@@ -201,7 +200,7 @@ class Engine:
             max_choices=1,
             is_random=False,
             choice_list=tuple(Choice(
-                cost=(Effect(type=EffectType.MODIFY_RESOURCES, subtype=rs, value=-1, is_cost=True),)
+                cost=(Effect(type=EffectType.MODIFY_RESOURCES, subtype=rs, value=-1),)
             ) for rs in rss),
         )
         return choices
@@ -226,7 +225,7 @@ class Engine:
             events: List[Event] = []
             occ = self._get_oracle_cost(ch)
             payment = self._eval_choices(occ, [], payment_selections, events)
-            ch.apply_effects(payment, events)
+            ch.apply_bargain(payment, events)
             id = Oracle.create(ch.name, payment, request)
             return id, Outcome(events=events)
 
@@ -261,7 +260,7 @@ class Engine:
             with Character.load(character_name) as ch:
                 events: List[Event] = []
                 if confirm:
-                    ch.apply_effects(oracle.proposal, events)
+                    ch.apply_bargain(oracle.proposal, events)
                     oracle.finish(ch.name, confirm=True)
                 else:
                     oracle.finish(ch.name, confirm=False)
@@ -345,7 +344,7 @@ class Engine:
             new_loc = board.get_token_location(ch.name)
             with Task.load_for_character(ch.name) as current:
                 for cur in current:
-                    cur.apply_effects(
+                    cur.apply_outcome(
                         [
                             Effect(
                                 EffectType.EXPLORE,
@@ -403,13 +402,13 @@ class Engine:
                 entity_type, entity_name = entity
                 if entity_type == EntityType.CHARACTER:
                     if entity_name == ch.name:
-                        ch.apply_effects(cur_effects, events)
+                        ch.apply_outcome(cur_effects, events)
                     else:
                         with Character.load(entity_name) as other_ch:
-                            other_ch.apply_effects(cur_effects, events)
+                            other_ch.apply_outcome(cur_effects, events)
                 elif entity_type == EntityType.TASK:
                     with Task.load(entity_name) as task:
-                        task.apply_effects(cur_effects, events)
+                        task.apply_outcome(cur_effects, events)
                 else:
                     raise Exception(
                         f"Unexpected entity in effect: {entity_type} {entity_name}"
@@ -500,8 +499,6 @@ class Engine:
             return [Effect(type=EffectType.MODIFY_HEALTH, value=cnt * 3)]
         elif enc_eff == EncounterEffect.DAMAGE:
             return [Effect(type=EffectType.MODIFY_HEALTH, value=-sum_til(cnt))]
-        elif enc_eff == EncounterEffect.GAIN_QUEST:
-            return [Effect(type=EffectType.MODIFY_QUEST, value=cnt)]
         elif enc_eff == EncounterEffect.GAIN_XP:
             return [
                 Effect(type=EffectType.MODIFY_XP, subtype=default_skill, value=cnt * 5)
@@ -514,6 +511,8 @@ class Engine:
             return [Effect(type=EffectType.MODIFY_TURNS, value=cnt)]
         elif enc_eff == EncounterEffect.LOSE_TURNS:
             return [Effect(type=EffectType.MODIFY_TURNS, value=-cnt)]
+        elif enc_eff == EncounterEffect.GAIN_SPEED:
+            return [Effect(type=EffectType.MODIFY_SPEED, value=cnt * 2)]
         elif enc_eff == EncounterEffect.LOSE_SPEED:
             return [Effect(type=EffectType.MODIFY_SPEED, value=-cnt)]
         elif enc_eff == EncounterEffect.TRANSPORT:
@@ -580,15 +579,12 @@ class Engine:
 
         effects: List[Effect] = []
         effects.extend(choices.benefit)
-        effects.extend(
-            dataclasses.replace(ct, is_cost=True)
-            for ct in choices.cost
-        )
+        effects.extend(choices.cost)
         for choice_idx, cnt in selections.items():
             choice = choices.choice_list[choice_idx]
             for _ in range(cnt):
                 effects.extend(choice.benefit)
-                effects.extend(dataclasses.replace(ct, is_cost=True) for ct in choice.cost)
+                effects.extend(choice.cost)
         return effects
 
     # currently we assume nothing in here adds to the current list of events,
@@ -605,7 +601,7 @@ class Engine:
 
         with Task.load_for_character(ch.name) as current:
             for cur in current:
-                cur.apply_effects(
+                cur.apply_outcome(
                     [
                         Effect(
                             EffectType.TIME_PASSES,

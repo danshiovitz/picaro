@@ -306,7 +306,7 @@ def read_selections(choices: Choices, rolls: Sequence[int]) -> Dict[int, int]:
                 line += "* " if idx in selections else "- "
 
             line += ", ".join(
-                render_effect(eff) for eff in choice.benefit + choice.cost
+                render_effect(eff) for eff in list(choice.benefit) + list(choice.cost)
             )
             line += f" [{selections[idx]}/{choice.max_choices}]"
             print(line)

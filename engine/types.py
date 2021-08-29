@@ -34,9 +34,9 @@ class EncounterEffect(Enum):
     GAIN_REPUTATION = enum_auto()
     GAIN_HEALING = enum_auto()
     GAIN_RESOURCES = enum_auto()
-    GAIN_QUEST = enum_auto()
     GAIN_TURNS = enum_auto()
     GAIN_PROJECT_XP = enum_auto()
+    GAIN_SPEED = enum_auto()
     LOSE_COINS = enum_auto()
     LOSE_REPUTATION = enum_auto()
     DAMAGE = enum_auto()
@@ -53,7 +53,6 @@ class EffectType(Enum):
     MODIFY_REPUTATION = enum_auto()
     MODIFY_HEALTH = enum_auto()
     MODIFY_RESOURCES = enum_auto()
-    MODIFY_QUEST = enum_auto()
     MODIFY_TURNS = enum_auto()
     MODIFY_SPEED = enum_auto()
     MODIFY_ACTION = enum_auto()
@@ -86,7 +85,6 @@ class Effect(Generic[T]):
     value: Optional[Any]
     is_absolute: bool = False
     subtype: Optional[str] = None
-    is_cost: bool = False
     comment: Optional[str] = None
     # if the entity isn't provided, it defaults to "the current character"
     entity_type: Optional[EntityType] = None

@@ -403,7 +403,7 @@ class ExploreHexMetaField(EntityField):
             None,
         )
 
-    def _update(self, effect: Effect, is_first: bool, is_last: bool) -> None:
+    def _update(self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool) -> None:
         if self._entity._data.type != TaskType.DISCOVERY:
             return
         extra = cast(TaskExtraDiscovery, self._entity._data.extra)

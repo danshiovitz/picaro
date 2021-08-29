@@ -233,7 +233,7 @@ class Client:
         ch = self._get(f"/character", Character)
         print(f"{ch.name} ({ch.player_id}) - a {ch.job} [{ch.location}]")
         print(
-            f"Health: {ch.health}   Coins: {ch.coins}   Reputation: {ch.reputation}   Quest: {ch.quest}"
+            f"Health: {ch.health}   Coins: {ch.coins}   Reputation: {ch.reputation}"
         )
         resources = ", ".join(f"{v} {n}" for n, v in ch.resources.items())
         print(f"Resources: {resources}")
@@ -570,7 +570,7 @@ class Client:
         )
         display.append("")
         display.append(
-            f"Health: {ch.health}/{ch.max_health}   Coins: {ch.coins}   Reputation: {ch.reputation}   Resources: {sum(ch.resources.values(), 0)}/{ch.max_resources}   Quest: {ch.quest}"
+            f"Health: {ch.health}/{ch.max_health}   Coins: {ch.coins}   Reputation: {ch.reputation}   Resources: {sum(ch.resources.values(), 0)}/{ch.max_resources}"
         )
         display.append(
             f" Turns: {ch.remaining_turns}       Luck: {ch.luck}        Speed: {ch.speed}/{ch.max_speed}"

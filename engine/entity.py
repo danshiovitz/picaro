@@ -23,6 +23,7 @@ class EntityField:
         entity: "Entity",
         split_effects: Dict[Tuple[EntityType, Optional[str]], List[Effect]],
         events: List[Event],
+        enforce_costs: bool,
     ) -> None:
         effects = split_effects.pop((self._type, self._subtype), [])
         if not effects:
@@ -30,20 +31,20 @@ class EntityField:
         self._entity = entity
         self._split_effects = split_effects
         self._events = events
-        # put costs first to ensure they're paid up front and not with stuff from this turn
         # put relative adjustments first just because it seems better ("set to 3, add 1" = 3, not 4)
-        # sort by value at the end just to get a consistent sort
+        # sort by value at the end to get a consistent sort, and to ensure costs aren't paid by
+        # stuff from this turn
         effects = sorted(
-            effects, key=lambda e: (not e.is_cost, not e.is_absolute, e.value)
+            effects, key=lambda e: (not e.is_absolute, e.value)
         )
         for idx, effect in enumerate(effects):
             if effect.type != self._type or effect.subtype != self._subtype:
                 raise Exception(
                     f"Unexpected effect: got {effect.type},{effect.subtype} - wanted {self._type},{self._subtype}"
                 )
-            self._update(effect, idx == 0, idx == len(effects) - 1)
+            self._update(effect, idx == 0, idx == len(effects) - 1, enforce_costs)
 
-    def _update(self, effect: Effect, is_first: bool, is_last: bool) -> None:
+    def _update(self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool) -> None:
         pass
 
 
@@ -64,7 +65,7 @@ class IntEntityField(EntityField):
         self._min_value = min_value
         self._max_value = max_value
 
-    def _update(self, effect: Effect, is_first: bool, is_last: bool) -> None:
+    def _update(self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool) -> None:
         if is_first:
             self._init_value = self._init_v(self._entity)
             self._cur_value = self._init_value
@@ -78,7 +79,7 @@ class IntEntityField(EntityField):
             self._comments.append(
                 effect.comment if effect.comment else f"{effect.value:+}"
             )
-        if effect.is_cost and self._cur_value < 0:
+        if enforce_costs and self._cur_value < 0:
             raise IllegalMoveException(
                 f"You do not have enough {self._name} to do this."
             )
@@ -179,10 +180,31 @@ class Entity:
     ENTITY_TYPE: EntityType
     FIELDS: List[Callable[[], List[EntityField]]]
 
-    def apply_effects(
+    # This one is for when the character has done a thing, and this is the outcome,
+    # which applies in all cases. If the character has 3 coins, and this has an effect
+    # of -10 coins, the character ends up with 0 coins and life goes on.
+    def apply_outcome(
         self,
         effects: List[Effect],
         events: List[Event],
+    ) -> None:
+        self._apply_effects(effects, events, False)
+
+    # This one is for when the character is doing a thing in exchange for another thing
+    # (like trading a Steel resource for 5 xp). If the character has 3 coins, and this has
+    # an effect of -10 coins, it'll raise an exception and the whole thing will fail.
+    def apply_bargain(
+        self,
+        effects: List[Effect],
+        events: List[Event],
+    ) -> None:
+        self._apply_effects(effects, events, True)
+
+    def _apply_effects(
+        self,
+        effects: List[Effect],
+        events: List[Event],
+        enforce_costs: bool,
     ) -> None:
         effects_split = defaultdict(list)
         for effect in effects:
@@ -191,6 +213,6 @@ class Entity:
         for field_func in self.FIELDS:
             for f in field_func(effects_split):
                 ffs.append((f._type, f._subtype))
-                f.apply_single(self, effects_split, events)
+                f.apply_single(self, effects_split, events, enforce_costs)
         if effects_split:
             raise Exception(f"Effects remaining unprocessed ({ffs}): {effects_split}")

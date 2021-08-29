@@ -16,9 +16,9 @@
 - character-based requirements to start tasks
 - evaluating projects
 - rename job disrupt -> check_leadership
-- get rid of quest points
-- make is_cost a thing like enforce_cost that happens when you apply the effects, not in the effects themselves
 - change the name of either "actions" you can take (like Trade or Mine) and your "action" for the turn
+- add "corrections" that are GM-initiated and can be done any time (and get assigned to random person for signoff)
+- rumors turn is now the world turn, I think
 - fill in stuff:
   - more feat hooks
   - terrain decks

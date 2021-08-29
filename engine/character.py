@@ -115,9 +115,6 @@ class Character(Entity, ReadOnlyWrapper):
             )
         ],
         lambda _vs: [
-            SimpleIntEntityField("quest points", "quest", EffectType.MODIFY_QUEST)
-        ],
-        lambda _vs: [
             SimpleIntEntityField("turns", "remaining_turns", EffectType.MODIFY_TURNS)
         ],
         lambda _vs: [SimpleIntEntityField("speed", "speed", EffectType.MODIFY_SPEED)],
@@ -138,7 +135,6 @@ class Character(Entity, ReadOnlyWrapper):
             coins=0,
             resources={},
             reputation=3,
-            quest=0,
             remaining_turns=0,
             luck=0,
             emblems=[],
@@ -199,7 +195,6 @@ class Character(Entity, ReadOnlyWrapper):
             resources=self._data.resources,
             max_resources=self.get_max_resources(),
             reputation=self._data.reputation,
-            quest=self._data.quest,
             location=location,
             remaining_turns=self._data.remaining_turns,
             acted_this_turn=self.acted_this_turn(),
@@ -600,10 +595,7 @@ class Character(Entity, ReadOnlyWrapper):
                             benefit=(Effect(type=EffectType.MODIFY_RESOURCES, value=1),)
                         ),
                         Choice(
-                            benefit=(Effect(type=EffectType.MODIFY_HEALTH, value=3),)
-                        ),
-                        Choice(
-                            benefit=(Effect(type=EffectType.MODIFY_QUEST, value=1),)
+                            benefit=(Effect(type=EffectType.MODIFY_SPEED, value=2),)
                         ),
                     ],
                 ),
@@ -731,7 +723,7 @@ class ModifyJobField(EntityField):
     def __init__(self):
         super().__init__("job", EffectType.MODIFY_JOB, None)
 
-    def _update(self, effect: Effect, is_first: bool, is_last: bool) -> None:
+    def _update(self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool) -> None:
         # don't actually switch multiple times
         if not is_last:
             return
@@ -871,7 +863,7 @@ class ModifyLocationField(EntityField):
     def __init__(self):
         super().__init__("location", EffectType.MODIFY_LOCATION, None)
 
-    def _update(self, effect: Effect, is_first: bool, is_last: bool) -> None:
+    def _update(self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool) -> None:
         # don't actually switch multiple times
         if not is_last:
             return
@@ -907,7 +899,7 @@ class AddEmblemField(EntityField):
     def __init__(self):
         super().__init__("emblems", EffectType.ADD_EMBLEM, None)
 
-    def _update(self, effect: Effect, is_first: bool, is_last: bool) -> None:
+    def _update(self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool) -> None:
         old_idxs = [
             idx
             for idx in range(len(self._entity._data.emblems))
@@ -965,7 +957,6 @@ class CharacterData:
     coins: int
     resources: Dict[str, int]
     reputation: int
-    quest: int
     remaining_turns: int
     luck: int
     emblems: List[Emblem]

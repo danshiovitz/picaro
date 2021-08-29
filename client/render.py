@@ -46,8 +46,6 @@ def render_event(ch: Character, event: Event) -> str:
             line += f"{event.subtype} resources have " + render_single_int(
                 event
             )
-    elif event.type == EffectType.MODIFY_QUEST:
-        line += "quest points have " + render_single_int(event)
     elif event.type == EffectType.MODIFY_TURNS:
         line += "remaining turns have " + render_single_int(event)
     elif event.type == EffectType.MODIFY_SPEED:
@@ -113,9 +111,9 @@ def render_encounter_effect(eff: EncounterEffect) -> str:
         EncounterEffect.GAIN_REPUTATION: "+reputation",
         EncounterEffect.GAIN_HEALING: "+healing",
         EncounterEffect.GAIN_RESOURCES: "+resources",
-        EncounterEffect.GAIN_QUEST: "+quest",
         EncounterEffect.GAIN_TURNS: "+turns",
         EncounterEffect.GAIN_PROJECT_XP: "+project",
+        EncounterEffect.GAIN_SPEED: "+speed",
         EncounterEffect.LOSE_COINS: "-coins",
         EncounterEffect.LOSE_REPUTATION: "-reputation",
         EncounterEffect.DAMAGE: "-damage",
@@ -158,12 +156,10 @@ def render_effect(eff: Effect) -> str:
             if eff.subtype is None
             else _std_mod("resource", subtype=eff.subtype)
         ) + entity
-    elif eff.type == EffectType.MODIFY_QUEST:
-        return _std_mod("quest", coll=True) + entity
     elif eff.type == EffectType.MODIFY_TURNS:
         return _std_mod("turn") + entity
     elif eff.type == EffectType.MODIFY_SPEED:
-        _std_mod("speed", coll=True) + entity
+        return _std_mod("speed", coll=True) + entity
     elif eff.type == EffectType.DISRUPT_JOB:
         return f"job turmoil ({eff.value:+}){entity}"
     elif eff.type == EffectType.TRANSPORT:
