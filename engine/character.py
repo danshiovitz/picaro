@@ -280,7 +280,10 @@ class Character(Entity, ReadOnlyWrapper):
 
     def refill_tableau(self) -> None:
         job = load_job(self._data.job_name)
-        while sum(1 for c in self._data.tableau if not c.is_extra) < self.get_max_tableau_size():
+        while (
+            sum(1 for c in self._data.tableau if not c.is_extra)
+            < self.get_max_tableau_size()
+        ):
             if not self._data.job_deck:
                 additional: List[TemplateCard] = []
                 with Task.load_for_character(self.name) as tasks:
@@ -295,10 +298,17 @@ class Character(Entity, ReadOnlyWrapper):
             )
 
             self._data.tableau.append(
-                TableauCard(card=card, location=location, age=self.get_init_tableau_age(), is_extra=False)
+                TableauCard(
+                    card=card,
+                    location=location,
+                    age=self.get_init_tableau_age(),
+                    is_extra=False,
+                )
             )
 
-    def add_extra_to_tableau(self, template_card: TemplateCard, location: str, age: int) -> None:
+    def add_extra_to_tableau(
+        self, template_card: TemplateCard, location: str, age: int
+    ) -> None:
         job = load_job(self._data.job_name)
         job_deck = load_deck(job.deck_name)
         full_card = job_deck.make_single(template_card)
@@ -723,7 +733,9 @@ class ModifyJobField(EntityField):
     def __init__(self):
         super().__init__("job", EffectType.MODIFY_JOB, None)
 
-    def _update(self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool) -> None:
+    def _update(
+        self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool
+    ) -> None:
         # don't actually switch multiple times
         if not is_last:
             return
@@ -863,7 +875,9 @@ class ModifyLocationField(EntityField):
     def __init__(self):
         super().__init__("location", EffectType.MODIFY_LOCATION, None)
 
-    def _update(self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool) -> None:
+    def _update(
+        self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool
+    ) -> None:
         # don't actually switch multiple times
         if not is_last:
             return
@@ -899,7 +913,9 @@ class AddEmblemField(EntityField):
     def __init__(self):
         super().__init__("emblems", EffectType.ADD_EMBLEM, None)
 
-    def _update(self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool) -> None:
+    def _update(
+        self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool
+    ) -> None:
         old_idxs = [
             idx
             for idx in range(len(self._entity._data.emblems))

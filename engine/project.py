@@ -403,7 +403,9 @@ class ExploreHexMetaField(EntityField):
             None,
         )
 
-    def _update(self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool) -> None:
+    def _update(
+        self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool
+    ) -> None:
         if self._entity._data.type != TaskType.DISCOVERY:
             return
         extra = cast(TaskExtraDiscovery, self._entity._data.extra)
@@ -475,7 +477,9 @@ class Project(ReadOnlyWrapper):
 
     @classmethod
     def load_in_progress(cls) -> "ProjectsContext":
-        return ProjectsContext(lambda: list(ProjectStorage.load_by_status(ProjectStatus.IN_PROGRESS)))
+        return ProjectsContext(
+            lambda: list(ProjectStorage.load_by_status(ProjectStatus.IN_PROGRESS))
+        )
 
     def get_snapshot(self, character_name: str, include_all: bool) -> snapshot_Project:
         tasks = [

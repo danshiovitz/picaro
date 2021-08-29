@@ -232,9 +232,7 @@ class Client:
     def get_character(self) -> None:
         ch = self._get(f"/character", Character)
         print(f"{ch.name} ({ch.player_id}) - a {ch.job} [{ch.location}]")
-        print(
-            f"Health: {ch.health}   Coins: {ch.coins}   Reputation: {ch.reputation}"
-        )
+        print(f"Health: {ch.health}   Coins: {ch.coins}   Reputation: {ch.reputation}")
         resources = ", ".join(f"{v} {n}" for n, v in ch.resources.items())
         print(f"Resources: {resources}")
         print("Skills:")
@@ -407,13 +405,20 @@ class Client:
             break
 
         payment = ", ".join(render_effect(e) for e in oracle.payment)
-        print(f"Petitioner: {oracle.petitioner}    Payment: {payment}    [{', '.join(oracle.signs)}]")
+        print(
+            f"Petitioner: {oracle.petitioner}    Payment: {payment}    [{', '.join(oracle.signs)}]"
+        )
         print(oracle.request)
         response = read_text("Give your response:", textbox=True)
         board = self._get(f"/board", Board)
         skills = self._get(f"/skills", SearchSkillsResponse).skills
         jobs = self._get(f"/jobs", SearchJobsResponse).jobs
-        reader = ComplexReader(default_entity=(EntityType.CHARACTER, oracle.petitioner), board=board, skills=skills, jobs=jobs)
+        reader = ComplexReader(
+            default_entity=(EntityType.CHARACTER, oracle.petitioner),
+            board=board,
+            skills=skills,
+            jobs=jobs,
+        )
         proposal = reader.read_effects("Propose mechanics for this oracle:", [])
         try:
             resp = self._post(
@@ -523,7 +528,9 @@ class Client:
         rt = rt.replace("\n", " ")
         print(f" {bullet} {rt}")
         sp = " " * len(bullet)
-        print(f" {sp} Petitioner: {oracle.petitioner}   Granter: {oracle.granter or '<none>'}   Status: {oracle.status.name.lower()}")
+        print(
+            f" {sp} Petitioner: {oracle.petitioner}   Granter: {oracle.granter or '<none>'}   Status: {oracle.status.name.lower()}"
+        )
 
     def play(self) -> None:
         while True:
@@ -741,9 +748,7 @@ class Client:
 
     def _camp(self, ch: Character) -> bool:
         try:
-            resp = self._post(
-                f"/play/camp", CampRequest(rest=True), CampResponse
-            )
+            resp = self._post(f"/play/camp", CampRequest(rest=True), CampResponse)
         except IllegalMoveException as e:
             print(e)
             print()
@@ -965,9 +970,7 @@ class Client:
 
     def _end_turn(self, ch: Character) -> bool:
         try:
-            resp = self._post(
-                f"/play/end_turn", EndTurnRequest(), EndTurnResponse
-            )
+            resp = self._post(f"/play/end_turn", EndTurnRequest(), EndTurnResponse)
         except IllegalMoveException as e:
             print(e)
             print()

@@ -106,32 +106,6 @@ Approaching this from the other side, what happens during the rumors phase? Prop
 
 -----
 
-Current Effects:
-1. +3 coins
-2. change job to Bandit
-
-Effect command:
-a. modify_coins
-b. modify_quest
-c. modify_resource
-...
-x. delete
-z. finished
-
-Command? a +2
-Added effect: +2 coins
-Command? b
-modify_quest
-Value? -2
-Added effect: -2 quest
-Command? c +1 Iron
-Added effect: +1 Iron resource
-Command? x 2
-
-In other words, different commands have different expected parameters, and if you don't provide them on the line, it prompts for them.
-
------
-
 Hokay so. In the game we have entities (characters, cities, mines, etc, but also projects and tasks). Entities have stats. They have zero or more associated tokens. They have stories (tentative title). Stories can also appear "loose" - I guess in that case they're associated to a secret World entity, and are probably called rumors. Anyway, stories are an overlay on top of entities, basically. Since all entities have an implicit story that lasts as long as they do, I guess we can say it's the stories that provide the tokens and stats and other stuff.
 
 Anyway, stories can provide: 1) effects, which have some range (globally, in country X, within X hexes of a particular token or of any token for the entity) 2) actions you can perform 3) other stuff.

@@ -54,7 +54,9 @@ class ActiveBoard:
             resources |= set(c.resources)
         snap_resources = tuple(resources)
 
-        return snapshot_Board(hexes=snap_hexes, tokens=snap_tokens, resources=snap_resources)
+        return snapshot_Board(
+            hexes=snap_hexes, tokens=snap_tokens, resources=snap_resources
+        )
 
     def add_token(
         self,

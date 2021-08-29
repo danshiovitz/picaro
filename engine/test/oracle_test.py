@@ -27,12 +27,22 @@ class OracleTest(TestCase):
         self.addCleanup(session_cleanup)
 
     def test_basic(self) -> None:
-        oracle_id = Oracle.create("Conan", "Mighty and all-knowing oracle, where did I leave my car keys?")
+        oracle_id = Oracle.create(
+            "Conan", "Mighty and all-knowing oracle, where did I leave my car keys?"
+        )
         with Oracle.load(oracle_id) as oracle:
             with self.assertRaises(IllegalMoveException):
-                oracle.answer("Conan", "Mortal, you should look beneath thy couch", [Effect(type=EffectType.MODIFY_HEALTH, value=-3)])
+                oracle.answer(
+                    "Conan",
+                    "Mortal, you should look beneath thy couch",
+                    [Effect(type=EffectType.MODIFY_HEALTH, value=-3)],
+                )
         with Oracle.load(oracle_id) as oracle:
-            oracle.answer("Thor", "Mortal, you should look beneath thy couch", [Effect(type=EffectType.MODIFY_HEALTH, value=-3)])
+            oracle.answer(
+                "Thor",
+                "Mortal, you should look beneath thy couch",
+                [Effect(type=EffectType.MODIFY_HEALTH, value=-3)],
+            )
         with Oracle.load(oracle_id) as oracle:
             with self.assertRaises(IllegalMoveException):
                 oracle.finish("Thor", confirm=True)

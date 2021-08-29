@@ -34,9 +34,7 @@ class EntityField:
         # put relative adjustments first just because it seems better ("set to 3, add 1" = 3, not 4)
         # sort by value at the end to get a consistent sort, and to ensure costs aren't paid by
         # stuff from this turn
-        effects = sorted(
-            effects, key=lambda e: (not e.is_absolute, e.value)
-        )
+        effects = sorted(effects, key=lambda e: (not e.is_absolute, e.value))
         for idx, effect in enumerate(effects):
             if effect.type != self._type or effect.subtype != self._subtype:
                 raise Exception(
@@ -44,7 +42,9 @@ class EntityField:
                 )
             self._update(effect, idx == 0, idx == len(effects) - 1, enforce_costs)
 
-    def _update(self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool) -> None:
+    def _update(
+        self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool
+    ) -> None:
         pass
 
 
@@ -65,7 +65,9 @@ class IntEntityField(EntityField):
         self._min_value = min_value
         self._max_value = max_value
 
-    def _update(self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool) -> None:
+    def _update(
+        self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool
+    ) -> None:
         if is_first:
             self._init_value = self._init_v(self._entity)
             self._cur_value = self._init_value

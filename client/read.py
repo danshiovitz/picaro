@@ -1,7 +1,6 @@
 import curses
 import curses.textpad
 import re
-
 from collections import defaultdict
 from string import ascii_lowercase
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, TypeVar
@@ -20,8 +19,8 @@ def read_text(prompt: str, textbox: bool = False) -> str:
     def enter_msg(stdscr):
         stdscr.addstr(0, 0, f"{prompt} (hit Ctrl-G to send)")
 
-        editwin = curses.newwin(5,30, 2,1)
-        curses.textpad.rectangle(stdscr, 1,0, 1+5+1, 1+30+1)
+        editwin = curses.newwin(5, 30, 2, 1)
+        curses.textpad.rectangle(stdscr, 1, 0, 1 + 5 + 1, 1 + 30 + 1)
         stdscr.refresh()
 
         box = curses.textpad.Textbox(editwin, insert_mode=True)
@@ -53,6 +52,7 @@ def read_text(prompt: str, textbox: bool = False) -> str:
 
 T = TypeVar("T")
 
+
 class ComplexReader:
     def __init__(
         self,
@@ -77,22 +77,97 @@ class ComplexReader:
         hexes = [h.name for h in self.board.hexes]
         fixup = lambda v: (v[0], True, v[1])
         effect_choices = [
-            ("Modify coins <amount>", lambda ln, e: self._lparse_effect(EffectType.MODIFY_COINS, e, ln)),
-            ("Modify xp <amount> <skill or 'free'>", lambda ln, e: self._lparse_effect(EffectType.MODIFY_XP, e, ln, subtypes=skills, none_type="free")),
-            ("Modify reputation <amount>", lambda ln, e: self._lparse_effect(EffectType.MODIFY_REPUTATION, e, ln)),
-            ("Modify health <amount>", lambda ln, e: self._lparse_effect(EffectType.MODIFY_HEALTH, e, ln)),
-            ("Modify resources <amount> <resource or 'draw'>", lambda ln, e: self._lparse_effect(EffectType.MODIFY_RESOURCES, e, ln, subtypes=board.resources, none_type="draw")),
-            ("Modify turns <amount>", lambda ln, e: self._lparse_effect(EffectType.MODIFY_TURNS, e, ln)),
-            ("Use up action", lambda ln, e: self._lparse_effect(EffectType.MODIFY_ACTION, e, ln, lparse_val=lambda ln: (-1, True, ln))),
-            ("Restore action", lambda ln, e: self._lparse_effect(EffectType.MODIFY_ACTION, e, ln, lparse_val=lambda ln: (1, True, ln))),
-            ("Modify location", lambda ln, e: self._lparse_effect(EffectType.MODIFY_LOCATION, e, ln, lparse_val=lambda ln: fixup(self._lparse_fixedstr("hex", ln, hexes)))),
-            ("Modify job", lambda ln, e: self._lparse_effect(EffectType.MODIFY_JOB, e, ln, lparse_val=lambda ln: fixup(self._lparse_fixedstr("job", ln, job_names)))),
-            ("Add emblem", lambda ln, e: self._lparse_effect(EffectType.ADD_EMBLEM, e, ln, lparse_val=lambda ln: fixup(self._lparse_emblem(ln)))),
-            ("Random transport", lambda ln, e: self._lparse_effect(EffectType.TRANSPORT, e, ln)),
-            ("Disrupt job", lambda ln, e: self._lparse_effect(EffectType.DISRUPT_JOB, e, ln)),
+            (
+                "Modify coins <amount>",
+                lambda ln, e: self._lparse_effect(EffectType.MODIFY_COINS, e, ln),
+            ),
+            (
+                "Modify xp <amount> <skill or 'free'>",
+                lambda ln, e: self._lparse_effect(
+                    EffectType.MODIFY_XP, e, ln, subtypes=skills, none_type="free"
+                ),
+            ),
+            (
+                "Modify reputation <amount>",
+                lambda ln, e: self._lparse_effect(EffectType.MODIFY_REPUTATION, e, ln),
+            ),
+            (
+                "Modify health <amount>",
+                lambda ln, e: self._lparse_effect(EffectType.MODIFY_HEALTH, e, ln),
+            ),
+            (
+                "Modify resources <amount> <resource or 'draw'>",
+                lambda ln, e: self._lparse_effect(
+                    EffectType.MODIFY_RESOURCES,
+                    e,
+                    ln,
+                    subtypes=board.resources,
+                    none_type="draw",
+                ),
+            ),
+            (
+                "Modify turns <amount>",
+                lambda ln, e: self._lparse_effect(EffectType.MODIFY_TURNS, e, ln),
+            ),
+            (
+                "Use up action",
+                lambda ln, e: self._lparse_effect(
+                    EffectType.MODIFY_ACTION,
+                    e,
+                    ln,
+                    lparse_val=lambda ln: (-1, True, ln),
+                ),
+            ),
+            (
+                "Restore action",
+                lambda ln, e: self._lparse_effect(
+                    EffectType.MODIFY_ACTION, e, ln, lparse_val=lambda ln: (1, True, ln)
+                ),
+            ),
+            (
+                "Modify location",
+                lambda ln, e: self._lparse_effect(
+                    EffectType.MODIFY_LOCATION,
+                    e,
+                    ln,
+                    lparse_val=lambda ln: fixup(
+                        self._lparse_fixedstr("hex", ln, hexes)
+                    ),
+                ),
+            ),
+            (
+                "Modify job",
+                lambda ln, e: self._lparse_effect(
+                    EffectType.MODIFY_JOB,
+                    e,
+                    ln,
+                    lparse_val=lambda ln: fixup(
+                        self._lparse_fixedstr("job", ln, job_names)
+                    ),
+                ),
+            ),
+            (
+                "Add emblem",
+                lambda ln, e: self._lparse_effect(
+                    EffectType.ADD_EMBLEM,
+                    e,
+                    ln,
+                    lparse_val=lambda ln: fixup(self._lparse_emblem(ln)),
+                ),
+            ),
+            (
+                "Random transport",
+                lambda ln, e: self._lparse_effect(EffectType.TRANSPORT, e, ln),
+            ),
+            (
+                "Disrupt job",
+                lambda ln, e: self._lparse_effect(EffectType.DISRUPT_JOB, e, ln),
+            ),
         ]
 
-        return self._read_complex(prompt, init, self.default_entity, effect_choices, render_effect)
+        return self._read_complex(
+            prompt, init, self.default_entity, effect_choices, render_effect
+        )
 
     def read_feats(
         self,
@@ -101,25 +176,60 @@ class ComplexReader:
     ) -> List[Feat]:
         skills = self.skills
         feat_choices = [
-            ("Modify init tableau age <amount>", lambda ln, e: self._lparse_feat(HookType.INIT_TABLEAU_AGE, e, ln)),
-            ("Modify init turns <amount>", lambda ln, e: self._lparse_feat(HookType.INIT_TURNS, e, ln)),
-            ("Modify max health <amount>", lambda ln, e: self._lparse_feat(HookType.MAX_HEALTH, e, ln)),
-            ("Modify max luck <amount>", lambda ln, e: self._lparse_feat(HookType.MAX_LUCK, e, ln)),
-            ("Modify max tableau size <amount>", lambda ln, e: self._lparse_feat(HookType.MAX_TABLEAU_SIZE, e, ln)),
-            ("Modify skill rank <amount> <skill>", lambda ln, e: self._lparse_feat(HookType.SKILL_RANK, e, ln, subtypes=skills)),
-            ("Modify skill reliability <amount> <skill>", lambda ln, e: self._lparse_feat(HookType.RELIABLE_SKILL, e, ln, subtypes=skills)),
-            ("Modify init speed <amount>", lambda ln, e: self._lparse_feat(HookType.INIT_SPEED, e, ln)),
-            ("Modify resource limit <amount>", lambda ln, e: self._lparse_feat(HookType.MAX_RESOURCES, e, ln)),
+            (
+                "Modify init tableau age <amount>",
+                lambda ln, e: self._lparse_feat(HookType.INIT_TABLEAU_AGE, e, ln),
+            ),
+            (
+                "Modify init turns <amount>",
+                lambda ln, e: self._lparse_feat(HookType.INIT_TURNS, e, ln),
+            ),
+            (
+                "Modify max health <amount>",
+                lambda ln, e: self._lparse_feat(HookType.MAX_HEALTH, e, ln),
+            ),
+            (
+                "Modify max luck <amount>",
+                lambda ln, e: self._lparse_feat(HookType.MAX_LUCK, e, ln),
+            ),
+            (
+                "Modify max tableau size <amount>",
+                lambda ln, e: self._lparse_feat(HookType.MAX_TABLEAU_SIZE, e, ln),
+            ),
+            (
+                "Modify skill rank <amount> <skill>",
+                lambda ln, e: self._lparse_feat(
+                    HookType.SKILL_RANK, e, ln, subtypes=skills
+                ),
+            ),
+            (
+                "Modify skill reliability <amount> <skill>",
+                lambda ln, e: self._lparse_feat(
+                    HookType.RELIABLE_SKILL, e, ln, subtypes=skills
+                ),
+            ),
+            (
+                "Modify init speed <amount>",
+                lambda ln, e: self._lparse_feat(HookType.INIT_SPEED, e, ln),
+            ),
+            (
+                "Modify resource limit <amount>",
+                lambda ln, e: self._lparse_feat(HookType.MAX_RESOURCES, e, ln),
+            ),
         ]
 
-        return self._read_complex(prompt, init, self.default_entity, feat_choices, render_feat)
+        return self._read_complex(
+            prompt, init, self.default_entity, feat_choices, render_feat
+        )
 
     def _read_complex(
         self,
         prompt: str,
         init: List[T],
         default_entity: Optional[Tuple[EntityType, str]],
-        choice_list: List[Tuple[str, Callable[[str, Optional[Tuple[EntityType, str]]], Tuple[T, str]]]],
+        choice_list: List[
+            Tuple[str, Callable[[str, Optional[Tuple[EntityType, str]]], Tuple[T, str]]]
+        ],
         render_func: Callable[[T], str],
     ) -> List[T]:
         print(prompt)
@@ -147,7 +257,7 @@ class ComplexReader:
                 print("Invalid input?")
                 continue
             choice_v = choice_m.group(1).lower()
-            line = line[len(choice_v):].strip()
+            line = line[len(choice_v) :].strip()
             if choice_v == "q":
                 raise IllegalMoveException("Cancelled")
             if choice_v == "z":
@@ -170,7 +280,7 @@ class ComplexReader:
         m = rex.match(line)
         if m:
             val = m.group(0)
-            line = line[len(val):].strip()
+            line = line[len(val) :].strip()
             return val, line
         if line:
             raise IllegalMoveException(f"Invalid value for {name}: {line}")
@@ -205,7 +315,7 @@ class ComplexReader:
         none_type: Optional[str] = None,
     ) -> Tuple[Optional[str], str]:
         st_str, line = self._parse_or_prompt(name, r"(\S+|\"[^\"]+\")", line)
-        if st_str and st_str[0] == "\"" and st_str[-1] == "\"":
+        if st_str and st_str[0] == '"' and st_str[-1] == '"':
             st_str = st_str[1:-1]
         st_str = st_str.lower()
         st_matches = [st for st in choices if st.lower().startswith(st_str)]
@@ -244,14 +354,17 @@ class ComplexReader:
             subtype, line = self._lparse_fixedstr("subtype", line, subtypes, none_type)
         else:
             subtype = None
-        return (Effect(
-            type=effect_type,
-            subtype=subtype,
-            value=val,
-            is_absolute=is_absolute,
-            entity_type=ent[0] if ent else None,
-            entity_name=ent[1] if ent else None,
-        ), line)
+        return (
+            Effect(
+                type=effect_type,
+                subtype=subtype,
+                value=val,
+                is_absolute=is_absolute,
+                entity_type=ent[0] if ent else None,
+                entity_name=ent[1] if ent else None,
+            ),
+            line,
+        )
 
     def _lparse_emblem(
         self,
@@ -274,11 +387,14 @@ class ComplexReader:
             subtype, line = self._lparse_fixedstr("subtype", line, subtypes, none_type)
         else:
             subtype = None
-        return (Feat(
-            hook=hook_type,
-            value=val,
-            subtype=subtype,
-        ), line)
+        return (
+            Feat(
+                hook=hook_type,
+                value=val,
+                subtype=subtype,
+            ),
+            line,
+        )
 
 
 def read_selections(choices: Choices, rolls: Sequence[int]) -> Dict[int, int]:

@@ -193,7 +193,11 @@ class Engine:
             with Oracle.load_unassigned(character_name) as unassigned:
                 return [o.get_snapshot() for o in unassigned]
         else:
-            with Oracle.load_for_petitioner(character_name) as pet_projects, Oracle.load_for_granter(character_name) as grant_projects:
+            with Oracle.load_for_petitioner(
+                character_name
+            ) as pet_projects, Oracle.load_for_granter(
+                character_name
+            ) as grant_projects:
                 return [o.get_snapshot() for o in pet_projects + grant_projects]
 
     @with_connection()
@@ -213,9 +217,14 @@ class Engine:
             min_choices=1,
             max_choices=1,
             is_random=False,
-            choice_list=tuple(Choice(
-                cost=(Effect(type=EffectType.MODIFY_RESOURCES, subtype=rs, value=-1),)
-            ) for rs in rss),
+            choice_list=tuple(
+                Choice(
+                    cost=(
+                        Effect(type=EffectType.MODIFY_RESOURCES, subtype=rs, value=-1),
+                    )
+                )
+                for rs in rss
+            ),
         )
         return choices
 
@@ -395,9 +404,19 @@ class Engine:
 
             encounter = ch.pop_encounter()
             if encounter.card.checks:
-                effects = self._eval_challenge(ch, encounter.card.checks, encounter.rolls, actions, encounter.card.entity_type, encounter.card.entity_name, events)
+                effects = self._eval_challenge(
+                    ch,
+                    encounter.card.checks,
+                    encounter.rolls,
+                    actions,
+                    encounter.card.entity_type,
+                    encounter.card.entity_name,
+                    events,
+                )
             elif encounter.card.choices:
-                effects = self._eval_choices(encounter.card.choices, encounter.rolls, actions.choices, events)
+                effects = self._eval_choices(
+                    encounter.card.choices, encounter.rolls, actions.choices, events
+                )
 
             effects = [
                 dataclasses.replace(
@@ -450,7 +469,16 @@ class Engine:
         if ch.acted_this_turn():
             raise IllegalMoveException(f"You can't move in a turn after having acted.")
 
-    def _eval_challenge(self, ch: Character, checks: List[EncounterCheck], rolls: List[int], actions: EncounterActions, entity_type: Optional[str], entity_name: Optional[str], events: List[Event]) -> List[Effect]:
+    def _eval_challenge(
+        self,
+        ch: Character,
+        checks: List[EncounterCheck],
+        rolls: List[int],
+        actions: EncounterActions,
+        entity_type: Optional[str],
+        entity_name: Optional[str],
+        events: List[Event],
+    ) -> List[Effect]:
         rolls = rolls[:]
 
         # validate the actions by rerunning them (note this also updates luck)
@@ -490,7 +518,11 @@ class Engine:
 
         sum_til = lambda v: (v * v + v) // 2
         for enc_eff, cnt in ocs.items():
-            effects.extend(self._convert_encounter_effect(enc_eff, cnt, ch, checks[0].skill, entity_type, entity_name))
+            effects.extend(
+                self._convert_encounter_effect(
+                    enc_eff, cnt, ch, checks[0].skill, entity_type, entity_name
+                )
+            )
         if failures > 0:
             effects.append(
                 Effect(
@@ -502,7 +534,15 @@ class Engine:
 
         return effects
 
-    def _convert_encounter_effect(self, enc_eff: EncounterEffect, cnt: int, ch: Character, default_skill: str, entity_type: Optional[str], entity_name: Optional[str]) -> List[Effect]:
+    def _convert_encounter_effect(
+        self,
+        enc_eff: EncounterEffect,
+        cnt: int,
+        ch: Character,
+        default_skill: str,
+        entity_type: Optional[str],
+        entity_name: Optional[str],
+    ) -> List[Effect]:
         sum_til = lambda v: (v * v + v) // 2
         if enc_eff == EncounterEffect.GAIN_COINS:
             return [Effect(type=EffectType.MODIFY_COINS, value=sum_til(cnt))]
@@ -561,7 +601,13 @@ class Engine:
         else:
             raise Exception(f"Unknown effect: {enc_eff}")
 
-    def _eval_choices(self, choices: Choices, rolls: List[int], selections: Dict[int, int], events: List[Event]) -> List[Effect]:
+    def _eval_choices(
+        self,
+        choices: Choices,
+        rolls: List[int],
+        selections: Dict[int, int],
+        events: List[Event],
+    ) -> List[Effect]:
         if choices.is_random:
             rnd = defaultdict(int)
             for v in rolls:

@@ -8,6 +8,7 @@ from .storage import ObjectStorageBase, ReadOnlyWrapper
 from .types import Effect, Event, OracleStatus, make_id
 from .zodiacs import load_zodiacs
 
+
 class Oracle(ReadOnlyWrapper):
     @classmethod
     def create(cls, character_name: str, payment: List[Effect], request: str) -> str:
@@ -34,15 +35,37 @@ class Oracle(ReadOnlyWrapper):
 
     @classmethod
     def load_for_petitioner(cls, character_name: str) -> "OraclesContext":
-        return OraclesContext(lambda: [o for o in OracleStorage.load_by_statuses(OracleStatus.WAITING, OracleStatus.ANSWERED) if o.petitioner == character_name])
+        return OraclesContext(
+            lambda: [
+                o
+                for o in OracleStorage.load_by_statuses(
+                    OracleStatus.WAITING, OracleStatus.ANSWERED
+                )
+                if o.petitioner == character_name
+            ]
+        )
 
     @classmethod
     def load_for_granter(cls, character_name: str) -> "OraclesContext":
-        return OraclesContext(lambda: [o for o in OracleStorage.load_by_statuses(OracleStatus.WAITING, OracleStatus.ANSWERED) if o.granter == character_name])
+        return OraclesContext(
+            lambda: [
+                o
+                for o in OracleStorage.load_by_statuses(
+                    OracleStatus.WAITING, OracleStatus.ANSWERED
+                )
+                if o.granter == character_name
+            ]
+        )
 
     @classmethod
     def load_unassigned(cls, character_name: str) -> "OraclesContext":
-        return OraclesContext(lambda: [o for o in OracleStorage.load_by_statuses(OracleStatus.WAITING) if o.petitioner != character_name])
+        return OraclesContext(
+            lambda: [
+                o
+                for o in OracleStorage.load_by_statuses(OracleStatus.WAITING)
+                if o.petitioner != character_name
+            ]
+        )
 
     def get_snapshot(self) -> snapshot_Oracle:
         return snapshot_Oracle(
@@ -71,9 +94,13 @@ class Oracle(ReadOnlyWrapper):
     # (to avoid a circular dependency around the apply-event code)
     def finish(self, character_name: str, confirm: bool) -> None:
         if self.status != OracleStatus.ANSWERED:
-            raise BadStateException(f"This oracle is in {self.state.name}, not answered")
+            raise BadStateException(
+                f"This oracle is in {self.state.name}, not answered"
+            )
         if self.petitioner != character_name:
-            raise IllegalMoveException("This oracle must be confirmed or rejected by the petitioner")
+            raise IllegalMoveException(
+                "This oracle must be confirmed or rejected by the petitioner"
+            )
         self._data.status = OracleStatus.CONFIRMED if confirm else OracleStatus.REJECTED
 
 
@@ -132,7 +159,9 @@ class OracleStorage(ObjectStorageBase[OracleData]):
 
     @classmethod
     def load_by_statuses(cls, *statuses: List[OracleStatus]) -> List[OracleData]:
-        clause = " OR ".join(f"(status = :status{idx})" for idx, _ in enumerate(statuses))
+        clause = " OR ".join(
+            f"(status = :status{idx})" for idx, _ in enumerate(statuses)
+        )
         props = {f"status{idx}": status.name for idx, status in enumerate(statuses)}
         return cls._select_helper([clause], props)
 

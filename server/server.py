@@ -132,9 +132,10 @@ class Server:
             )
         )
 
-
     @wrap_errors()
-    def get_oracle_cost(self, game_id: int, character_name: str) -> GetOracleCostResponse:
+    def get_oracle_cost(
+        self, game_id: int, character_name: str
+    ) -> GetOracleCostResponse:
         player_id = self._extract_player_id()
         cost = self._engine.get_oracle_cost(
             player_id=player_id,
@@ -142,7 +143,6 @@ class Server:
             character_name=character_name,
         )
         return GetOracleCostResponse(cost=cost)
-
 
     @wrap_errors()
     def create_oracle(self, game_id: int, character_name: str) -> CreateOracleResponse:
@@ -172,7 +172,9 @@ class Server:
         return AnswerOracleResponse(outcome=outcome)
 
     @wrap_errors()
-    def confirm_oracle(self, game_id: int, character_name: str) -> ConfirmOracleResponse:
+    def confirm_oracle(
+        self, game_id: int, character_name: str
+    ) -> ConfirmOracleResponse:
         player_id = self._extract_player_id()
         req = self._read_body(ConfirmOracleRequest)
         outcome = self._engine.confirm_oracle(

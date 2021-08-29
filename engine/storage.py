@@ -71,7 +71,9 @@ class ConnectionManager:
 
     def __enter__(self) -> "ConnectionManager":
         if current_session.get(None) is not None:
-            raise Exception("Trying to create a nested connection, this is probably bad")
+            raise Exception(
+                "Trying to create a nested connection, this is probably bad"
+            )
         connection = connect(self.DB_STR, uri=True)
         connection.row_factory = Row
         connection.__enter__()  # type: ignore

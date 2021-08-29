@@ -2,6 +2,7 @@ from typing import Optional
 
 from picaro.server.api_types import *
 
+
 def render_event(ch: Character, event: Event) -> str:
     def render_single_int(event: Event) -> str:
         if event.new_value > event.old_value:
@@ -13,10 +14,7 @@ def render_event(ch: Character, event: Event) -> str:
 
     line = "* "
     subj = event.entity_name
-    if (
-        event.entity_type == EntityType.CHARACTER
-        and event.entity_name == ch.name
-    ):
+    if event.entity_type == EntityType.CHARACTER and event.entity_name == ch.name:
         line += "Your "
         subj = "You"
     else:
@@ -36,25 +34,19 @@ def render_event(ch: Character, event: Event) -> str:
     elif event.type == EffectType.MODIFY_REPUTATION:
         line += "reputation has " + render_single_int(event)
     elif event.type == EffectType.MODIFY_XP:
-        line += f"{event.subtype or 'unassigned'} xp has " + render_single_int(
-            event
-        )
+        line += f"{event.subtype or 'unassigned'} xp has " + render_single_int(event)
     elif event.type == EffectType.MODIFY_RESOURCES:
         if event.subtype is None:
             line = f"* {subj} gained {event.new_value} resource draws"
         else:
-            line += f"{event.subtype} resources have " + render_single_int(
-                event
-            )
+            line += f"{event.subtype} resources have " + render_single_int(event)
     elif event.type == EffectType.MODIFY_TURNS:
         line += "remaining turns have " + render_single_int(event)
     elif event.type == EffectType.MODIFY_SPEED:
         line += "speed has " + render_single_int(event)
     elif event.type == EffectType.ADD_EMBLEM:
         if event.old_value:
-            line += (
-                f"emblem was updated to {render_emblem(event.new_value)}."
-            )
+            line += f"emblem was updated to {render_emblem(event.new_value)}."
         else:
             line = f"* {subj} gained the emblem {render_emblem(event.new_value)}"
     elif event.type == EffectType.MODIFY_LOCATION:
@@ -145,7 +137,7 @@ def render_effect(eff: Effect) -> str:
     if eff.type == EffectType.MODIFY_COINS:
         return _std_mod("coin") + entity
     elif eff.type == EffectType.MODIFY_XP:
-        return _std_mod("xp", coll=True, subtype=eff.subtype or 'unassigned') + entity
+        return _std_mod("xp", coll=True, subtype=eff.subtype or "unassigned") + entity
     elif eff.type == EffectType.MODIFY_REPUTATION:
         return _std_mod("reputation", coll=True) + entity
     elif eff.type == EffectType.MODIFY_HEALTH:
