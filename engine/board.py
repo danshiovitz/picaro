@@ -409,7 +409,7 @@ class ActiveBoard:
                                 )
                                 for rs in mine_rs.values()
                             ],
-                            cost=[Effect(type=EffectType.MODIFY_ACTION, value=-1)],
+                            cost=[Effect(type=EffectType.MODIFY_ACTIVITY, value=-1)],
                         ),
                     ),
                 ]
@@ -432,7 +432,9 @@ class ActiveBoard:
                             choice_list=[
                                 Choice(
                                     cost=(
-                                        Effect(type=EffectType.MODIFY_ACTION, value=-1),
+                                        Effect(
+                                            type=EffectType.MODIFY_ACTIVITY, value=-1
+                                        ),
                                     ),
                                     benefit=(
                                         Effect(

@@ -166,7 +166,7 @@ class TemplateDeck:
                 EncounterEffect.LOSE_RESOURCES,
                 EncounterEffect.LOSE_COINS,
                 EncounterEffect.TRANSPORT,
-                EncounterEffect.DISRUPT_JOB,
+                EncounterEffect.LOSE_LEADERSHIP,
             ]
             * 1
         )

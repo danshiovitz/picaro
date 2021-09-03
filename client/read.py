@@ -110,18 +110,21 @@ class ComplexReader:
                 lambda ln, e: self._lparse_effect(EffectType.MODIFY_TURNS, e, ln),
             ),
             (
-                "Use up action",
+                "Use up activity",
                 lambda ln, e: self._lparse_effect(
-                    EffectType.MODIFY_ACTION,
+                    EffectType.MODIFY_ACTIVITY,
                     e,
                     ln,
                     lparse_val=lambda ln: (-1, True, ln),
                 ),
             ),
             (
-                "Restore action",
+                "Refresh activity",
                 lambda ln, e: self._lparse_effect(
-                    EffectType.MODIFY_ACTION, e, ln, lparse_val=lambda ln: (1, True, ln)
+                    EffectType.MODIFY_ACTIVITY,
+                    e,
+                    ln,
+                    lparse_val=lambda ln: (1, True, ln),
                 ),
             ),
             (
@@ -160,8 +163,8 @@ class ComplexReader:
                 lambda ln, e: self._lparse_effect(EffectType.TRANSPORT, e, ln),
             ),
             (
-                "Disrupt job",
-                lambda ln, e: self._lparse_effect(EffectType.DISRUPT_JOB, e, ln),
+                "Leadership challenge",
+                lambda ln, e: self._lparse_effect(EffectType.LEADERSHIP, e, ln),
             ),
         ]
 

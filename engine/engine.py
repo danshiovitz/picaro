@@ -574,8 +574,8 @@ class Engine:
             return [Effect(type=EffectType.MODIFY_SPEED, value=-cnt)]
         elif enc_eff == EncounterEffect.TRANSPORT:
             return [Effect(type=EffectType.TRANSPORT, value=cnt * 5)]
-        elif enc_eff == EncounterEffect.DISRUPT_JOB:
-            return [Effect(type=EffectType.DISRUPT_JOB, value=-cnt)]
+        elif enc_eff == EncounterEffect.LOSE_LEADERSHIP:
+            return [Effect(type=EffectType.LEADERSHIP, value=-cnt)]
         elif enc_eff == EncounterEffect.GAIN_PROJECT_XP:
             use_name: Optional[str] = None
             if entity_type is not None and entity_type == EntityType.TASK:
@@ -703,7 +703,7 @@ class Engine:
                         Choice(
                             benefit=(
                                 Effect(
-                                    type=EffectType.DISRUPT_JOB, subtype=None, value=-1
+                                    type=EffectType.LEADERSHIP, subtype=None, value=-1
                                 ),
                             )
                         )

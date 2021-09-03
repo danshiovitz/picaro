@@ -15,8 +15,7 @@
 - hidden tasks that get revealed (either sequentially or in groups)
 - character-based requirements to start tasks
 - evaluating projects
-- rename job disrupt -> check_leadership
-- change the name of either "actions" you can take (like Trade or Mine) and your "action" for the turn
+- split out board generation to its own file (including skills, jobs, etc)
 - add "corrections" that are GM-initiated and can be done any time (and get assigned to random person for signoff)
 - rumors turn is now the world turn, I think
 - rename events to loglines or something to free up event name
@@ -155,3 +154,38 @@ For all of these, it'll instantiate part and suggest for the rest but you can ch
 Note implicitly we only have two kinds of things now, "enemies" and "the empire" - there's not a hierarchy of solo/company/kingdom/empire size villains, although enemies do have a size as part of them, and this does have some effect (maybe enemies increase the hex danger level based on their rank, and the radius is based on their size).
 
 ----
+
+Ok umf. List of top-level stuff:
+
+
+- A setting (object), which has
+  - A list of skills (strings)
+  - A list of resource types (strings)
+  - A list of zodiacs (strings)
+  - A list of countries (objects?)
+  - A list of jobs (objects)
+- A board (object), which has
+  - A list of hexes (objects)
+  - A list of tokens (objects), which have
+     - A list of actions (objects)
+  - A list of events (objects) [these are global events]
+- A list of characters (objects, including skill ranks), which have
+  - A list of projects (objects)
+  - A tableau of encounters (objects)
+- A list of enemies (objects), which have
+  - A list of events (objects)
+  - A list of projects (objects)
+- A list of allies (objects), which have
+  - A list of events (objects)
+  - A list of projects (objects)
+
+Organized like this it doesn't seem so bad!
+
+Events then have:
+  - A list of mysteries
+  - A list of rules
+  - A list of actions
+  - A list of encounters? Or is that an action?
+
+Projects have:
+  - A list of .. tasks?

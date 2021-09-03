@@ -90,7 +90,7 @@ class TravelCard:
 class Character(Entity, ReadOnlyWrapper):
     ENTITY_TYPE = EntityType.CHARACTER
     FIELDS = [
-        lambda _vs: [DisruptJobMetaField()],
+        lambda _vs: [LeadershipMetaField()],
         lambda _vs: [ModifyJobField()],
         lambda _vs: [ResourceDrawMetaField()],
         lambda evs: SimpleDictIntEntityField.make_fields(
@@ -98,7 +98,7 @@ class Character(Entity, ReadOnlyWrapper):
         ),
         lambda _vs: [TransportField()],
         lambda _vs: [ModifyLocationField()],
-        lambda _vs: [ModifyActionField()],
+        lambda _vs: [ModifyActivityField()],
         lambda _vs: [AddEmblemField()],
         lambda _vs: [SimpleIntEntityField("coins", "coins", EffectType.MODIFY_COINS)],
         lambda _vs: [
@@ -508,7 +508,7 @@ class Character(Entity, ReadOnlyWrapper):
                     )
                     for task_name, rs in task_rs
                 ],
-                cost=[Effect(type=EffectType.MODIFY_ACTION, value=-1)],
+                cost=[Effect(type=EffectType.MODIFY_ACTIVITY, value=-1)],
             )
         else:
             raise Exception(f"Unknown special choice type: {choices.special_type}")
@@ -685,11 +685,11 @@ class CharacterContext:
         CharacterStorage.update(self._data)
 
 
-class DisruptJobMetaField(IntEntityField):
+class LeadershipMetaField(IntEntityField):
     def __init__(self):
         super().__init__(
-            "disrupt job",
-            EffectType.DISRUPT_JOB,
+            "leadership challenge",
+            EffectType.LEADERSHIP,
             None,
             init_v=lambda e: 0,
             set_v=self._do_disrupt,
@@ -712,17 +712,17 @@ class DisruptJobMetaField(IntEntityField):
 
         if new_job:
             self._split_effects[(EffectType.MODIFY_JOB, None)].append(
-                Effect(EffectType.MODIFY_JOB, new_job, comment="job disruption")
+                Effect(EffectType.MODIFY_JOB, new_job, comment="leadership challenge")
             )
             if is_promo:
                 entity._schedule_promotion(entity.job_name)
             else:
                 self._split_effects[(EffectType.TRANSPORT, None)].append(
-                    Effect(EffectType.TRANSPORT, 3, comment="job disruption")
+                    Effect(EffectType.TRANSPORT, 3, comment="leadership challenge")
                 )
         else:
             self._split_effects[(EffectType.MODIFY_REPUTATION, None)].append(
-                Effect(EffectType.MODIFY_REPUTATION, -2, comment="job disruption")
+                Effect(EffectType.MODIFY_REPUTATION, -2, comment="leadership challenge")
             )
 
         # we are handling the events ourselves
@@ -890,11 +890,11 @@ class ModifyLocationField(EntityField):
         )
 
 
-class ModifyActionField(IntEntityField):
+class ModifyActivityField(IntEntityField):
     def __init__(self):
         super().__init__(
-            "available action",
-            EffectType.MODIFY_ACTION,
+            "available activity",
+            EffectType.MODIFY_ACTIVITY,
             None,
             init_v=lambda e: 0
             if TurnFlags.ACTED in self._entity._data.turn_flags

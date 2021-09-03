@@ -30,7 +30,7 @@
         "challenge": {
           "skills": ["Stealth", "Formation Fighting", "Speed"],
           "rewards": ["GAIN_COINS", "GAIN_REPUTATION"],
-          "penalties": ["DAMAGE", "DISRUPT_JOB"]
+          "penalties": ["DAMAGE", "LOSE_LEADERSHIP"]
         }
       },
       {
@@ -126,7 +126,7 @@
         "challenge": {
           "skills": ["Spirit Binding", "Navigation", "Mesmerism"],
           "rewards": ["GAIN_SPEED", "GAIN_XP"],
-          "penalties": ["DAMAGE", "DISRUPT_JOB"]
+          "penalties": ["DAMAGE", "LOSE_LEADERSHIP"]
         }
       },
       {
@@ -420,7 +420,7 @@
           "choice_list": [
             { "benefit": [ {"type": "MODIFY_HEALTH", "value": 10, "subtype": null} ] },
             { "benefit": [ {"type": "MODIFY_COINS", "value": 10, "subtype": null} ] },
-            { "benefit": [ {"type": "DISRUPT_JOB", "value": 20, "subtype": null} ] },
+            { "benefit": [ {"type": "LEADERSHIP", "value": -20, "subtype": null} ] },
             { "benefit": [ {"type": "MODIFY_RESOURCES", "value": 10, "subtype": null} ] }
           ]
         }

@@ -20,13 +20,13 @@ def render_event(ch: Character, event: Event) -> str:
     else:
         line += event.entity_name + "'s "
 
-    if event.type == EffectType.MODIFY_ACTION:
+    if event.type == EffectType.MODIFY_ACTIVITY:
         if event.new_value <= 0 and event.old_value > 0:
-            line += "action was used"
+            line += "activity was used"
         elif event.new_value > 0 and event.old_value <= 0:
-            line += "action was refreshed"
+            line += "activity was refreshed"
         else:
-            line += "action is unchanged"
+            line += "activity is unchanged"
     elif event.type == EffectType.MODIFY_HEALTH:
         line += "health has " + render_single_int(event)
     elif event.type == EffectType.MODIFY_COINS:
@@ -61,7 +61,7 @@ def render_event(ch: Character, event: Event) -> str:
         else:
             line = f"* {subj} has "
         line += f"become a {event.new_value}"
-    elif event.type == EffectType.DISRUPT_JOB:
+    elif event.type == EffectType.LEADERSHIP:
         if subj == "You":
             line = f"* {subj} have "
         else:
@@ -112,7 +112,7 @@ def render_encounter_effect(eff: EncounterEffect) -> str:
         EncounterEffect.LOSE_RESOURCES: "-resources",
         EncounterEffect.LOSE_TURNS: "-turns",
         EncounterEffect.LOSE_SPEED: "-speed",
-        EncounterEffect.DISRUPT_JOB: "-job",
+        EncounterEffect.LOSE_LEADERSHIP: "-leadership",
         EncounterEffect.TRANSPORT: "-transport",
     }
     return names.get(eff, eff.name)
@@ -152,12 +152,12 @@ def render_effect(eff: Effect) -> str:
         return _std_mod("turn") + entity
     elif eff.type == EffectType.MODIFY_SPEED:
         return _std_mod("speed", coll=True) + entity
-    elif eff.type == EffectType.DISRUPT_JOB:
-        return f"job turmoil ({eff.value:+}){entity}"
+    elif eff.type == EffectType.LEADERSHIP:
+        return f"leadership challenge ({eff.value:+}){entity}"
     elif eff.type == EffectType.TRANSPORT:
         return f"random transport ({eff.value:+}){entity}"
-    elif eff.type == EffectType.MODIFY_ACTION:
-        return ("use action" if eff.value <= 0 else "refresh action") + entity
+    elif eff.type == EffectType.MODIFY_ACTIVITY:
+        return ("use activity" if eff.value <= 0 else "refresh activity") + entity
     elif eff.type == EffectType.ADD_EMBLEM:
         return "add an emblem (" + render_emblem(eff.value) + ")" + entity
     elif eff.type == EffectType.MODIFY_LOCATION:
