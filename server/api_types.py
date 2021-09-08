@@ -7,6 +7,7 @@ from picaro.engine.job import Job
 from picaro.engine.snapshot import (
     Board,
     Character,
+    CreateGameData as CreateGameRequest,
     Encounter,
     Hex,
     Oracle,
@@ -15,7 +16,9 @@ from picaro.engine.snapshot import (
 )
 from picaro.engine.types import (
     Action,
+    Choice,
     Choices,
+    Country,
     Effect,
     EffectType,
     Emblem,
@@ -28,9 +31,11 @@ from picaro.engine.types import (
     HookType,
     OracleStatus,
     Outcome,
+    ProjectType,
     TaskStatus,
     TaskType,
     TableauCard,
+    TemplateDeck,
 )
 
 
@@ -184,6 +189,11 @@ class ResolveEncounterRequest:
 @dataclass(frozen=True)
 class ResolveEncounterResponse:
     outcome: Outcome
+
+
+@dataclass(frozen=True)
+class CreateGameResponse:
+    game_id: int
 
 
 class ErrorType(Enum):

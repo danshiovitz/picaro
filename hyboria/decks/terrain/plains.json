@@ -1,0 +1,66 @@
+{
+  "name": "Plains",
+  "base_skills": ["Plains Lore", "Plains Lore", "Ride"],
+  "templates": [
+    {
+      "copies": 2,
+      "name": "Circling Birds",
+      "desc": "...",
+      "challenge": {
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Strange Vegetation",
+      "desc": "...",
+      "challenge": {
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Distant Riders",
+      "desc": "...",
+      "challenge": {
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Sudden Storm",
+      "desc": "...",
+      "challenge": {
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Beasts of the Plains",
+      "desc": "...",
+      "challenge": {
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Ley Lines",
+      "desc": "...",
+      "challenge": {
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    }
+  ]
+}

@@ -21,7 +21,7 @@ from typing import (
 from picaro.common.utils import clamp
 
 from .board import load_board
-from .deck import load_deck
+from .deck import actualize_deck, load_deck, make_card
 from .entity import (
     Entity,
     EntityField,
@@ -30,14 +30,14 @@ from .entity import (
     SimpleDictIntEntityField,
 )
 from .exceptions import BadStateException, IllegalMoveException
-from .job import load_job, load_jobs
+from .game import load_game
+from .job import Job, load_job, load_jobs
 from .project import (
     Task,
     TaskExtraResource,
     TaskStatus,
     TaskType,
 )
-from .skills import load_skills
 from .snapshot import (
     Character as snapshot_Character,
     Encounter as snapshot_Encounter,
@@ -176,7 +176,7 @@ class Character(Entity, ReadOnlyWrapper):
         return TurnFlags.ACTED in self._data.turn_flags
 
     def get_snapshot(self) -> snapshot_Character:
-        all_skills = load_skills()
+        all_skills = load_game().skills
         board = load_board()
         location = board.get_token_location(self.name)
         routes = board.best_routes(location, [c.location for c in self._data.tableau])
@@ -250,8 +250,7 @@ class Character(Entity, ReadOnlyWrapper):
     def queue_template(
         self, template: TemplateCard, context_type: EncounterContextType
     ) -> None:
-        custom_deck = load_deck("Custom")
-        card = custom_deck.make_card(template, 1, context_type)
+        card = make_card(None, template, 1, context_type)
         self._queue_encounter(card, context_type=context_type)
 
     def queue_camp_card(self) -> None:
@@ -289,7 +288,7 @@ class Character(Entity, ReadOnlyWrapper):
                 with Task.load_for_character(self.name) as tasks:
                     for task in tasks:
                         additional.extend(task.get_templates())
-                self._data.job_deck = job.make_deck(additional=additional)
+                self._data.job_deck = self._make_job_deck(job, additional=additional)
             card = self._data.job_deck.pop(0)
             dst = random.choice(job.encounter_distances)
             board = load_board()
@@ -310,8 +309,7 @@ class Character(Entity, ReadOnlyWrapper):
         self, template_card: TemplateCard, location: str, age: int
     ) -> None:
         job = load_job(self._data.job_name)
-        job_deck = load_deck(job.deck_name)
-        full_card = job_deck.make_single(template_card)
+        full_card = self._make_single_job_card(job, template_card)
         self._data.tableau.append(
             TableauCard(card=full_card, location=location, age=age, is_extra=True)
         )
@@ -433,6 +431,20 @@ class Character(Entity, ReadOnlyWrapper):
                         tot += feat.value
         return tot
 
+    def _make_job_deck(
+        self, job: Job, additional: List[TemplateCard] = None
+    ) -> List[FullCard]:
+        # template_deck = load_deck(job.deck_name)
+        template_deck = load_deck("Raider")
+        return actualize_deck(
+            template_deck, job.rank + 1, EncounterContextType.JOB, additional
+        )
+
+    def _make_single_job_card(self, job: Job, single: TemplateCard) -> FullCard:
+        # template_deck = load_deck(job.deck_name)
+        template_deck = load_deck("Raider")
+        return make_card(template_deck, single, job.rank + 1, EncounterContextType.JOB)
+
     def _remove_tableau_card(self, card_id: str) -> TableauCard:
         idx = [
             i
@@ -548,7 +560,7 @@ class Character(Entity, ReadOnlyWrapper):
         self.queue_template(promo_template, context_type=EncounterContextType.SYSTEM)
 
     def _distribute_free_xp(self, xp: int) -> None:
-        all_skills = load_skills()
+        all_skills = load_game().skills
 
         assign_template = TemplateCard(
             copies=1,
@@ -610,10 +622,7 @@ class Character(Entity, ReadOnlyWrapper):
                     ],
                 ),
             )
-            custom_deck = load_deck("Custom")
-            return custom_deck.make_card(
-                trinket_template, 1, EncounterContextType.TRAVEL
-            )
+            return make_card(None, trinket_template, 1, EncounterContextType.TRAVEL)
         else:
             raise Exception(f"Unknown card type: {card.type}")
 
@@ -633,15 +642,36 @@ class Character(Entity, ReadOnlyWrapper):
         return cards
 
     def _draw_camp_card(self) -> FullCard:
-        if not self._data.camp_deck:
-            template_deck = load_deck("Camp")
-            additional: List[TemplateCard] = []
-            job = load_job(self.job_name)
-            self._data.camp_deck = template_deck.actualize(
-                job.rank + 1, EncounterContextType.CAMP, additional
-            )
+        camp_template = TemplateCard(
+            copies=1,
+            name="Rest and Relaxation",
+            desc=f"What happens at camp stays at camp",
+            unsigned=True,
+            choices=Choices(
+                min_choices=0,
+                max_choices=1,
+                is_random=False,
+                choice_list=[
+                    Choice(benefit=(Effect(type=EffectType.MODIFY_HEALTH, value=10),)),
+                    Choice(benefit=(Effect(type=EffectType.MODIFY_COINS, value=10),)),
+                    Choice(benefit=(Effect(type=EffectType.LEADERSHIP, value=-20),)),
+                    Choice(
+                        benefit=(Effect(type=EffectType.MODIFY_RESOURCES, value=10),)
+                    ),
+                ],
+            ),
+        )
+        return make_card(None, camp_template, 1, EncounterContextType.CAMP)
 
-        return self._data.camp_deck.pop(0)
+        # if not self._data.camp_deck:
+        #     template_deck = load_deck("Camp")
+        #     additional: List[TemplateCard] = []
+        #     job = load_job(self.job_name)
+        #     self._data.camp_deck = actualize_deck(
+        #         template_deck, job.rank + 1, EncounterContextType.CAMP, additional
+        #     )
+
+        # return self._data.camp_deck.pop(0)
 
     def _job_check(self, modifier: int) -> Tuple[str, Optional[str], bool]:
         target_number = 4 - modifier
@@ -693,6 +723,8 @@ class LeadershipMetaField(IntEntityField):
             None,
             init_v=lambda e: 0,
             set_v=self._do_disrupt,
+            min_value=lambda _: -20,
+            max_value=lambda _: 20,
         )
 
     def _do_disrupt(self, entity: Entity, val: int) -> bool:

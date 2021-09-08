@@ -3,18 +3,20 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).absolute().parent.parent.parent))
 
+from picaro.client.generate import generate_game_v2
 from picaro.engine import Engine
 from picaro.engine.types import TaskType
 from picaro.server import Server
 
+
 if __name__ == "__main__":
-    json_dir = Path(__file__).absolute().parent.parent / "engine" / "data"
+    json_dir = Path(__file__).absolute().parent.parent / "hyboria"
     engine = Engine(db_path=None)
 
+    # this whole chunk here is a temp hack to get things set up
     PLAYER_ID = 103
-    game_id = engine.create_game(
-        player_id=PLAYER_ID, name="Test Game", json_dir=json_dir
-    )
+    data = generate_game_v2("Hyboria", json_dir)
+    game_id = engine.create_game(player_id=PLAYER_ID, data=data)
     engine.add_character(
         game_id=game_id,
         player_id=PLAYER_ID,

@@ -1,0 +1,66 @@
+{
+  "name": "Water",
+  "base_skills": ["Sea Lore", "Sea Lore", "Navigation"],
+  "templates": [
+    {
+      "copies": 2,
+      "name": "Storm",
+      "desc": "...",
+      "challenge": {
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Dangerous Rocks",
+      "desc": "...",
+      "challenge": {
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Whirlpool",
+      "desc": "...",
+      "challenge": {
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Aquatic Beast",
+      "desc": "...",
+      "challenge": {
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Ghost Ship",
+      "desc": "...",
+      "challenge": {
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Becalmed",
+      "desc": "...",
+      "challenge": {
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    }
+  ]
+}

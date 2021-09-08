@@ -3,13 +3,67 @@ from collections import defaultdict
 from dataclasses import dataclass
 from functools import reduce
 from math import floor
-from typing import Callable, Dict, List, Set, Tuple
+from pathlib import Path
+from typing import Callable, Dict, List, Set, Tuple, Type, TypeVar
 
 from picaro.common.hexmap.types import CubeCoordinate, OffsetCoordinate
 from picaro.common.hexmap.utils import calc_offset_neighbor_map
+from picaro.common.serializer import deserialize
+from picaro.server.api_types import (
+    Action,
+    Choice,
+    Choices,
+    Country,
+    CreateGameRequest,
+    Effect,
+    EffectType,
+    EntityType,
+    Hex,
+    Job,
+    ProjectType,
+    TemplateDeck,
+    Token,
+)
 
-from .snapshot import Hex
-from .types import Country, Terrains
+
+def generate_game_v2(name: str, json_dir: Path) -> CreateGameRequest:
+    skills = _load_json(json_dir, "skills", str)
+    resources = Resources
+    jobs = _load_json(json_dir, "jobs", Job)
+    template_decks = _load_json(json_dir, "decks", TemplateDeck)
+    project_types = _load_json(json_dir, "project_types", ProjectType)
+    zodiacs = _load_json(json_dir, "zodiacs", str)
+    hexes, tokens, countries = generate_map_v2()
+    return CreateGameRequest(
+        name=name,
+        skills=skills,
+        resources=resources,
+        jobs=jobs,
+        template_decks=template_decks,
+        project_types=project_types,
+        zodiacs=zodiacs,
+        hexes=hexes,
+        tokens=tokens,
+        countries=countries,
+    )
+
+
+T = TypeVar("T")
+
+
+def _load_json(json_dir: Path, fname: str, type: Type[T]) -> List[T]:
+    json_dir_path = json_dir / fname
+    if json_dir_path.is_dir():
+        ret = []
+        for fname in json_dir_path.glob("**/*"):
+            if fname.is_file():
+                with open(fname) as f:
+                    ret.append(deserialize(f.read(), type))
+        return ret
+    else:
+        with open(json_dir / (fname + ".json")) as f:
+            return deserialize(f.read(), List[type])
+
 
 # generation code from https://welshpiper.com/hex-based-campaign-design-part-1/
 @dataclass(frozen=True)
@@ -125,6 +179,142 @@ def generate(
         )
 
     return [make_hex(k) for k in terrain]
+
+
+def generate_map_v2() -> Tuple[List[Hex], List[Token], List[Country]]:
+    minimap = [
+        "^n::n::~",
+        'n:n."..~',
+        '"."."".~',
+        '^n."".nn',
+        "^.~~~~~~",
+        '.."~~..:',
+        '""""^::n',
+        '&&"^n:::',
+    ]
+    hexes, countries, mine_locs = generate_from_mini(50, 50, minimap)
+
+    # using http://www.dungeoneering.net/d100-list-fantasy-town-names/ as a placeholder
+    # for now
+    city_names = [
+        "Aerilon",
+        "Aquarin",
+        "Aramoor",
+        "Azmar",
+        "Beggar's Hole",
+        "Black Hollow",
+        "Blue Field",
+        "Briar Glen",
+        "Brickelwhyte",
+        "Broken Shield",
+        "Boatwright",
+        "Bullmar",
+        "Carran",
+        "City of Fire",
+        "Coalfell",
+        "Cullfield",
+        "Darkwell",
+        "Deathfall",
+        "Doonatel",
+        "Dry Gulch",
+        "Easthaven",
+        "Ecrin",
+        "Erast",
+        "Far Water",
+        "Firebend",
+        "Fool's March",
+        "Frostford",
+        "Goldcrest",
+        "Goldenleaf",
+        "Greenflower",
+        "Garen's Well",
+        "Haran",
+        "Hillfar",
+        "Hogsfeet",
+        "Hollyhead",
+        "Hull",
+        "Hwen",
+        "Icemeet",
+        "Ironforge",
+        "Irragin",
+    ]
+    random.shuffle(city_names)
+
+    mine_set = {m for m in mine_locs}
+    mine_rs = {c.name: c.resources[0] for c in countries}
+
+    tokens = []
+
+    for hx in hexes:
+        if hx.terrain == "City":
+            actions = [
+                Action(
+                    name="Trade",
+                    choices=Choices(
+                        min_choices=0,
+                        max_choices=99,
+                        is_random=False,
+                        choice_list=[
+                            Choice(
+                                cost=[
+                                    Effect(
+                                        type=EffectType.MODIFY_RESOURCES,
+                                        subtype=rs,
+                                        value=-1,
+                                    )
+                                ],
+                                benefit=[Effect(type=EffectType.MODIFY_COINS, value=5)],
+                                max_choices=99,
+                            )
+                            for rs in mine_rs.values()
+                        ],
+                        cost=[Effect(type=EffectType.MODIFY_ACTIVITY, value=-1)],
+                    ),
+                ),
+            ]
+            token = Token(
+                name=city_names.pop(0),
+                type=EntityType.CITY,
+                location=hx.name,
+                actions=actions,
+                route=[],
+            )
+            tokens.append(token)
+
+        if hx.name in mine_set:
+            actions = [
+                Action(
+                    name=f"Gather {mine_rs[hx.country]}",
+                    choices=Choices(
+                        min_choices=0,
+                        max_choices=1,
+                        is_random=False,
+                        choice_list=[
+                            Choice(
+                                cost=(
+                                    Effect(type=EffectType.MODIFY_ACTIVITY, value=-1),
+                                ),
+                                benefit=(
+                                    Effect(
+                                        type=EffectType.MODIFY_RESOURCES,
+                                        subtype=mine_rs[hx.country],
+                                        value=1,
+                                    ),
+                                ),
+                            )
+                        ],
+                    ),
+                ),
+            ]
+            token = Token(
+                name=f"{mine_rs[hx.country]} Source",
+                type=EntityType.MINE,
+                location=hx.name,
+                actions=actions,
+                route=[],
+            )
+            tokens.append(token)
+    return hexes, tokens, countries
 
 
 def generate_from_mini(

@@ -6,15 +6,19 @@ from picaro.common.hexmap.types import OffsetCoordinate
 from picaro.engine.types import (
     Action,
     Choices,
+    Country,
     TableauCard,
     Effect,
     Emblem,
     EncounterCheck,
     EntityType,
+    Job,
     OracleStatus,
     TaskStatus,
     TaskType,
+    TemplateDeck,
     ProjectStatus,
+    ProjectType,
 )
 
 
@@ -171,3 +175,17 @@ class Character:
     encounters: Sequence[Encounter]
     emblems: Sequence[Emblem]
     tasks: Sequence[Task]
+
+
+@dataclass(frozen=True)
+class CreateGameData:
+    name: str
+    skills: List[str]
+    resources: List[str]
+    jobs: List[Job]
+    template_decks: List[TemplateDeck]
+    project_types: List[ProjectType]
+    zodiacs: List[str]
+    hexes: List[Hex]
+    tokens: List[Token]
+    countries: List[Country]

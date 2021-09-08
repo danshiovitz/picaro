@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from typing import Dict, List, cast
 from unittest import TestCase, main
 
-from picaro.engine.board import load_board
+from picaro.common.hexmap.types import OffsetCoordinate
+from picaro.engine.board import CreateBoardData, load_board
 from picaro.engine.exceptions import IllegalMoveException
 from picaro.engine.project import (
     Project,
@@ -16,8 +17,9 @@ from picaro.engine.project import (
     TaskStatus,
     ProjectTypeStorage,
 )
+from picaro.engine.snapshot import Hex, Token
 from picaro.engine.storage import ConnectionManager, with_connection
-from picaro.engine.types import Effect, EffectType, Event
+from picaro.engine.types import Country, Effect, EffectType, EntityType, Event
 
 
 class ProjectTest(TestCase):
@@ -37,7 +39,41 @@ class ProjectTest(TestCase):
         self.addCleanup(session_cleanup)
 
         board = load_board()
-        board.generate_flat_map()
+        board.create(self.generate_flat_map())
+
+    def generate_flat_map(self) -> CreateBoardData:
+        hexes = []
+        for r in range(30):
+            for c in range(30):
+                coord = OffsetCoordinate(row=r, column=c)
+                hexes.append(
+                    Hex(
+                        name=coord.get_name(),
+                        coordinate=coord,
+                        terrain="Plains",
+                        country="Alpha",
+                        region="1",
+                        danger=2,
+                    )
+                )
+        tokens = [
+            Token(
+                name="Capitol City",
+                type=EntityType.CITY,
+                location="AJ15",
+                actions=[],
+                route=[],
+            ),
+        ]
+        countries = [
+            Country(
+                name="Alpha",
+                capitol_hex="AJ15",
+                resources=["Stone", "Timber"],
+            ),
+        ]
+
+        return CreateBoardData(hexes=hexes, tokens=tokens, countries=countries)
 
     def test_waiting_task(self) -> None:
         Project.create("Operation Meatloaf", "Monument", "AE12")

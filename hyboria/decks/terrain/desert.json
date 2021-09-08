@@ -1,0 +1,66 @@
+{
+  "name": "Desert",
+  "base_skills": ["Desert Lore", "Desert Lore", "Endurance"],
+  "templates": [
+    {
+      "copies": 2,
+      "name": "Oasis",
+      "desc": "...",
+      "challenge": {
+        "skills": ["Carousing", "Observation", "Doctor"],
+        "rewards": ["GAIN_COINS", "GAIN_HEALING"],
+        "penalties": ["DAMAGE", "LOSE_COINS"]
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Sandstorm",
+      "desc": "...",
+      "challenge": {
+        "skills": ["Navigation", "Endurance", "Might"],
+        "rewards": ["GAIN_XP", "NOTHING"],
+        "penalties": ["DAMAGE", "LOSE_REPUTATION"]
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Desert Beast",
+      "desc": "...",
+      "challenge": {
+        "skills": ["Charm", "Stealth", "Animal Training"],
+        "rewards": ["GAIN_COINS", "GAIN_RESOURCES"],
+        "penalties": ["DAMAGE", "LOSE_RESOURCES"]
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Ancient Structure",
+      "desc": "...",
+      "challenge": {
+        "skills": ["Endurance", "Endurance", "Desert Lore"],
+        "rewards": ["GAIN_COINS", "GAIN_RESOURCES"],
+        "penalties": ["DAMAGE", "LOSE_REPUTATION"]
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Strange Constellations",
+      "desc": "...",
+      "challenge": {
+        "skills": ["Spirit Binding", "Navigation", "Mesmerism"],
+        "rewards": ["GAIN_SPEED", "GAIN_XP"],
+        "penalties": ["DAMAGE", "LOSE_LEADERSHIP"]
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Mirage",
+      "desc": "...",
+      "challenge": {
+        "skills": ["Observation", "Architecture", "Mesmerism"],
+        "rewards": ["GAIN_COINS", "NOTHING"],
+        "penalties": ["TRANSPORT", "LOSE_REPUTATION"]
+      }
+    }
+  ]
+}

@@ -256,7 +256,22 @@ class Server:
         )
         return EndTurnResponse(outcome=outcome)
 
+    @wrap_errors()
+    def create_game(self) -> CreateGameResponse:
+        player_id = self._extract_player_id()
+        req = self._read_body(CreateGameRequest)
+        game_id = self._engine.create_game(
+            data=req,
+            player_id=player_id,
+        )
+        return CreateGameResponse(game_id)
+
     def run(self) -> None:
+        bottle.route(
+            path="/game/create",
+            method="POST",
+            callback=self.create_game,
+        )
         bottle.route(
             path="/game/<game_id>/<character_name>/board", callback=self.get_board
         )

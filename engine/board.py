@@ -5,9 +5,9 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from picaro.common.hexmap.types import CubeCoordinate, OffsetCoordinate
 
-from .deck import load_deck
+from .deck import make_card, load_deck, semi_actualize_deck
 from .exceptions import BadStateException, IllegalMoveException
-from .generate import generate_from_mini
+from .game import load_game
 from .snapshot import (
     Board as snapshot_Board,
     Hex as snapshot_Hex,
@@ -32,9 +32,6 @@ from .types import (
 )
 
 
-TokenTypes = ["Character", "City", "Mine", "Other"]
-
-
 # This one isn't serialized at all, it owns no data directly
 class ActiveBoard:
     NOWHERE = "Nowhere"
@@ -49,10 +46,7 @@ class ActiveBoard:
             self._translate_token(tok, routes[tok.location]) for tok in tokens
         )
         countries = CountryStorage.load()
-        resources = set()
-        for c in countries:
-            resources |= set(c.resources)
-        snap_resources = tuple(resources)
+        snap_resources = tuple(load_game().resources)
 
         return snapshot_Board(
             hexes=snap_hexes, tokens=snap_tokens, resources=snap_resources
@@ -240,21 +234,6 @@ class ActiveBoard:
             danger=hx.danger,
         )
 
-    def _translate_from_snapshot_hex(self, hx: snapshot_Hex) -> "Hex":
-        cube = CubeCoordinate.from_row_col(
-            row=hx.coordinate.row, col=hx.coordinate.column
-        )
-        return Hex(
-            name=hx.name,
-            terrain=hx.terrain,
-            country=hx.country,
-            region=hx.region,
-            x=cube.x,
-            y=cube.y,
-            z=cube.z,
-            danger=hx.danger,
-        )
-
     def draw_hex_card(self, hex_name: str, context: EncounterContextType) -> FullCard:
         hx = HexStorage.load_by_name(hex_name)
         deck_name = "Desert"
@@ -262,9 +241,9 @@ class ActiveBoard:
         hex_deck = HexDeckStorage.load_by_name(deck_name)
         template_deck = load_deck(deck_name)
         if not hex_deck.deck:
-            hex_deck.deck = template_deck.semi_actualize(additional=[])
+            hex_deck.deck = semi_actualize_deck(template_deck, additional=[])
         template_card = hex_deck.deck.pop(0)
-        card = template_deck.make_card(template_card, difficulty, context)
+        card = make_card(template_deck, template_card, difficulty, context)
         HexDeckStorage.update(hex_deck)
         return card
 
@@ -284,9 +263,7 @@ class ActiveBoard:
 
     def _make_resource_deck(self, country: str, region: str) -> List[ResourceCard]:
         countries = CountryStorage.load()
-        resources = set()
-        for c in countries:
-            resources |= set(c.resources)
+        resources = set(load_game().resources)
 
         if country == "Wild":
             cards = [ResourceCard(name="Nothing", type="nothing", value=0)] * 20
@@ -308,188 +285,46 @@ class ActiveBoard:
             cards.pop()
         return cards
 
-    def get_base_resources(self) -> List[str]:
-        countries = CountryStorage.load()
-        resources = set()
-        for c in countries:
-            resources |= set(c.resources)
-        return list(resources)
-
-    def generate_map(self) -> None:
-        all_hexes = HexStorage.load()
-        if all_hexes:
-            raise Exception("Can't generate, hexes already exist")
-
-        minimap = [
-            "^n::n::~",
-            'n:n."..~',
-            '"."."".~',
-            '^n."".nn',
-            "^.~~~~~~",
-            '.."~~..:',
-            '""""^::n',
-            '&&"^n:::',
-        ]
-        hexes, countries, mines = generate_from_mini(50, 50, minimap)
-
-        CountryStorage.insert_all(countries)
-        HexStorage.insert([self._translate_from_snapshot_hex(hx) for hx in hexes])
-
-        # using http://www.dungeoneering.net/d100-list-fantasy-town-names/ as a placeholder
-        # for now
-        city_names = [
-            "Aerilon",
-            "Aquarin",
-            "Aramoor",
-            "Azmar",
-            "Beggar's Hole",
-            "Black Hollow",
-            "Blue Field",
-            "Briar Glen",
-            "Brickelwhyte",
-            "Broken Shield",
-            "Boatwright",
-            "Bullmar",
-            "Carran",
-            "City of Fire",
-            "Coalfell",
-            "Cullfield",
-            "Darkwell",
-            "Deathfall",
-            "Doonatel",
-            "Dry Gulch",
-            "Easthaven",
-            "Ecrin",
-            "Erast",
-            "Far Water",
-            "Firebend",
-            "Fool's March",
-            "Frostford",
-            "Goldcrest",
-            "Goldenleaf",
-            "Greenflower",
-            "Garen's Well",
-            "Haran",
-            "Hillfar",
-            "Hogsfeet",
-            "Hollyhead",
-            "Hull",
-            "Hwen",
-            "Icemeet",
-            "Ironforge",
-            "Irragin",
-        ]
-        random.shuffle(city_names)
-
-        mine_set = {m for m in mines}
-        mine_rs = {c.name: c.resources[0] for c in countries}
-
-        for hx in hexes:
-            if hx.terrain == "City":
-                actions = [
-                    Action(
-                        name="Trade",
-                        choices=Choices(
-                            min_choices=0,
-                            max_choices=99,
-                            is_random=False,
-                            choice_list=[
-                                Choice(
-                                    cost=[
-                                        Effect(
-                                            type=EffectType.MODIFY_RESOURCES,
-                                            subtype=rs,
-                                            value=-1,
-                                        )
-                                    ],
-                                    benefit=[
-                                        Effect(type=EffectType.MODIFY_COINS, value=5)
-                                    ],
-                                    max_choices=99,
-                                )
-                                for rs in mine_rs.values()
-                            ],
-                            cost=[Effect(type=EffectType.MODIFY_ACTIVITY, value=-1)],
-                        ),
-                    ),
-                ]
-                token = Token(
-                    name=city_names.pop(0),
-                    type=EntityType.CITY,
-                    location=hx.name,
-                    actions=actions,
-                )
-                TokenStorage.create(token)
-
-            if hx.name in mine_set:
-                actions = [
-                    Action(
-                        name=f"Gather {mine_rs[hx.country]}",
-                        choices=Choices(
-                            min_choices=0,
-                            max_choices=1,
-                            is_random=False,
-                            choice_list=[
-                                Choice(
-                                    cost=(
-                                        Effect(
-                                            type=EffectType.MODIFY_ACTIVITY, value=-1
-                                        ),
-                                    ),
-                                    benefit=(
-                                        Effect(
-                                            type=EffectType.MODIFY_RESOURCES,
-                                            subtype=mine_rs[hx.country],
-                                            value=1,
-                                        ),
-                                    ),
-                                )
-                            ],
-                        ),
-                    ),
-                ]
-                token = Token(
-                    name=f"{mine_rs[hx.country]} Source",
-                    type=EntityType.MINE,
-                    location=hx.name,
-                    actions=actions,
-                )
-                TokenStorage.create(token)
-
-    def generate_flat_map(self) -> None:
-        all_hexes = HexStorage.load()
-        if all_hexes:
-            raise Exception("Can't generate, hexes already exist")
-
-        hexes = []
-        for r in range(30):
-            for c in range(30):
-                coord = OffsetCoordinate(row=r, column=c)
-                hexes.append(
-                    snapshot_Hex(
-                        name=coord.get_name(),
-                        coordinate=coord,
-                        terrain="Plains",
-                        country="Alpha",
-                        region="1",
-                        danger=2,
-                    )
-                )
-        countries = [
-            Country(
-                name="Alpha",
-                capitol_hex="AJ15",
-                resources=["Stone", "Timber"],
-            ),
-        ]
-
-        CountryStorage.insert_all(countries)
-        HexStorage.insert([self._translate_from_snapshot_hex(hx) for hx in hexes])
-
 
 # since it has no state, this doesn't actually have to hit db currently
 def load_board() -> ActiveBoard:
     return ActiveBoard()
+
+
+def create_board(
+    hexes: List[snapshot_Hex],
+    tokens: List[snapshot_Token],
+    countries: List[Country],
+) -> None:
+    HexStorage.insert([_translate_from_snapshot_hex(hx) for hx in hexes])
+    TokenStorage.insert_all([_translate_from_snapshot_token(tk) for tk in tokens])
+    CountryStorage.insert_all(countries)
+
+    for t in Terrains:
+        HexDeckStorage.insert(HexDeck(name=t, deck=[]))
+
+
+def _translate_from_snapshot_hex(hx: snapshot_Hex) -> "Hex":
+    cube = CubeCoordinate.from_row_col(row=hx.coordinate.row, col=hx.coordinate.column)
+    return Hex(
+        name=hx.name,
+        terrain=hx.terrain,
+        country=hx.country,
+        region=hx.region,
+        x=cube.x,
+        y=cube.y,
+        z=cube.z,
+        danger=hx.danger,
+    )
+
+
+def _translate_from_snapshot_token(token: snapshot_Token) -> "Token":
+    return Token(
+        name=token.name,
+        type=token.type,
+        location=token.location,
+        actions=token.actions,
+    )
 
 
 # this one is not frozen and not exposed externally
@@ -604,11 +439,6 @@ class HexDeckStorage(ObjectStorageBase[HexDeck]):
     def update(cls, deck: HexDeck) -> None:
         cls._update_helper(deck)
 
-    @classmethod
-    def insert_initial_data(cls, _json_dir: str) -> List[HexDeck]:
-        vals = [HexDeck(name=t, deck=[]) for t in Terrains]
-        cls._insert_helper(vals)
-
 
 class ResourceDeckStorage(ObjectStorageBase[ResourceDeck]):
     TABLE_NAME = "resource_deck"
@@ -638,10 +468,6 @@ class ResourceDeckStorage(ObjectStorageBase[ResourceDeck]):
     def update(cls, deck: ResourceDeck) -> None:
         cls._update_helper(deck)
 
-    @classmethod
-    def insert_initial_data(cls, _json_dir: str) -> List[ResourceDeck]:
-        return []
-
 
 class TokenStorage(ObjectStorageBase[Token]):
     TABLE_NAME = "token"
@@ -666,6 +492,10 @@ class TokenStorage(ObjectStorageBase[Token]):
     def create(cls, token: Token) -> Token:
         cls._insert_helper([token])
         return token
+
+    @classmethod
+    def insert_all(cls, tokens: List[Token]) -> None:
+        cls._insert_helper(tokens)
 
     @classmethod
     def update(cls, token: Token) -> Token:

@@ -114,6 +114,16 @@ class JobType(Enum):
     KING = enum_auto()
 
 
+@dataclass(frozen=True)
+class Job:
+    name: str
+    type: JobType
+    rank: int
+    promotions: Sequence[str]
+    deck_name: str
+    encounter_distances: Sequence[int]
+
+
 class HookType(Enum):
     INIT_TABLEAU_AGE = enum_auto()
     INIT_TURNS = enum_auto()
@@ -206,6 +216,13 @@ class TemplateCard:
 
 
 @dataclass(frozen=True)
+class TemplateDeck:
+    name: str
+    templates: Sequence[TemplateCard]
+    base_skills: Sequence[str]
+
+
+@dataclass(frozen=True)
 class FullCard:
     id: str
     name: str
@@ -258,12 +275,6 @@ class EncounterActions:
 
 
 @dataclass(frozen=True)
-class Game:
-    id: int
-    name: str
-
-
-@dataclass(frozen=True)
 class ResourceCard:
     name: str
     type: str
@@ -275,6 +286,14 @@ class Country:
     name: str
     capitol_hex: str
     resources: Sequence[str]
+
+
+@dataclass(frozen=True)
+class ProjectType:
+    name: str
+    desc: str
+    skills: List[str]
+    resources: List[str]
 
 
 class TaskType(Enum):
@@ -409,3 +428,13 @@ class Event(Generic[T]):
 @dataclass(frozen=True)
 class Outcome:
     events: Sequence[Event]
+
+
+@dataclass(frozen=True)
+class Game:
+    id: int
+    name: str
+    skills: List[str]
+    resources: List[str]
+    project_types: List[ProjectType]
+    zodiacs: List[str]

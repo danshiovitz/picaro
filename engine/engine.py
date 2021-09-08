@@ -5,25 +5,29 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from picaro.common.utils import with_s
 
-from .board import load_board
+from .board import create_board, load_board
 from .character import Character, TurnFlags
+from .deck import create_decks
 from .exceptions import BadStateException, IllegalMoveException
-from .game import create_game
-from .job import Job, load_jobs
+from .game import create_game, load_game
+from .job import Job, create_jobs, load_jobs
 from .oracle import Oracle
 from .project import Project, Task
-from .skills import load_skills
 from .snapshot import (
     Board as snapshot_Board,
     Character as snapshot_Character,
+    CreateGameData,
+    Hex as snapshot_Hex,
     Oracle as snapshot_Oracle,
     Project as snapshot_Project,
+    Token as snapshot_Token,
 )
 from .storage import ConnectionManager, with_connection
 from .types import (
     Action,
     Choice,
     Choices,
+    Country,
     Effect,
     EffectType,
     Encounter,
@@ -71,11 +75,19 @@ class Engine:
             task.start(character_name, [])
 
     @with_connection()
-    def create_game(self, name: str, json_dir: Path, *, player_id: int) -> int:
-        game = create_game(name, json_dir)
-        # create_game fixes the game_id in the session, so we can just call this:
-        board = load_board()
-        board.generate_map()
+    def create_game(self, data: CreateGameData, *, player_id: int) -> int:
+        game = create_game(
+            name=data.name,
+            skills=data.skills,
+            resources=data.resources,
+            project_types=data.project_types,
+            zodiacs=data.zodiacs,
+        )
+        ConnectionManager.fix_game_id(game.id)
+        # now that game id is fixed we can call this:
+        create_board(hexes=data.hexes, tokens=data.tokens, countries=data.countries)
+        create_jobs(data.jobs)
+        create_decks(data.template_decks)
         return game.id
 
     @with_connection()
@@ -177,7 +189,7 @@ class Engine:
     def get_skills(
         self, *, player_id: int, game_id: int, character_name: str
     ) -> List[str]:
-        return load_skills()
+        return load_game().skills
 
     @with_connection()
     def get_jobs(

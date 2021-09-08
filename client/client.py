@@ -3,6 +3,7 @@ import sys
 from argparse import ArgumentParser, Namespace
 from collections import defaultdict
 from http.client import HTTPResponse
+from pathlib import Path
 from string import ascii_lowercase
 from typing import (
     Any,
@@ -30,6 +31,7 @@ from picaro.common.serializer import deserialize, serialize
 from picaro.server.api_types import *
 
 from .common import BadStateException, IllegalMoveException
+from .generate import generate_game_v2
 from .read import ComplexReader, read_selections, read_text
 from .render import render_effect, render_emblem, render_encounter_effect, render_event
 
@@ -89,6 +91,11 @@ class Client:
         play_parser = subparsers.add_parser("play")
         play_parser.set_defaults(cmd=lambda cli: cli.play())
         play_parser.add_argument("--season", action="store_true")
+
+        generate_parser = subparsers.add_parser("generate")
+        generate_parser.set_defaults(cmd=lambda cli: cli.generate_game())
+        generate_parser.add_argument("--game_name", type=str, required=True)
+        generate_parser.add_argument("--json_dir", type=str, required=True)
 
         return parser.parse_args()
 
@@ -981,6 +988,16 @@ class Client:
             input()
             return True
         return True
+
+    def generate_game(self) -> None:
+        game_name = self.args.game_name
+        json_dir = Path(self.args.json_dir)
+        data = generate_game_v2(game_name, json_dir)
+        # special handling since player name and game id aren't used
+        url = self.base_url + "/game/create"
+        request = Request(url, data=serialize(data).encode("utf-8"))
+        resp = self._http_common(request, CreateGameResponse)
+        print(f"Generated game named {self.args.game_name} (id {resp.game_id})")
 
     def _get(self, path: str, cls: Type[T]) -> T:
         url = self.base_url

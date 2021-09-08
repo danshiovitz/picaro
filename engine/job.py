@@ -7,33 +7,7 @@ from .deck import load_deck
 from .exceptions import IllegalMoveException
 from .snapshot import Hex
 from .storage import ObjectStorageBase
-from .types import EncounterContextType, FullCard, JobType, TemplateCard
-
-
-@dataclass(frozen=True)
-class Job:
-    name: str
-    type: JobType
-    rank: int
-    promotions: Sequence[str]
-    deck_name: str
-    encounter_distances: Sequence[int]
-
-    def make_deck(self, additional: List[TemplateCard] = None) -> List[FullCard]:
-        # template_deck = load_deck(self.deck_name)
-        template_deck = load_deck("Raider")
-        return template_deck.actualize(
-            self.rank + 1, EncounterContextType.JOB, additional
-        )
-
-    def make_single(self, single: TemplateCard) -> FullCard:
-        # template_deck = load_deck(self.deck_name)
-        template_deck = load_deck("Raider")
-        return template_deck.make_card(single, self.rank + 1, EncounterContextType.JOB)
-
-    def fits_hex(self, hx: Hex) -> bool:
-        # later: some jobs filter by country and/or terrain type
-        return True
+from .types import EncounterContextType, FullCard, Job, JobType, TemplateCard
 
 
 def load_jobs() -> List[Job]:
@@ -42,6 +16,12 @@ def load_jobs() -> List[Job]:
 
 def load_job(job_name: str) -> Job:
     return JobsStorage.load_by_name(job_name)
+
+
+def create_jobs(
+    jobs: List[Job],
+) -> None:
+    JobsStorage.insert(jobs)
 
 
 class JobsStorage(ObjectStorageBase[Job]):
@@ -58,3 +38,7 @@ class JobsStorage(ObjectStorageBase[Job]):
         if not jobs:
             raise IllegalMoveException(f"No such job: {name}")
         return jobs[0]
+
+    @classmethod
+    def insert(cls, jobs: List[Job]) -> None:
+        cls._insert_helper(jobs)

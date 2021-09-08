@@ -27,7 +27,7 @@ from typing import (
     cast,
 )
 
-from picaro.common.serializer import deserialize, recursive_from_dict, serialize
+from picaro.common.serializer import recursive_from_dict, serialize
 
 
 @dataclass
@@ -151,17 +151,6 @@ class StorageBase(ABC, Generic[T]):
             sub_base._create_table_helper()
 
     @classmethod
-    def insert_initial_data(cls, json_dir: Path) -> None:
-        json_path = json_dir / f"{cls.TABLE_NAME}s.json"
-        if not json_path.exists():
-            return
-        with open(json_path) as f:
-            val_type = cls._get_val_type()
-            vals: List[T] = deserialize(f.read(), List[val_type])  # type: ignore
-        if vals:
-            cls._insert_helper(vals)
-
-    @classmethod
     def _create_table_helper(cls) -> None:
         cols = cls._full_table_schema()
         sql = f"CREATE TABLE {cls.TABLE_NAME} (\n  "
@@ -193,12 +182,19 @@ class StorageBase(ABC, Generic[T]):
 
     @classmethod
     def _select_helper_grouped(
-        cls, where_clauses: List[str], params: Dict[str, Any]
+        cls,
+        where_clauses: List[str],
+        params: Dict[str, Any],
+        game_filter: bool = True,
     ) -> Dict[Sequence[Any], List[T]]:
         session = current_session.get()
-        if session.game_id is not None and cls.TABLE_NAME != "game":
-            where_clauses.append("game_id = :game_id")
+        if game_filter and session.game_id is not None:
+            if cls.TABLE_NAME != "game":
+                where_clauses.append("game_id = :game_id")
+            else:
+                where_clauses.append("id = :game_id")
             params["game_id"] = session.game_id
+
         sql = f"SELECT * FROM {cls.TABLE_NAME}"
         if where_clauses:
             sql += " WHERE (" + ") AND (".join(where_clauses) + ")"
@@ -362,6 +358,7 @@ class ValueStorageBase(StorageBase[str]):
 
 class ObjectStorageBase(StorageBase[T]):
     PRIMARY_KEYS: Set[str]
+    UNIQUE_KEYS: Set[str] = set()
 
     @classmethod
     def _table_schema(cls) -> List[Tuple[str, str, bool]]:
@@ -384,7 +381,8 @@ class ObjectStorageBase(StorageBase[T]):
                 col_type = "integer" + nn
             else:
                 col_type = "text" + nn
-
+            if fname in cls.UNIQUE_KEYS:
+                col_type += " unique"
             cols.append((col_name, col_type, col_name in cls.PRIMARY_KEYS))
 
         return cols

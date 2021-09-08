@@ -1,0 +1,66 @@
+{
+  "name": "City",
+  "base_skills": ["Observation", "Architecture", "Carousing"],
+  "templates": [
+    {
+      "copies": 2,
+      "name": "Street Market",
+      "desc": "...",
+      "challenge": {
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Wandering Prophet",
+      "desc": "...",
+      "challenge": {
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Tavern Brawl",
+      "desc": "...",
+      "challenge": {
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Statuary Garden",
+      "desc": "...",
+      "challenge": {
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Tipped Wagon",
+      "desc": "...",
+      "challenge": {
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Maze of Alleys",
+      "desc": "...",
+      "challenge": {
+        "skills": [],
+        "rewards": [],
+        "penalties": []
+      }
+    }
+  ]
+}

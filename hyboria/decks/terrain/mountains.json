@@ -1,0 +1,66 @@
+{
+  "name": "Mountains",
+  "base_skills": ["Mountain Lore", "Mountain Lore", "Climb"],
+  "templates": [
+    {
+      "copies": 2,
+      "name": "Chasm",
+      "desc": "...",
+      "challenge": {
+        "skills": ["Acrobatics", "Throw", "Navigation"],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Avalanche",
+      "desc": "...",
+      "challenge": {
+        "skills": ["Might", "Speed", "Acrobatics"],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Mountain Shrine",
+      "desc": "...",
+      "challenge": {
+        "skills": ["Spirit Binding", "Research", "Mechanisms"],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Creatures of the Mountain",
+      "desc": "...",
+      "challenge": {
+        "skills": ["Debate", "Pickpocket", "Might"],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Dark Cave",
+      "desc": "...",
+      "challenge": {
+        "skills": ["Architecture", "Navigation", "Thaumaturgy"],
+        "rewards": [],
+        "penalties": []
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Icy Wind",
+      "desc": "...",
+      "challenge": {
+        "skills": ["Endurance", "Acrobatics", "Mesmerism"],
+        "rewards": [],
+        "penalties": []
+      }
+    }
+  ]
+}

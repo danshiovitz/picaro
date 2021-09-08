@@ -3,16 +3,16 @@ from dataclasses import dataclass
 from typing import Any, Callable, List, Optional
 
 from .exceptions import BadStateException, IllegalMoveException
+from .game import load_game
 from .snapshot import Oracle as snapshot_Oracle
 from .storage import ObjectStorageBase, ReadOnlyWrapper
 from .types import Effect, Event, OracleStatus, make_id
-from .zodiacs import load_zodiacs
 
 
 class Oracle(ReadOnlyWrapper):
     @classmethod
     def create(cls, character_name: str, payment: List[Effect], request: str) -> str:
-        all_zodiacs = load_zodiacs()
+        all_zodiacs = load_game().zodiacs
         signs = random.sample(all_zodiacs, 2)
         data = OracleData(
             guid=make_id(),

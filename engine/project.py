@@ -27,6 +27,7 @@ from .entity import (
     SimpleIntEntityField,
 )
 from .exceptions import BadStateException, IllegalMoveException
+from .game import load_game
 from .snapshot import (
     Task as snapshot_Task,
     TaskExtraChallenge as snapshot_TaskExtraChallenge,
@@ -48,6 +49,7 @@ from .types import (
     TaskStatus,
     TaskType,
     ProjectStatus,
+    ProjectType,
     SpecialChoiceType,
     TemplateCard,
 )
@@ -441,10 +443,17 @@ class ModifyXpField(IntEntityField):
         return True  # just generate the standard event
 
 
+def load_project_type(name: str) -> ProjectType:
+    types = [t for t in load_game().project_types if t.name == name]
+    if not types:
+        raise IllegalMoveException(f"No such project type: {name}")
+    return types[0]
+
+
 class Project(ReadOnlyWrapper):
     @classmethod
     def create(cls, name: str, project_type: str, target_hex: str) -> None:
-        type_obj = ProjectTypeStorage.load_by_name(project_type)
+        type_obj = load_project_type(project_type)
 
         data = ProjectData(
             name=name,
@@ -514,13 +523,12 @@ class Project(ReadOnlyWrapper):
         common_args = (task_name, self.name, len(cur_tasks) + 1, cost, difficulty)
 
         if task_type == TaskType.CHALLENGE:
-            project_type = ProjectTypeStorage.load_by_name(self.type)
+            project_type = load_project_type(self.type)
             skills = kwargs.get("skills", None) or project_type.skills
             Task.create_challenge(*common_args, skills)
         elif task_type == TaskType.RESOURCE:
-            board = load_board()
-            all_resources = list(board.get_base_resources())
-            project_type = ProjectTypeStorage.load_by_name(self.type)
+            all_resources = list(load_game().resources)
+            project_type = load_project_type(self.type)
             all_resources.extend(project_type.resources * 3)
             resources = set(
                 kwargs.get("resources", None) or random.sample(all_resources, 2)
@@ -630,14 +638,6 @@ class TaskExtraDiscovery:
     explored_hexes: Set[str]
 
 
-@dataclass(frozen=True)
-class ProjectType:
-    name: str
-    desc: str
-    skills: List[str]
-    resources: List[str]
-
-
 @dataclass()
 class ProjectData:
     name: str
@@ -706,19 +706,3 @@ class ProjectStorage(ObjectStorageBase[ProjectData]):
     @classmethod
     def update(cls, project: ProjectData) -> None:
         cls._update_helper(project)
-
-
-class ProjectTypeStorage(ObjectStorageBase[ProjectType]):
-    TABLE_NAME = "project_type"
-    PRIMARY_KEYS = {"name"}
-
-    @classmethod
-    def load(cls) -> List[ProjectType]:
-        return cls._select_helper([], {})
-
-    @classmethod
-    def load_by_name(cls, name: str) -> List[TaskData]:
-        types = cls._select_helper(["name = :name"], {"name": name})
-        if not types:
-            raise IllegalMoveException(f"No such project type: {name}")
-        return types[0]
