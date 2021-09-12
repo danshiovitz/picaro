@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 
 
 def conj_list(items: List[str], conj: str) -> str:

@@ -15,11 +15,11 @@ from picaro.engine.storage import ConnectionManager, with_connection
 from picaro.engine.types import (
     Effect,
     EffectType,
-    Emblem,
     EncounterContextType,
-    Rule,
-    HookType,
+    Gadget,
     JobType,
+    Rule,
+    RuleType,
 )
 
 
@@ -84,15 +84,19 @@ class CharacterTest(TestCase):
             )
 
         ch._data.skill_xp["Foo"] = 70
-        emblem = Emblem(
+        emblem = Gadget(
             name="Foo Boost",
-            rules=[Rule(hook=HookType.SKILL_RANK, subtype="Foo", value=2)],
+            rules=[
+                Rule(type=RuleType.SKILL_RANK, subtype="Foo", value=2),
+            ],
         )
         ch._data.emblems.append(emblem)
         self.assertEqual(ch.get_skill_rank("Foo"), 5)
-        emblem = Emblem(
+        emblem = Gadget(
             name="Generic Boost",
-            rules=[Rule(hook=HookType.SKILL_RANK, subtype=None, value=2)],
+            rules=[
+                Rule(type=RuleType.SKILL_RANK, subtype=None, value=2),
+            ],
         )
         ch._data.emblems.append(emblem)
         self.assertEqual(ch.get_skill_rank("Foo"), 6)  # capped at 6
@@ -103,7 +107,7 @@ class CharacterTest(TestCase):
 
         effects = [Effect(type=EffectType.MODIFY_COINS, value=1)]
         records = []
-        outcome = ch.apply_outcome(effects, EncounterContextType.JOB, records)
+        outcome = ch.apply_outcome(effects, records)
         self.assertEqual(ch.coins, 4)
         ec = [e for e in records if e.type == EffectType.MODIFY_COINS]
         self.assertEqual(len(ec), 1)
@@ -115,7 +119,7 @@ class CharacterTest(TestCase):
             Effect(type=EffectType.MODIFY_COINS, value=4),
         ]
         records = []
-        outcome = ch.apply_outcome(effects, EncounterContextType.JOB, records)
+        outcome = ch.apply_outcome(effects, records)
         self.assertEqual(ch.coins, 14)
         ec = [e for e in records if e.type == EffectType.MODIFY_COINS]
         self.assertEqual(len(ec), 1)
@@ -130,35 +134,41 @@ class CharacterTest(TestCase):
             Effect(type=EffectType.MODIFY_XP, subtype="Fishing", value=1),
         ]
         records = []
-        outcome = ch.apply_outcome(effects, EncounterContextType.JOB, records)
+        outcome = ch.apply_outcome(effects, records)
         ec = [e for e in records if e.type == EffectType.MODIFY_XP]
         self.assertEqual(len(ec), 1)
         self.assertEqual(ec[0].subtype, "Fishing")
         self.assertEqual(ec[0].old_value, 0)
         self.assertEqual(ec[0].new_value, 4)
 
-    def test_speed_hook(self) -> None:
+    def test_speed_rule(self) -> None:
         ch = self._make_ch()
         self.assertEqual(ch.get_init_speed(), 3)
         self.load_job_mock.assert_called()
 
-        emblem = Emblem(
+        emblem = Gadget(
             name="Speed Boost",
-            rules=[Rule(hook=HookType.INIT_SPEED, subtype=None, value=2)],
+            rules=[
+                Rule(type=RuleType.INIT_SPEED, subtype=None, value=2),
+            ],
         )
         ch._data.emblems.append(emblem)
         self.assertEqual(ch.get_init_speed(), 5)
 
-        emblem = Emblem(
+        emblem = Gadget(
             name="Speed Penalty",
-            rules=[Rule(hook=HookType.INIT_SPEED, subtype=None, value=-4)],
+            rules=[
+                Rule(type=RuleType.INIT_SPEED, subtype=None, value=-4),
+            ],
         )
         ch._data.emblems.append(emblem)
         self.assertEqual(ch.get_init_speed(), 1)
 
-        emblem = Emblem(
+        emblem = Gadget(
             name="Speed Penalty",
-            rules=[Rule(hook=HookType.INIT_SPEED, subtype=None, value=-3)],
+            rules=[
+                Rule(type=RuleType.INIT_SPEED, subtype=None, value=-3),
+            ],
         )
         ch._data.emblems.append(emblem)
         self.assertEqual(ch.get_init_speed(), 0)

@@ -52,6 +52,7 @@ from .types import (
     ProjectType,
     SpecialChoiceType,
     TemplateCard,
+    TemplateCardType,
 )
 
 
@@ -275,7 +276,8 @@ class Task(Entity, ReadOnlyWrapper):
                     copies=2,
                     name=f"A {self.name} Challenge!",
                     desc=f"A new development in this task.",
-                    challenge=Challenge(
+                    type=TemplateCardType.CHALLENGE,
+                    data=Challenge(
                         skills=extra.skills + extra.skills,
                         rewards=[EncounterEffect.GAIN_PROJECT_XP] * 4,
                         penalties=[EncounterEffect.DAMAGE, EncounterEffect.LOSE_COINS],

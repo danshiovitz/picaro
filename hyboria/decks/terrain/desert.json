@@ -6,7 +6,8 @@
       "copies": 2,
       "name": "Oasis",
       "desc": "...",
-      "challenge": {
+      "type": "CHALLENGE",
+      "data": {
         "skills": ["Carousing", "Observation", "Doctor"],
         "rewards": ["GAIN_COINS", "GAIN_HEALING"],
         "penalties": ["DAMAGE", "LOSE_COINS"]
@@ -16,7 +17,8 @@
       "copies": 2,
       "name": "Sandstorm",
       "desc": "...",
-      "challenge": {
+      "type": "CHALLENGE",
+      "data": {
         "skills": ["Navigation", "Endurance", "Might"],
         "rewards": ["GAIN_XP", "NOTHING"],
         "penalties": ["DAMAGE", "LOSE_REPUTATION"]
@@ -26,7 +28,8 @@
       "copies": 2,
       "name": "Desert Beast",
       "desc": "...",
-      "challenge": {
+      "type": "CHALLENGE",
+      "data": {
         "skills": ["Charm", "Stealth", "Animal Training"],
         "rewards": ["GAIN_COINS", "GAIN_RESOURCES"],
         "penalties": ["DAMAGE", "LOSE_RESOURCES"]
@@ -36,7 +39,8 @@
       "copies": 2,
       "name": "Ancient Structure",
       "desc": "...",
-      "challenge": {
+      "type": "CHALLENGE",
+      "data": {
         "skills": ["Endurance", "Endurance", "Desert Lore"],
         "rewards": ["GAIN_COINS", "GAIN_RESOURCES"],
         "penalties": ["DAMAGE", "LOSE_REPUTATION"]
@@ -46,7 +50,8 @@
       "copies": 2,
       "name": "Strange Constellations",
       "desc": "...",
-      "challenge": {
+      "type": "CHALLENGE",
+      "data": {
         "skills": ["Spirit Binding", "Navigation", "Mesmerism"],
         "rewards": ["GAIN_SPEED", "GAIN_XP"],
         "penalties": ["DAMAGE", "LOSE_LEADERSHIP"]
@@ -56,7 +61,8 @@
       "copies": 2,
       "name": "Mirage",
       "desc": "...",
-      "challenge": {
+      "type": "CHALLENGE",
+      "data": {
         "skills": ["Observation", "Architecture", "Mesmerism"],
         "rewards": ["GAIN_COINS", "NOTHING"],
         "penalties": ["TRANSPORT", "LOSE_REPUTATION"]

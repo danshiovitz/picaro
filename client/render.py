@@ -1,5 +1,6 @@
 from typing import Optional
 
+from picaro.common.text import conj_list
 from picaro.server.api_types import *
 
 
@@ -46,9 +47,9 @@ def render_record(ch: Character, record: Record) -> str:
         line += "speed has " + render_single_int(record)
     elif record.type == EffectType.ADD_EMBLEM:
         if record.old_value:
-            line += f"emblem was updated to {render_emblem(record.new_value)}."
+            line += f"emblem was updated to {render_gadget(record.new_value)}."
         else:
-            line = f"* {subj} gained the emblem {render_emblem(record.new_value)}"
+            line = f"* {subj} gained the emblem {render_gadget(record.new_value)}"
     elif record.type == EffectType.MODIFY_LOCATION:
         if subj == "You":
             line = f"* {subj} are "
@@ -159,7 +160,7 @@ def render_effect(eff: Effect) -> str:
     elif eff.type == EffectType.MODIFY_ACTIVITY:
         return ("use activity" if eff.value <= 0 else "refresh activity") + entity
     elif eff.type == EffectType.ADD_EMBLEM:
-        return "add an emblem (" + render_emblem(eff.value) + ")" + entity
+        return "add an emblem (" + render_gadget(eff.value) + ")" + entity
     elif eff.type == EffectType.MODIFY_LOCATION:
         return f"move to {eff.value}{entity}"
     elif eff.type == EffectType.MODIFY_JOB:
@@ -172,26 +173,26 @@ def render_effect(eff: Effect) -> str:
         return eff
 
 
-def render_emblem(emblem: Emblem) -> str:
-    ret = emblem.name
-    if emblem.rules:
-        ret += f" ({', '.join(render_rule(f) for f in emblem.rules)})"
+def render_gadget(gadget: Gadget) -> str:
+    ret = gadget.name
+    if gadget.rules:
+        ret += f" ({', '.join(render_rule(f) for f in gadget.rules)})"
     return ret
 
 
 def render_rule(rule: Rule) -> str:
     names = {
-        HookType.INIT_SPEED: "init speed",
-        HookType.INIT_TABLEAU_AGE: "tableau age",
-        HookType.INIT_TURNS: "init turns",
-        HookType.MAX_HEALTH: "max health",
-        HookType.MAX_LUCK: "max luck",
-        HookType.MAX_TABLEAU_SIZE: "tableau size",
-        HookType.SKILL_RANK: "rank",
-        HookType.RELIABLE_SKILL: "reliability",
-        HookType.MAX_RESOURCES: "resource limit",
+        RuleType.INIT_SPEED: "init speed",
+        RuleType.INIT_TABLEAU_AGE: "tableau age",
+        RuleType.INIT_TURNS: "init turns",
+        RuleType.MAX_HEALTH: "max health",
+        RuleType.MAX_LUCK: "max luck",
+        RuleType.MAX_TABLEAU_SIZE: "tableau size",
+        RuleType.SKILL_RANK: "rank",
+        RuleType.RELIABLE_SKILL: "reliability",
+        RuleType.MAX_RESOURCES: "resource limit",
     }
-    name = names.get(rule.hook, rule.hook.name)
+    name = names.get(rule.type, rule.type.name)
     if rule.subtype:
         name = rule.subtype + " " + name
     return f"{rule.value:+} {name}"

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from enum import Enum
+from enum import Enum, auto as enum_auto
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 from picaro.common.hexmap.types import OffsetCoordinate
@@ -9,9 +9,9 @@ from picaro.engine.types import (
     Country,
     TableauCard,
     Effect,
-    Emblem,
     EncounterCheck,
     EntityType,
+    Gadget,
     Job,
     OracleStatus,
     TaskStatus,
@@ -129,26 +129,63 @@ class Oracle:
     proposal: Optional[List[Effect]]
 
 
+class EncounterType(Enum):
+    CHALLENGE = enum_auto()
+    CHOICE = enum_auto()
+
+
 @dataclass(frozen=True)
 class TableauCard:
     id: str
     name: str
-    checks: Sequence[EncounterCheck]
-    choices: Optional[Choices]
+    type: EncounterType
+    data: Any
     age: int
     location: str
     route: Sequence[str]
     is_extra: bool
+
+    @classmethod
+    def type_field(cls) -> str:
+        return "type"
+
+    @classmethod
+    def any_type(cls, type_val: Union[EncounterType, str]) -> type:
+        if type(type_val) is str:
+            type_val = EncounterType[type_val]
+
+        if type_val == EncounterType.CHALLENGE:
+            return Sequence[EncounterCheck]
+        elif type_val == EncounterType.CHOICE:
+            return Choices
+        else:
+            raise Exception(f"Unknown encounter type: {type_val.name}")
 
 
 @dataclass(frozen=True)
 class Encounter:
     name: str
     desc: str
-    checks: Sequence[EncounterCheck]
-    choices: Optional[Choices]
+    type: EncounterType
+    data: Any
     signs: Sequence[str]
     rolls: Sequence[int]
+
+    @classmethod
+    def type_field(cls) -> str:
+        return "type"
+
+    @classmethod
+    def any_type(cls, type_val: Union[EncounterType, str]) -> type:
+        if type(type_val) is str:
+            type_val = EncounterType[type_val]
+
+        if type_val == EncounterType.CHALLENGE:
+            return Sequence[EncounterCheck]
+        elif type_val == EncounterType.CHOICE:
+            return Choices
+        else:
+            raise Exception(f"Unknown encounter type: {type_val.name}")
 
 
 @dataclass(frozen=True)
@@ -172,7 +209,7 @@ class Character:
     max_speed: int
     tableau: Sequence[TableauCard]
     encounters: Sequence[Encounter]
-    emblems: Sequence[Emblem]
+    emblems: Sequence[Gadget]
     tasks: Sequence[Task]
 
 

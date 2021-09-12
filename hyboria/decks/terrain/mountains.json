@@ -6,7 +6,8 @@
       "copies": 2,
       "name": "Chasm",
       "desc": "...",
-      "challenge": {
+      "type": "CHALLENGE",
+      "data": {
         "skills": ["Acrobatics", "Throw", "Navigation"],
         "rewards": [],
         "penalties": []
@@ -16,7 +17,8 @@
       "copies": 2,
       "name": "Avalanche",
       "desc": "...",
-      "challenge": {
+      "type": "CHALLENGE",
+      "data": {
         "skills": ["Might", "Speed", "Acrobatics"],
         "rewards": [],
         "penalties": []
@@ -26,7 +28,8 @@
       "copies": 2,
       "name": "Mountain Shrine",
       "desc": "...",
-      "challenge": {
+      "type": "CHALLENGE",
+      "data": {
         "skills": ["Spirit Binding", "Research", "Mechanisms"],
         "rewards": [],
         "penalties": []
@@ -36,7 +39,8 @@
       "copies": 2,
       "name": "Creatures of the Mountain",
       "desc": "...",
-      "challenge": {
+      "type": "CHALLENGE",
+      "data": {
         "skills": ["Debate", "Pickpocket", "Might"],
         "rewards": [],
         "penalties": []
@@ -46,7 +50,8 @@
       "copies": 2,
       "name": "Dark Cave",
       "desc": "...",
-      "challenge": {
+      "type": "CHALLENGE",
+      "data": {
         "skills": ["Architecture", "Navigation", "Thaumaturgy"],
         "rewards": [],
         "penalties": []
@@ -56,7 +61,8 @@
       "copies": 2,
       "name": "Icy Wind",
       "desc": "...",
-      "challenge": {
+      "type": "CHALLENGE",
+      "data": {
         "skills": ["Endurance", "Acrobatics", "Mesmerism"],
         "rewards": [],
         "penalties": []

@@ -100,7 +100,7 @@ class Effect(Generic[T]):
             type_val = EffectType[type_val]
 
         if type_val == EffectType.ADD_EMBLEM:
-            return Emblem
+            return Gadget
         elif type_val in (EffectType.MODIFY_LOCATION, EffectType.MODIFY_JOB):
             return str
         else:
@@ -124,7 +124,7 @@ class Job:
     encounter_distances: Sequence[int]
 
 
-class HookType(Enum):
+class RuleType(Enum):
     INIT_TABLEAU_AGE = enum_auto()
     INIT_TURNS = enum_auto()
     MAX_HEALTH = enum_auto()
@@ -138,13 +138,13 @@ class HookType(Enum):
 
 @dataclass(frozen=True)
 class Rule:
-    hook: HookType
+    type: RuleType
     value: int
     subtype: Optional[str]
 
 
 @dataclass(frozen=True)
-class Emblem:
+class Gadget:
     name: str
     rules: Sequence[Rule]
 
@@ -203,16 +203,38 @@ class Choices:
         )
 
 
+class TemplateCardType(Enum):
+    CHALLENGE = enum_auto()
+    CHOICE = enum_auto()
+    SPECIAL = enum_auto()
+
+
 @dataclass(frozen=True)
 class TemplateCard:
     copies: int
     name: str
     desc: str
-    challenge: Optional[Challenge] = None
-    choices: Optional[Choices] = None
+    type: TemplateCardType
+    data: Any
     unsigned: bool = False
     entity_type: Optional[EntityType] = None
     entity_name: Optional[str] = None
+
+    @classmethod
+    def type_field(cls) -> str:
+        return "type"
+
+    @classmethod
+    def any_type(cls, type_val: Union[TemplateCardType, str]) -> type:
+        if type(type_val) is str:
+            type_val = TemplateCardType[type_val]
+
+        if type_val == TemplateCardType.CHALLENGE:
+            return Challenge
+        elif type_val == TemplateCardType.CHOICE:
+            return Choices
+        else:
+            return Tuple[str, Any]
 
 
 @dataclass(frozen=True)
@@ -222,16 +244,37 @@ class TemplateDeck:
     base_skills: Sequence[str]
 
 
+class FullCardType(Enum):
+    CHALLENGE = enum_auto()
+    CHOICE = enum_auto()
+
+
 @dataclass(frozen=True)
 class FullCard:
     id: str
     name: str
     desc: str
-    checks: Sequence[EncounterCheck]
-    choices: Optional[Choices]
+    type: FullCardType
+    data: Any
     signs: Sequence[str]
     entity_type: Optional[EntityType] = None
     entity_name: Optional[str] = None
+
+    @classmethod
+    def type_field(cls) -> str:
+        return "type"
+
+    @classmethod
+    def any_type(cls, type_val: Union[FullCardType, str]) -> type:
+        if type(type_val) is str:
+            type_val = FullCardType[type_val]
+
+        if type_val == FullCardType.CHALLENGE:
+            return Sequence[EncounterCheck]
+        elif type_val == FullCardType.CHOICE:
+            return Choices
+        else:
+            raise Exception(f"Unknown full card type: {type_val.name}")
 
 
 @dataclass(frozen=True)
@@ -240,6 +283,20 @@ class TableauCard:
     age: int
     location: str
     is_extra: bool = False  # don't count against limit of tableau size
+
+
+class AvailabilityType(Enum):
+    HEX = enum_auto()
+    COUNTRY = enum_auto()
+    NOT_COUNTRY = enum_auto()
+    GLOBAL = enum_auto()
+
+
+@dataclass(frozen=True)
+class Availability:
+    type: AvailabilityType
+    location: str
+    distance: int
 
 
 @dataclass(frozen=True)
@@ -342,7 +399,7 @@ class Record(Generic[T]):
             type_val = EffectType[type_val]
 
         if type_val == EffectType.ADD_EMBLEM:
-            return Emblem
+            return Gadget
         elif type_val in (
             EffectType.MODIFY_JOB,
             EffectType.MODIFY_LOCATION,

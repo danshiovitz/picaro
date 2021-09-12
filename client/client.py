@@ -33,7 +33,7 @@ from picaro.server.api_types import *
 from .common import BadStateException, IllegalMoveException
 from .generate import generate_game_v2
 from .read import ComplexReader, read_selections, read_text
-from .render import render_effect, render_emblem, render_encounter_effect, render_record
+from .render import render_effect, render_gadget, render_encounter_effect, render_record
 
 S = TypeVar("S")
 T = TypeVar("T")
@@ -238,7 +238,7 @@ class Client:
         print()
         print("Emblems:")
         for emblem in ch.emblems:
-            print(f"* {render_emblem(emblem)}")
+            print(f"* {render_gadget(emblem)}")
         if not ch.emblems:
             print("* None")
         print()
@@ -591,7 +591,10 @@ class Client:
                 display.append(
                     f"{ascii_lowercase[idx]}. ({card.age}) {card.name} [{card.location} {dist(card.route)}]:"
                 )
-                display.append(f"       {self._check_str(card.checks[0], ch)}")
+                if card.type == EncounterType.CHALLENGE:
+                    display.append(f"       {self._check_str(card.data[0], ch)}")
+                else:
+                    display.append("")
 
             actions = self._available_actions(board)
             for idx, token_action in enumerate(actions):
@@ -766,13 +769,13 @@ class Client:
         return self._input_encounter_action(ch)
 
     def _input_encounter_action(self, ch: Character) -> bool:
-        if ch.encounters[0].checks:
+        if ch.encounters[0].type == EncounterType.CHALLENGE:
             actions = self._input_encounter_checks(
-                ch, ch.encounters[0].checks, ch.encounters[0].rolls
+                ch, ch.encounters[0].data, ch.encounters[0].rolls
             )
-        elif ch.encounters[0].choices:
+        elif ch.encounters[0].type == EncounterType.CHOICE:
             actions = self._input_encounter_choices(
-                ch, ch.encounters[0].choices, ch.encounters[0].rolls
+                ch, ch.encounters[0].data, ch.encounters[0].rolls
             )
         else:
             raise Exception("Encounter with no checks or choices?")

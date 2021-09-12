@@ -79,27 +79,26 @@ class ComplexReader:
         effect_choices = [
             (
                 "Modify coins <amount>",
-                lambda ln, e: self._lparse_effect(EffectType.MODIFY_COINS, e, ln),
+                lambda ln: self._lparse_effect(EffectType.MODIFY_COINS, ln),
             ),
             (
                 "Modify xp <amount> <skill or 'free'>",
-                lambda ln, e: self._lparse_effect(
-                    EffectType.MODIFY_XP, e, ln, subtypes=skills, none_type="free"
+                lambda ln: self._lparse_effect(
+                    EffectType.MODIFY_XP, ln, subtypes=skills, none_type="free"
                 ),
             ),
             (
                 "Modify reputation <amount>",
-                lambda ln, e: self._lparse_effect(EffectType.MODIFY_REPUTATION, e, ln),
+                lambda ln: self._lparse_effect(EffectType.MODIFY_REPUTATION, ln),
             ),
             (
                 "Modify health <amount>",
-                lambda ln, e: self._lparse_effect(EffectType.MODIFY_HEALTH, e, ln),
+                lambda ln: self._lparse_effect(EffectType.MODIFY_HEALTH, ln),
             ),
             (
                 "Modify resources <amount> <resource or 'draw'>",
-                lambda ln, e: self._lparse_effect(
+                lambda ln: self._lparse_effect(
                     EffectType.MODIFY_RESOURCES,
-                    e,
                     ln,
                     subtypes=board.resources,
                     none_type="draw",
@@ -107,31 +106,28 @@ class ComplexReader:
             ),
             (
                 "Modify turns <amount>",
-                lambda ln, e: self._lparse_effect(EffectType.MODIFY_TURNS, e, ln),
+                lambda ln: self._lparse_effect(EffectType.MODIFY_TURNS, ln),
             ),
             (
                 "Use up activity",
-                lambda ln, e: self._lparse_effect(
+                lambda ln: self._lparse_effect(
                     EffectType.MODIFY_ACTIVITY,
-                    e,
                     ln,
                     lparse_val=lambda ln: (-1, True, ln),
                 ),
             ),
             (
                 "Refresh activity",
-                lambda ln, e: self._lparse_effect(
+                lambda ln: self._lparse_effect(
                     EffectType.MODIFY_ACTIVITY,
-                    e,
                     ln,
                     lparse_val=lambda ln: (1, True, ln),
                 ),
             ),
             (
-                "Modify location",
-                lambda ln, e: self._lparse_effect(
+                "Move to location <hex>",
+                lambda ln: self._lparse_effect(
                     EffectType.MODIFY_LOCATION,
-                    e,
                     ln,
                     lparse_val=lambda ln: fixup(
                         self._lparse_fixedstr("hex", ln, hexes)
@@ -139,10 +135,9 @@ class ComplexReader:
                 ),
             ),
             (
-                "Modify job",
-                lambda ln, e: self._lparse_effect(
+                "Switch to job <job>",
+                lambda ln: self._lparse_effect(
                     EffectType.MODIFY_JOB,
-                    e,
                     ln,
                     lparse_val=lambda ln: fixup(
                         self._lparse_fixedstr("job", ln, job_names)
@@ -150,27 +145,24 @@ class ComplexReader:
                 ),
             ),
             (
-                "Add emblem",
-                lambda ln, e: self._lparse_effect(
+                "Add emblem <name>",
+                lambda ln: self._lparse_effect(
                     EffectType.ADD_EMBLEM,
-                    e,
                     ln,
-                    lparse_val=lambda ln: fixup(self._lparse_emblem(ln)),
+                    lparse_val=lambda ln: fixup(self._lparse_gadget(ln)),
                 ),
             ),
             (
-                "Random transport",
-                lambda ln, e: self._lparse_effect(EffectType.TRANSPORT, e, ln),
+                "Random transport <distance>",
+                lambda ln: self._lparse_effect(EffectType.TRANSPORT, ln),
             ),
             (
-                "Leadership challenge",
-                lambda ln, e: self._lparse_effect(EffectType.LEADERSHIP, e, ln),
+                "Leadership challenge <difficulty>",
+                lambda ln: self._lparse_effect(EffectType.LEADERSHIP, ln),
             ),
         ]
 
-        return self._read_complex(
-            prompt, init, self.default_entity, effect_choices, render_effect
-        )
+        return self._read_complex(prompt, init, effect_choices, render_effect)
 
     def read_rules(
         self,
@@ -181,63 +173,55 @@ class ComplexReader:
         rule_choices = [
             (
                 "Modify init tableau age <amount>",
-                lambda ln, e: self._lparse_rule(HookType.INIT_TABLEAU_AGE, e, ln),
+                lambda ln: self._lparse_rule(RuleType.INIT_TABLEAU_AGE, ln),
             ),
             (
                 "Modify init turns <amount>",
-                lambda ln, e: self._lparse_rule(HookType.INIT_TURNS, e, ln),
+                lambda ln: self._lparse_rule(RuleType.INIT_TURNS, ln),
             ),
             (
                 "Modify max health <amount>",
-                lambda ln, e: self._lparse_rule(HookType.MAX_HEALTH, e, ln),
+                lambda ln: self._lparse_rule(RuleType.MAX_HEALTH, ln),
             ),
             (
                 "Modify max luck <amount>",
-                lambda ln, e: self._lparse_rule(HookType.MAX_LUCK, e, ln),
+                lambda ln: self._lparse_rule(RuleType.MAX_LUCK, ln),
             ),
             (
                 "Modify max tableau size <amount>",
-                lambda ln, e: self._lparse_rule(HookType.MAX_TABLEAU_SIZE, e, ln),
+                lambda ln: self._lparse_rule(RuleType.MAX_TABLEAU_SIZE, ln),
             ),
             (
                 "Modify skill rank <amount> <skill>",
-                lambda ln, e: self._lparse_rule(
-                    HookType.SKILL_RANK, e, ln, subtypes=skills
-                ),
+                lambda ln: self._lparse_rule(RuleType.SKILL_RANK, ln, subtypes=skills),
             ),
             (
                 "Modify skill reliability <amount> <skill>",
-                lambda ln, e: self._lparse_rule(
-                    HookType.RELIABLE_SKILL, e, ln, subtypes=skills
+                lambda ln: self._lparse_rule(
+                    RuleType.RELIABLE_SKILL, ln, subtypes=skills
                 ),
             ),
             (
                 "Modify init speed <amount>",
-                lambda ln, e: self._lparse_rule(HookType.INIT_SPEED, e, ln),
+                lambda ln: self._lparse_rule(RuleType.INIT_SPEED, ln),
             ),
             (
                 "Modify resource limit <amount>",
-                lambda ln, e: self._lparse_rule(HookType.MAX_RESOURCES, e, ln),
+                lambda ln: self._lparse_rule(RuleType.MAX_RESOURCES, ln),
             ),
         ]
 
-        return self._read_complex(
-            prompt, init, self.default_entity, rule_choices, render_rule
-        )
+        return self._read_complex(prompt, init, rule_choices, render_rule)
 
     def _read_complex(
         self,
         prompt: str,
         init: List[T],
-        default_entity: Optional[Tuple[EntityType, str]],
-        choice_list: List[
-            Tuple[str, Callable[[str, Optional[Tuple[EntityType, str]]], Tuple[T, str]]]
-        ],
+        choice_list: List[Tuple[str, Callable[[str], Tuple[T, str]]]],
         render_func: Callable[[T], str],
     ) -> List[T]:
         print(prompt)
         items = init[:]
-        cur_entity = default_entity
         while True:
             if items:
                 print()
@@ -270,7 +254,7 @@ class ComplexReader:
                 print("Not a valid choice?")
                 continue
             try:
-                item, line = choice_list[choice_idx][1](line, cur_entity)
+                item, line = choice_list[choice_idx][1](line)
                 if line:
                     raise IllegalMoveException(f"Unparsed: {line}")
                 items.append(item)
@@ -343,7 +327,6 @@ class ComplexReader:
     def _lparse_effect(
         self,
         effect_type: EffectType,
-        ent: Optional[Tuple[EntityType, str]],
         line: str,
         lparse_val: Optional[Callable[[str], Tuple[Any, bool]]] = None,
         subtypes: Optional[Sequence[str]] = None,
@@ -357,6 +340,7 @@ class ComplexReader:
             subtype, line = self._lparse_fixedstr("subtype", line, subtypes, none_type)
         else:
             subtype = None
+        ent = self.default_entity
         return (
             Effect(
                 type=effect_type,
@@ -369,18 +353,17 @@ class ComplexReader:
             line,
         )
 
-    def _lparse_emblem(
+    def _lparse_gadget(
         self,
         line: str,
-    ) -> Tuple[Emblem, str]:
+    ) -> Tuple[Gadget, str]:
         name, line = self._lparse_str("name", line)
-        rules = self.read_rules("Enter rules for this emblem:", [])
-        return Emblem(name, rules), line
+        rules = self.read_rules("Enter rules for this gadget:", [])
+        return Gadget(name, rules), line
 
     def _lparse_rule(
         self,
-        hook_type: HookType,
-        ent: Optional[Tuple[EntityType, str]],
+        rule_type: RuleType,
         line: str,
         subtypes: Optional[Sequence[str]] = None,
         none_type: Optional[str] = None,
@@ -392,7 +375,7 @@ class ComplexReader:
             subtype = None
         return (
             Rule(
-                hook=hook_type,
+                type=rule_type,
                 value=val,
                 subtype=subtype,
             ),

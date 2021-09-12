@@ -6,7 +6,8 @@
       "copies": 2,
       "name": "Street Market",
       "desc": "...",
-      "challenge": {
+      "type": "CHALLENGE",
+      "data": {
         "skills": [],
         "rewards": [],
         "penalties": []
@@ -16,7 +17,8 @@
       "copies": 2,
       "name": "Wandering Prophet",
       "desc": "...",
-      "challenge": {
+      "type": "CHALLENGE",
+      "data": {
         "skills": [],
         "rewards": [],
         "penalties": []
@@ -26,7 +28,8 @@
       "copies": 2,
       "name": "Tavern Brawl",
       "desc": "...",
-      "challenge": {
+      "type": "CHALLENGE",
+      "data": {
         "skills": [],
         "rewards": [],
         "penalties": []
@@ -36,7 +39,8 @@
       "copies": 2,
       "name": "Statuary Garden",
       "desc": "...",
-      "challenge": {
+      "type": "CHALLENGE",
+      "data": {
         "skills": [],
         "rewards": [],
         "penalties": []
@@ -46,7 +50,8 @@
       "copies": 2,
       "name": "Tipped Wagon",
       "desc": "...",
-      "challenge": {
+      "type": "CHALLENGE",
+      "data": {
         "skills": [],
         "rewards": [],
         "penalties": []
@@ -56,7 +61,8 @@
       "copies": 2,
       "name": "Maze of Alleys",
       "desc": "...",
-      "challenge": {
+      "type": "CHALLENGE",
+      "data": {
         "skills": [],
         "rewards": [],
         "penalties": []

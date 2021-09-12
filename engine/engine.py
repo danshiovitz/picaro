@@ -36,9 +36,11 @@ from .types import (
     EncounterContextType,
     EncounterEffect,
     EntityType,
+    FullCardType,
     Record,
     Outcome,
     TemplateCard,
+    TemplateCardType,
 )
 
 
@@ -352,7 +354,8 @@ class Engine:
             copies=1,
             name=action.name,
             desc="Choose your action:",
-            choices=action.choices,
+            type=TemplateCardType.CHOICE,
+            data=action.choices,
             entity_type=entity_type,
             entity_name=entity_name,
         )
@@ -415,20 +418,22 @@ class Engine:
             records: List[Record] = []
 
             encounter = ch.pop_encounter()
-            if encounter.card.checks:
+            if encounter.card.type == FullCardType.CHALLENGE:
                 effects = self._eval_challenge(
                     ch,
-                    encounter.card.checks,
+                    encounter.card.data,
                     encounter.rolls,
                     actions,
                     encounter.card.entity_type,
                     encounter.card.entity_name,
                     records,
                 )
-            elif encounter.card.choices:
+            elif encounter.card.type == FullCardType.CHOICE:
                 effects = self._eval_choices(
-                    encounter.card.choices, encounter.rolls, actions.choices, records
+                    encounter.card.data, encounter.rolls, actions.choices, records
                 )
+            else:
+                raise Exception(f"Bad card type: {encounter.card.type.name}")
 
             effects = [
                 dataclasses.replace(
@@ -706,7 +711,8 @@ class Engine:
             name="Bad Reputation",
             desc=f"Automatic job check at zero reputation.",
             unsigned=True,
-            choices=Choices(
+            type=TemplateCardType.CHOICE,
+            data=Choices(
                 min_choices=1,
                 max_choices=1,
                 is_random=False,
@@ -736,7 +742,8 @@ class Engine:
             name="Discard Resources",
             desc=f"You must discard to {ch.get_max_resources()} resources.",
             unsigned=True,
-            choices=Choices(
+            type=TemplateCardType.CHOICE,
+            data=Choices(
                 min_choices=overage,
                 max_choices=overage,
                 is_random=False,

@@ -13,7 +13,7 @@
 - creating projects
 - creating tasks
 - hidden tasks that get revealed (either sequentially or in groups)
-- character-based requirements to start tasks
+- character-based requirements to start tasks or special encounters
 - evaluating projects
 - change camp decks to pick 1 or 2 of 3
 - add "corrections" that are GM-initiated and can be done any time (and get assigned to random person for signoff)
@@ -181,6 +181,7 @@ Ok umf. List of top-level stuff:
 Organized like this it doesn't seem so bad!
 
 Events then have:
+  - A filter for applicability (?)
   - A list of mysteries
   - A list of rules
   - A list of actions
@@ -188,3 +189,29 @@ Events then have:
 
 Projects have:
   - A list of .. tasks?
+
+I think rules and actions might need to themselves have an applicability filter on them, although for token actions and emblem rules, there's an easy default applicability filter. This then implies best_route needs to be per action and not per token. Oh, and do-an-encounter is a subtype of action, I guess? It needs the same best route stuff.
+
+Event: Storm of Swords
+Swords are just flying through the air, it's weird.
+In Zeta, Steel sells for less (-1) and Wine sells for more (+1).
+Outside Zeta, Steel sells for more (+1).
+Within 3 hexes of hex XYZ, each time you move into a new hex, you take 1 damage. # a trigger?
+Globally, you can take 5 damage to teleport to hex XYZ.
+Within 5 hexes of hex XYZ, you can have the encounter Fight A Sword.
+
+Customization:
+- This applies within 3 hexes of hex XYZ
+- This applies to people with a Stealth of +2 or higher
+- Rules:
+  - Your max speed increases by 1
+  - Your max luck decreases by 1
+- Triggers:
+  - When you move to a new hex, your health increases by +2
+  - When you finish an encounter, you gain +1 coins
+- Actions:
+  - "Trade": Steel resources -1, coins resource +5  # remember this actually queues an encounter!
+  - "Trade": Glass resources -1, coins resource +5  # remember this actually queues an encounter!
+- Encounters:
+  - Fight A Sword
+  - Sword A Fight

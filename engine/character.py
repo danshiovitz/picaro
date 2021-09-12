@@ -42,6 +42,7 @@ from .snapshot import (
     Character as snapshot_Character,
     Encounter as snapshot_Encounter,
     TableauCard as snapshot_TableauCard,
+    EncounterType as snapshot_EncounterType,
 )
 from .storage import ObjectStorageBase, ReadOnlyWrapper
 from .types import (
@@ -50,21 +51,23 @@ from .types import (
     Choices,
     Effect,
     EffectType,
-    Emblem,
     Encounter,
     EncounterActions,
     EncounterContextType,
     EncounterEffect,
     EntityType,
+    FullCardType,
+    Gadget,
     Record,
     Rule,
+    RuleType,
     FullCard,
-    HookType,
     JobType,
     Outcome,
     SpecialChoiceType,
     TableauCard,
     TemplateCard,
+    TemplateCardType,
     make_id,
 )
 
@@ -215,12 +218,19 @@ class Character(Entity, ReadOnlyWrapper):
     def _tableau_snapshot(
         self, card: TableauCard, route: Sequence[str]
     ) -> Sequence[snapshot_TableauCard]:
-        # in the future might be able to preview more checks so leaving them as lists
+        if card.card.type == FullCardType.CHALLENGE:
+            card_type = snapshot_EncounterType.CHALLENGE
+            # in the future might be able to preview more checks so leaving them as lists
+            data = card.card.data[0:1]
+        else:
+            card_type = snapshot_EncounterType.CHOICE
+            data = card.card.data
+
         return snapshot_TableauCard(
             id=card.card.id,
             name=card.card.name,
-            checks=card.card.checks[0:1],
-            choices=card.card.choices,
+            type=card_type,
+            data=data,
             age=card.age,
             location=card.location,
             route=tuple(route),
@@ -228,11 +238,18 @@ class Character(Entity, ReadOnlyWrapper):
         )
 
     def _encounter_snapshot(self, encounter: Encounter) -> Sequence[snapshot_Encounter]:
+        if encounter.card.type == FullCardType.CHALLENGE:
+            card_type = snapshot_EncounterType.CHALLENGE
+            data = encounter.card.data
+        else:
+            card_type = snapshot_EncounterType.CHOICE
+            data = encounter.card.data
+
         return snapshot_Encounter(
             name=encounter.card.name,
             desc=encounter.card.desc,
-            checks=encounter.card.checks,
-            choices=encounter.card.choices,
+            type=card_type,
+            data=data,
             signs=encounter.card.signs,
             rolls=encounter.rolls,
         )
@@ -347,19 +364,19 @@ class Character(Entity, ReadOnlyWrapper):
         self._data.luck -= amt
 
     def get_init_turns(self) -> int:
-        return clamp(20 + self._calc_hook(HookType.INIT_TURNS), min=10, max=40)
+        return clamp(20 + self._calc_rule(RuleType.INIT_TURNS), min=10, max=40)
 
     def get_max_luck(self) -> int:
-        return clamp(5 + self._calc_hook(HookType.MAX_LUCK), min=0)
+        return clamp(5 + self._calc_rule(RuleType.MAX_LUCK), min=0)
 
     def get_max_tableau_size(self) -> int:
-        return clamp(3 + self._calc_hook(HookType.MAX_TABLEAU_SIZE), min=1)
+        return clamp(3 + self._calc_rule(RuleType.MAX_TABLEAU_SIZE), min=1)
 
     def get_init_tableau_age(self) -> int:
-        return clamp(3 + self._calc_hook(HookType.INIT_TABLEAU_AGE), min=1)
+        return clamp(3 + self._calc_rule(RuleType.INIT_TABLEAU_AGE), min=1)
 
     def get_max_health(self) -> int:
-        return clamp(20 + self._calc_hook(HookType.MAX_HEALTH), min=1)
+        return clamp(20 + self._calc_rule(RuleType.MAX_HEALTH), min=1)
 
     def get_max_resources(self) -> int:
         job = load_job(self._data.job_name)
@@ -373,7 +390,7 @@ class Character(Entity, ReadOnlyWrapper):
             base_limit = 100
         else:
             raise Exception(f"Unknown job type: {job.type}")
-        return clamp(base_limit + self._calc_hook(HookType.MAX_RESOURCES), min=0)
+        return clamp(base_limit + self._calc_rule(RuleType.MAX_RESOURCES), min=0)
 
     def get_max_tasks(self) -> int:
         return 3
@@ -397,7 +414,7 @@ class Character(Entity, ReadOnlyWrapper):
         else:
             base_rank = 5
         return clamp(
-            base_rank + self._calc_hook(HookType.SKILL_RANK, skill_name), min=0, max=6
+            base_rank + self._calc_rule(RuleType.SKILL_RANK, skill_name), min=0, max=6
         )
 
     def get_init_speed(self) -> int:
@@ -413,19 +430,19 @@ class Character(Entity, ReadOnlyWrapper):
             base_speed = 1
         else:
             raise Exception(f"Unknown job type: {job.type}")
-        return clamp(base_speed + self._calc_hook(HookType.INIT_SPEED), min=0)
+        return clamp(base_speed + self._calc_rule(RuleType.INIT_SPEED), min=0)
 
-    def _calc_hook(
-        self, hook_name: HookType, hook_subtype: Optional[str] = None
+    def _calc_rule(
+        self, rule_type: RuleType, rule_subtype: Optional[str] = None
     ) -> int:
         tot = 0
         for emblem in self._data.emblems:
             for rule in emblem.rules:
-                if rule.hook == hook_name:
+                if rule.type == rule_type:
                     subtype_match = (
-                        hook_subtype is None
+                        rule_subtype is None
                         or rule.subtype is None
-                        or hook_subtype == rule.subtype
+                        or rule_subtype == rule.subtype
                     )
                     if subtype_match:
                         tot += rule.value
@@ -459,21 +476,22 @@ class Character(Entity, ReadOnlyWrapper):
         self, card: FullCard, context_type: EncounterContextType
     ) -> None:
         rolls = []
-        for chk in card.checks:
-            bonus = self.get_skill_rank(chk.skill)
-            roll_val = random.randint(1, 8)
-            if roll_val <= self._calc_hook(HookType.RELIABLE_SKILL, chk.skill):
+        if card.type == FullCardType.CHALLENGE:
+            for chk in card.data:
+                bonus = self.get_skill_rank(chk.skill)
                 roll_val = random.randint(1, 8)
-            rolls.append(roll_val + bonus)
-        if card.choices:
-            if card.choices.special_type:
+                if roll_val <= self._calc_rule(RuleType.RELIABLE_SKILL, chk.skill):
+                    roll_val = random.randint(1, 8)
+                rolls.append(roll_val + bonus)
+        else:
+            if card.data.special_type:
                 card = dataclasses.replace(
-                    card, choices=self._make_special_choices(card.choices, card)
+                    card, data=self._make_special_choices(card.data, card)
                 )
-            if card.choices.is_random:
+            if card.data.is_random:
                 rolls.extend(
-                    random.randint(1, len(card.choices.choice_list))
-                    for _ in range(card.choices.max_choices)
+                    random.randint(1, len(card.data.choice_list))
+                    for _ in range(card.data.max_choices)
                 )
         self._data.encounters.append(
             Encounter(
@@ -533,10 +551,16 @@ class Character(Entity, ReadOnlyWrapper):
         emblem_effects = [[]]
         for sk in deck.base_skills:
             emblem_effects.append(
-                [Rule(hook=HookType.RELIABLE_SKILL, subtype=sk, value=1)]
+                [
+                    Rule(
+                        type=RuleType.RELIABLE_SKILL,
+                        subtype=sk,
+                        value=1,
+                    )
+                ],
             )
         emblems = [
-            Emblem(name=f"Veteran {job_name}", rules=ee) for ee in emblem_effects
+            Gadget(name=f"Veteran {job_name}", rules=ee) for ee in emblem_effects
         ]
         extra = [[] for ee in emblems]
         extra[0].append(Effect(type=EffectType.MODIFY_XP, subtype=None, value=10))
@@ -602,7 +626,8 @@ class Character(Entity, ReadOnlyWrapper):
                 copies=1,
                 name="A Find Along The Way",
                 desc="...",
-                choices=Choices(
+                type=TemplateCardType.CHOICE,
+                data=Choices(
                     min_choices=1,
                     max_choices=1,
                     is_random=True,
@@ -955,7 +980,7 @@ class AddEmblemField(EntityField):
         ]
         if old_idxs:
             old_emblem = self._entity._data.emblems.pop(old_idxs[0])
-            new_emblem = Emblem(
+            new_emblem = Gadget(
                 name=effect.value.name, rules=old_emblem.rules + effect.value.rules
             )
         else:
@@ -1007,7 +1032,7 @@ class CharacterData:
     reputation: int
     remaining_turns: int
     luck: int
-    emblems: List[Emblem]
+    emblems: List[Gadget]
     tableau: List[TableauCard]
     encounters: List[Encounter]
     job_deck: List[FullCard]

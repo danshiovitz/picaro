@@ -1,6 +1,6 @@
 import random
 from dataclasses import dataclass
-from typing import Generic, List, Optional, Sequence, Tuple, TypeVar
+from typing import Generic, List, Optional, Sequence, Tuple, TypeVar, cast
 
 from .exceptions import IllegalMoveException
 from .game import load_game
@@ -12,7 +12,9 @@ from .types import (
     EncounterContextType,
     EncounterEffect,
     FullCard,
+    FullCardType,
     TemplateCard,
+    TemplateCardType,
     TemplateDeck,
     make_id,
 )
@@ -49,29 +51,29 @@ def make_card(
     difficulty: int,
     context: EncounterContextType,
 ) -> FullCard:
-    checks: List[EncounterCheck] = []
-    choices: Optional[Choices] = None
-    if val.choices:
-        choices = val.choices
-    elif val.challenge:
+    if val.type == TemplateCardType.CHOICE:
+        data = val.data
+        card_type = FullCardType.CHOICE
+    elif val.type == TemplateCardType.CHALLENGE:
         if not deck:
             raise Exception("Can't make challenge card with no deck")
+        challenge = cast(Challenge, val.data)
         skill_bag = []
         # the number of copies of the core skills only matters on the third check,
         # where we add in all the skills (let's assume there are 36) and want to
         # have the copy number such that we pick a core skill (let's assume there
         # are 6) say 50% of the time and an unusual skill 50% of the time
-        sk = (
-            list(val.challenge.skills) + list(deck.base_skills) + list(deck.base_skills)
-        )[0:6]
+        sk = (list(challenge.skills) + list(deck.base_skills) + list(deck.base_skills))[
+            0:6
+        ]
         skill_bag.extend(sk * 6)
 
         all_skills = list(load_game().skills)
-        reward_bag = _make_reward_bag(deck, val.challenge, context)
-        penalty_bag = _make_penalty_bag(deck, val.challenge, context)
-        if val.challenge.difficulty is not None:
-            difficulty = val.challenge.difficulty
-        checks = [
+        reward_bag = _make_reward_bag(deck, challenge, context)
+        penalty_bag = _make_penalty_bag(deck, challenge, context)
+        if challenge.difficulty is not None:
+            difficulty = challenge.difficulty
+        data = [
             _make_check(deck, difficulty, skill_bag, reward_bag, penalty_bag),
             _make_check(deck, difficulty, skill_bag, reward_bag, penalty_bag),
             _make_check(
@@ -82,6 +84,9 @@ def make_card(
                 penalty_bag,
             ),
         ]
+        card_type = FullCardType.CHALLENGE
+    else:
+        raise Exception("XXXX SUPPORT SPECIAL CARD")
 
     all_zodiacs = load_game().zodiacs
     signs = random.sample(all_zodiacs, 2) if not val.unsigned else []
@@ -91,8 +96,8 @@ def make_card(
         id=card_id,
         name=val.name,
         desc=val.desc,
-        checks=checks,
-        choices=choices,
+        type=card_type,
+        data=data,
         signs=signs,
         entity_type=val.entity_type,
         entity_name=val.entity_name,
