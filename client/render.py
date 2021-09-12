@@ -3,94 +3,94 @@ from typing import Optional
 from picaro.server.api_types import *
 
 
-def render_event(ch: Character, event: Event) -> str:
-    def render_single_int(event: Event) -> str:
-        if event.new_value > event.old_value:
-            return f"increased to {event.new_value}"
-        elif event.new_value < event.old_value:
-            return f"decreased to {event.new_value}"
+def render_record(ch: Character, record: Record) -> str:
+    def render_single_int(record: Record) -> str:
+        if record.new_value > record.old_value:
+            return f"increased to {record.new_value}"
+        elif record.new_value < record.old_value:
+            return f"decreased to {record.new_value}"
         else:
-            return f"remained at {event.new_value}"
+            return f"remained at {record.new_value}"
 
     line = "* "
-    subj = event.entity_name
-    if event.entity_type == EntityType.CHARACTER and event.entity_name == ch.name:
+    subj = record.entity_name
+    if record.entity_type == EntityType.CHARACTER and record.entity_name == ch.name:
         line += "Your "
         subj = "You"
     else:
-        line += event.entity_name + "'s "
+        line += record.entity_name + "'s "
 
-    if event.type == EffectType.MODIFY_ACTIVITY:
-        if event.new_value <= 0 and event.old_value > 0:
+    if record.type == EffectType.MODIFY_ACTIVITY:
+        if record.new_value <= 0 and record.old_value > 0:
             line += "activity was used"
-        elif event.new_value > 0 and event.old_value <= 0:
+        elif record.new_value > 0 and record.old_value <= 0:
             line += "activity was refreshed"
         else:
             line += "activity is unchanged"
-    elif event.type == EffectType.MODIFY_HEALTH:
-        line += "health has " + render_single_int(event)
-    elif event.type == EffectType.MODIFY_COINS:
-        line += "coins have " + render_single_int(event)
-    elif event.type == EffectType.MODIFY_REPUTATION:
-        line += "reputation has " + render_single_int(event)
-    elif event.type == EffectType.MODIFY_XP:
-        line += f"{event.subtype or 'unassigned'} xp has " + render_single_int(event)
-    elif event.type == EffectType.MODIFY_RESOURCES:
-        if event.subtype is None:
-            line = f"* {subj} gained {event.new_value} resource draws"
+    elif record.type == EffectType.MODIFY_HEALTH:
+        line += "health has " + render_single_int(record)
+    elif record.type == EffectType.MODIFY_COINS:
+        line += "coins have " + render_single_int(record)
+    elif record.type == EffectType.MODIFY_REPUTATION:
+        line += "reputation has " + render_single_int(record)
+    elif record.type == EffectType.MODIFY_XP:
+        line += f"{record.subtype or 'unassigned'} xp has " + render_single_int(record)
+    elif record.type == EffectType.MODIFY_RESOURCES:
+        if record.subtype is None:
+            line = f"* {subj} gained {record.new_value} resource draws"
         else:
-            line += f"{event.subtype} resources have " + render_single_int(event)
-    elif event.type == EffectType.MODIFY_TURNS:
-        line += "remaining turns have " + render_single_int(event)
-    elif event.type == EffectType.MODIFY_SPEED:
-        line += "speed has " + render_single_int(event)
-    elif event.type == EffectType.ADD_EMBLEM:
-        if event.old_value:
-            line += f"emblem was updated to {render_emblem(event.new_value)}."
+            line += f"{record.subtype} resources have " + render_single_int(record)
+    elif record.type == EffectType.MODIFY_TURNS:
+        line += "remaining turns have " + render_single_int(record)
+    elif record.type == EffectType.MODIFY_SPEED:
+        line += "speed has " + render_single_int(record)
+    elif record.type == EffectType.ADD_EMBLEM:
+        if record.old_value:
+            line += f"emblem was updated to {render_emblem(record.new_value)}."
         else:
-            line = f"* {subj} gained the emblem {render_emblem(event.new_value)}"
-    elif event.type == EffectType.MODIFY_LOCATION:
+            line = f"* {subj} gained the emblem {render_emblem(record.new_value)}"
+    elif record.type == EffectType.MODIFY_LOCATION:
         if subj == "You":
             line = f"* {subj} are "
         else:
             line = f"* {subj} is "
-        line += f"now in hex {event.new_value}"
-    elif event.type == EffectType.MODIFY_JOB:
+        line += f"now in hex {record.new_value}"
+    elif record.type == EffectType.MODIFY_JOB:
         if subj == "You":
             line = f"* {subj} have "
         else:
             line = f"* {subj} has "
-        line += f"become a {event.new_value}"
-    elif event.type == EffectType.LEADERSHIP:
+        line += f"become a {record.new_value}"
+    elif record.type == EffectType.LEADERSHIP:
         if subj == "You":
             line = f"* {subj} have "
         else:
             line = f"* {subj} has "
-        if event.new_value:
+        if record.new_value:
             line += f"lost in a leadership challenge"
         else:
             line += f"survived a leadership challenge"
-    elif event.type == EffectType.START_TASK:
-        # in the event the project is the subject and the character is the
+    elif record.type == EffectType.START_TASK:
+        # in the record the project is the subject and the character is the
         # object, but we want to display it the other way around
-        if event.new_value == ch.name:
+        if record.new_value == ch.name:
             line = f"* You have "
         else:
-            line = f"* {event.new_value} has "
-        line += f"started the task {event.entity_name}"
-    elif event.type == EffectType.RETURN_TASK:
-        # in the event the project is the subject and the character is the
+            line = f"* {record.new_value} has "
+        line += f"started the task {record.entity_name}"
+    elif record.type == EffectType.RETURN_TASK:
+        # in the record the project is the subject and the character is the
         # object, but we want to display it the other way around
-        if event.new_value == ch.name:
+        if record.new_value == ch.name:
             line = f"* You have "
         else:
-            line = f"* {event.new_value} has "
-        line += f"returned the task {event.entity_name}"
+            line = f"* {record.new_value} has "
+        line += f"returned the task {record.entity_name}"
     else:
-        line += f"UNKNOWN EVENT TYPE: {event}"
+        line += f"UNKNOWN EVENT TYPE: {record}"
 
-    if event.comments:
-        line += " (" + ", ".join(event.comments) + ")"
+    if record.comments:
+        line += " (" + ", ".join(record.comments) + ")"
     line += "."
     return line
 
@@ -174,12 +174,12 @@ def render_effect(eff: Effect) -> str:
 
 def render_emblem(emblem: Emblem) -> str:
     ret = emblem.name
-    if emblem.feats:
-        ret += f" ({', '.join(render_feat(f) for f in emblem.feats)})"
+    if emblem.rules:
+        ret += f" ({', '.join(render_rule(f) for f in emblem.rules)})"
     return ret
 
 
-def render_feat(feat: Feat) -> str:
+def render_rule(rule: Rule) -> str:
     names = {
         HookType.INIT_SPEED: "init speed",
         HookType.INIT_TABLEAU_AGE: "tableau age",
@@ -191,7 +191,7 @@ def render_feat(feat: Feat) -> str:
         HookType.RELIABLE_SKILL: "reliability",
         HookType.MAX_RESOURCES: "resource limit",
     }
-    name = names.get(feat.hook, feat.hook.name)
-    if feat.subtype:
-        name = feat.subtype + " " + name
-    return f"{feat.value:+} {name}"
+    name = names.get(rule.hook, rule.hook.name)
+    if rule.subtype:
+        name = rule.subtype + " " + name
+    return f"{rule.value:+} {name}"

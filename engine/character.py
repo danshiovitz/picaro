@@ -56,8 +56,8 @@ from .types import (
     EncounterContextType,
     EncounterEffect,
     EntityType,
-    Event,
-    Feat,
+    Record,
+    Rule,
     FullCard,
     HookType,
     JobType,
@@ -93,8 +93,8 @@ class Character(Entity, ReadOnlyWrapper):
         lambda _vs: [LeadershipMetaField()],
         lambda _vs: [ModifyJobField()],
         lambda _vs: [ResourceDrawMetaField()],
-        lambda evs: SimpleDictIntEntityField.make_fields(
-            evs, "resources", "resources", EffectType.MODIFY_RESOURCES
+        lambda recs: SimpleDictIntEntityField.make_fields(
+            recs, "resources", "resources", EffectType.MODIFY_RESOURCES
         ),
         lambda _vs: [TransportField()],
         lambda _vs: [ModifyLocationField()],
@@ -118,8 +118,8 @@ class Character(Entity, ReadOnlyWrapper):
             SimpleIntEntityField("turns", "remaining_turns", EffectType.MODIFY_TURNS)
         ],
         lambda _vs: [SimpleIntEntityField("speed", "speed", EffectType.MODIFY_SPEED)],
-        lambda evs: SimpleDictIntEntityField.make_fields(
-            evs, "xp", "skill_xp", EffectType.MODIFY_XP
+        lambda recs: SimpleDictIntEntityField.make_fields(
+            recs, "xp", "skill_xp", EffectType.MODIFY_XP
         ),
         lambda _vs: [ModifyFreeXpField()],
     ]
@@ -160,7 +160,7 @@ class Character(Entity, ReadOnlyWrapper):
             type=EntityType.CHARACTER,
             location=location,
             actions=None,
-            events=[],
+            records=[],
         )
 
     @classmethod
@@ -264,17 +264,17 @@ class Character(Entity, ReadOnlyWrapper):
                 self._queue_encounter(card, context_type=EncounterContextType.TRAVEL)
                 self._data.turn_flags.add(TurnFlags.HAD_TRAVEL_ENCOUNTER)
 
-    def step(self, location: str, events: List[Event]) -> None:
+    def step(self, location: str, records: List[Record]) -> None:
         if self._data.speed < 1:
             raise IllegalMoveException(f"You don't have enough speed.")
 
         # moving and decreasing speed are normal effects, so we don't report them
-        # in events (this might be wrong, especially if we eventually want events
+        # in records (this might be wrong, especially if we eventually want records
         # to be a true undo log, but it makes the client easier for now)
         self._data.speed -= 1
         board = load_board()
         board.move_token(
-            self._data.name, location, adjacent=True, comments=["Travel"], events=[]
+            self._data.name, location, adjacent=True, comments=["Travel"], records=[]
         )
 
     def refill_tableau(self) -> None:
@@ -326,7 +326,7 @@ class Character(Entity, ReadOnlyWrapper):
         self._data.job_deck = self._data.job_deck[num_cards:]
 
     def turn_reset(self) -> None:
-        # these are all expected, so not reporting them in events
+        # these are all expected, so not reporting them in records
         self._data.remaining_turns -= 1
         self._data.turn_flags.clear()
         self._data.speed = self.get_init_speed()
@@ -420,15 +420,15 @@ class Character(Entity, ReadOnlyWrapper):
     ) -> int:
         tot = 0
         for emblem in self._data.emblems:
-            for feat in emblem.feats:
-                if feat.hook == hook_name:
+            for rule in emblem.rules:
+                if rule.hook == hook_name:
                     subtype_match = (
                         hook_subtype is None
-                        or feat.subtype is None
-                        or hook_subtype == feat.subtype
+                        or rule.subtype is None
+                        or hook_subtype == rule.subtype
                     )
                     if subtype_match:
-                        tot += feat.value
+                        tot += rule.value
         return tot
 
     def _make_job_deck(
@@ -529,14 +529,14 @@ class Character(Entity, ReadOnlyWrapper):
         job = load_job(job_name)
         deck = load_deck(job.deck_name)
 
-        # first emblem is empty (+xp), then others give reliable feat
+        # first emblem is empty (+xp), then others give reliable rule
         emblem_effects = [[]]
         for sk in deck.base_skills:
             emblem_effects.append(
-                [Feat(hook=HookType.RELIABLE_SKILL, subtype=sk, value=1)]
+                [Rule(hook=HookType.RELIABLE_SKILL, subtype=sk, value=1)]
             )
         emblems = [
-            Emblem(name=f"Veteran {job_name}", feats=ee) for ee in emblem_effects
+            Emblem(name=f"Veteran {job_name}", rules=ee) for ee in emblem_effects
         ]
         extra = [[] for ee in emblems]
         extra[0].append(Effect(type=EffectType.MODIFY_XP, subtype=None, value=10))
@@ -729,8 +729,8 @@ class LeadershipMetaField(IntEntityField):
 
     def _do_disrupt(self, entity: Entity, val: int) -> bool:
         job_msg, new_job, is_promo = entity._job_check(val)
-        self._events.append(
-            Event(
+        self._records.append(
+            Record(
                 make_id(),
                 self._entity.ENTITY_TYPE,
                 self._entity.name,
@@ -757,7 +757,7 @@ class LeadershipMetaField(IntEntityField):
                 Effect(EffectType.MODIFY_REPUTATION, -2, comment="leadership challenge")
             )
 
-        # we are handling the events ourselves
+        # we are handling the records ourselves
         return False
 
 
@@ -784,8 +784,8 @@ class ModifyJobField(EntityField):
                 comment="set from job switch",
             )
         )
-        self._events.append(
-            Event(
+        self._records.append(
+            Record(
                 make_id(),
                 self._entity.ENTITY_TYPE,
                 self._entity.name,
@@ -833,8 +833,8 @@ class ResourceDrawMetaField(IntEntityField):
                     comment=f"random pick {-cnt}",
                 )
             )
-        self._events.append(
-            Event(
+        self._records.append(
+            Record(
                 make_id(),
                 self._entity.ENTITY_TYPE,
                 self._entity.name,
@@ -861,8 +861,8 @@ class ResourceDrawMetaField(IntEntityField):
                     )
                 )
             comments.append(draw.name)
-        self._events.append(
-            Event(
+        self._records.append(
+            Record(
                 make_id(),
                 self._entity.ENTITY_TYPE,
                 self._entity.name,
@@ -899,7 +899,7 @@ class TransportField(IntEntityField):
             new_location,
             adjacent=False,
             comments=[f"random {tp_min}-{tp_max} hex transport"],
-            events=self._events,
+            records=self._records,
         )
 
 
@@ -918,7 +918,7 @@ class ModifyLocationField(EntityField):
             effect.value,
             adjacent=False,
             comments=[],
-            events=self._events,
+            records=self._records,
         )
 
 
@@ -956,14 +956,14 @@ class AddEmblemField(EntityField):
         if old_idxs:
             old_emblem = self._entity._data.emblems.pop(old_idxs[0])
             new_emblem = Emblem(
-                name=effect.value.name, feats=old_emblem.feats + effect.value.feats
+                name=effect.value.name, rules=old_emblem.rules + effect.value.rules
             )
         else:
             old_emblem = None
             new_emblem = effect.value
         self._entity._data.emblems.append(new_emblem)
-        self._events.append(
-            Event(
+        self._records.append(
+            Record(
                 make_id(),
                 self._entity.ENTITY_TYPE,
                 self._entity.name,

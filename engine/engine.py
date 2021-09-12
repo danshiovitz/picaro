@@ -36,7 +36,7 @@ from .types import (
     EncounterContextType,
     EncounterEffect,
     EntityType,
-    Event,
+    Record,
     Outcome,
     TemplateCard,
 )
@@ -158,8 +158,8 @@ class Engine:
 
                 # other requirements could be checked here
 
-                events: List[Event] = []
-                ch.apply_bargain(task.cost, events)
+                records: List[Record] = []
+                ch.apply_bargain(task.cost, records)
 
                 # if it's a challenge card, we discard a bunch of cards to refresh the
                 # deck faster, and get to the point where we're rebuilding the deck with
@@ -167,8 +167,8 @@ class Engine:
                 if task.type == TaskType.CHALLENGE:
                     ch.discard_job_cards(6)
 
-                task.start(ch.name, events)
-                return Outcome(events=events)
+                task.start(ch.name, records)
+                return Outcome(records=records)
 
     @with_connection()
     def return_task(
@@ -181,9 +181,9 @@ class Engine:
     ) -> Outcome:
         with Task.load(task_name) as task:
             with Character.load(character_name) as ch:
-                events: List[Event] = []
-                task.do_return(ch.name, events)
-                return Outcome(events=events)
+                records: List[Record] = []
+                task.do_return(ch.name, records)
+                return Outcome(records=records)
 
     @with_connection()
     def get_skills(
@@ -257,19 +257,19 @@ class Engine:
                         "You are already at your maximum number of active oracle requests."
                     )
 
-            events: List[Event] = []
+            records: List[Record] = []
             occ = self._get_oracle_cost(ch)
-            payment = self._eval_choices(occ, [], payment_selections, events)
-            ch.apply_bargain(payment, events)
+            payment = self._eval_choices(occ, [], payment_selections, records)
+            ch.apply_bargain(payment, records)
             id = Oracle.create(ch.name, payment, request)
-            return id, Outcome(events=events)
+            return id, Outcome(records=records)
 
     @with_connection()
     def answer_oracle(
         self,
         oracle_id: str,
         response: str,
-        proposal: List[Event],
+        proposal: List[Record],
         *,
         player_id: int,
         game_id: int,
@@ -277,9 +277,9 @@ class Engine:
     ) -> Outcome:
         with Oracle.load(oracle_id) as oracle:
             with Character.load(character_name) as ch:
-                events: List[Event] = []
+                records: List[Record] = []
                 oracle.answer(ch.name, response, proposal)
-                return Outcome(events=events)
+                return Outcome(records=records)
 
     @with_connection()
     def confirm_oracle(
@@ -293,25 +293,25 @@ class Engine:
     ) -> Outcome:
         with Oracle.load(oracle_id) as oracle:
             with Character.load(character_name) as ch:
-                events: List[Event] = []
+                records: List[Record] = []
                 if confirm:
-                    ch.apply_bargain(oracle.proposal, events)
+                    ch.apply_bargain(oracle.proposal, records)
                     oracle.finish(ch.name, confirm=True)
                 else:
                     oracle.finish(ch.name, confirm=False)
-                return Outcome(events=events)
+                return Outcome(records=records)
 
     @with_connection()
     def do_job(
         self, card_id: int, *, player_id: int, game_id: int, character_name: str
     ) -> Outcome:
         with Character.load(character_name) as ch:
-            events: List[Event] = []
+            records: List[Record] = []
             self._basic_action_prep(ch, consume_action=True)
             ch.queue_tableau_card(card_id)
             if ch.acted_this_turn() and not ch.encounters:
-                self._finish_turn(ch, events)
-            return Outcome(events=events)
+                self._finish_turn(ch, records)
+            return Outcome(records=records)
 
     @with_connection()
     def token_action(
@@ -324,7 +324,7 @@ class Engine:
         character_name: str,
     ) -> Outcome:
         with Character.load(character_name) as ch:
-            events: List[Event] = []
+            records: List[Record] = []
             self._basic_action_prep(ch, consume_action=False)
 
             board = load_board()
@@ -342,8 +342,8 @@ class Engine:
                 context_type=EncounterContextType.ACTION,
             )
             if ch.acted_this_turn() and not ch.encounters:
-                self._finish_turn(ch, events)
-            return Outcome(events=events)
+                self._finish_turn(ch, records)
+            return Outcome(records=records)
 
     def _action_to_template(
         self, action: Action, entity_type: EntityType, entity_name: str
@@ -360,12 +360,12 @@ class Engine:
     @with_connection()
     def camp(self, player_id: int, game_id: int, character_name: str) -> Outcome:
         with Character.load(character_name) as ch:
-            events: List[Event] = []
+            records: List[Record] = []
             self._basic_action_prep(ch, consume_action=True)
             ch.queue_camp_card()
             if ch.acted_this_turn() and not ch.encounters:
-                self._finish_turn(ch, events)
-            return Outcome(events=events)
+                self._finish_turn(ch, records)
+            return Outcome(records=records)
 
     @with_connection()
     def travel(
@@ -373,8 +373,8 @@ class Engine:
     ) -> Outcome:
         with Character.load(character_name) as ch:
             self._travel_prep(ch)
-            events: List[Event] = []
-            ch.step(step, events)
+            records: List[Record] = []
+            ch.step(step, records)
             board = load_board()
             new_loc = board.get_token_location(ch.name)
             with Task.load_for_character(ch.name) as current:
@@ -386,21 +386,21 @@ class Engine:
                                 new_loc,
                             )
                         ],
-                        events,
+                        records,
                     )
             ch.queue_travel_card(new_loc)
             if ch.acted_this_turn() and not ch.encounters:
-                self._finish_turn(ch, events)
-            return Outcome(events=events)
+                self._finish_turn(ch, records)
+            return Outcome(records=records)
 
     @with_connection()
     def end_turn(self, *, player_id: int, game_id: int, character_name: str) -> Outcome:
         with Character.load(character_name) as ch:
-            events: List[Event] = []
+            records: List[Record] = []
             self._basic_action_prep(ch, consume_action=True)
             if not ch.encounters:
-                self._finish_turn(ch, events)
-            return Outcome(events=events)
+                self._finish_turn(ch, records)
+            return Outcome(records=records)
 
     @with_connection()
     def resolve_encounter(
@@ -412,7 +412,7 @@ class Engine:
         character_name: str,
     ) -> Outcome:
         with Character.load(character_name) as ch:
-            events: List[Event] = []
+            records: List[Record] = []
 
             encounter = ch.pop_encounter()
             if encounter.card.checks:
@@ -423,11 +423,11 @@ class Engine:
                     actions,
                     encounter.card.entity_type,
                     encounter.card.entity_name,
-                    events,
+                    records,
                 )
             elif encounter.card.choices:
                 effects = self._eval_choices(
-                    encounter.card.choices, encounter.rolls, actions.choices, events
+                    encounter.card.choices, encounter.rolls, actions.choices, records
                 )
 
             effects = [
@@ -448,23 +448,23 @@ class Engine:
                 if entity_type == EntityType.CHARACTER:
                     if entity_name == ch.name:
                         if encounter.context_type == EncounterContextType.ACTION:
-                            ch.apply_bargain(cur_effects, events)
+                            ch.apply_bargain(cur_effects, records)
                         else:
-                            ch.apply_outcome(cur_effects, events)
+                            ch.apply_outcome(cur_effects, records)
                     else:
                         with Character.load(entity_name) as other_ch:
-                            other_ch.apply_outcome(cur_effects, events)
+                            other_ch.apply_outcome(cur_effects, records)
                 elif entity_type == EntityType.TASK:
                     with Task.load(entity_name) as task:
-                        task.apply_outcome(cur_effects, events)
+                        task.apply_outcome(cur_effects, records)
                 else:
                     raise Exception(
                         f"Unexpected entity in effect: {entity_type} {entity_name}"
                     )
 
             if ch.acted_this_turn() and not ch.encounters:
-                self._finish_turn(ch, events)
-            return Outcome(events=events)
+                self._finish_turn(ch, records)
+            return Outcome(records=records)
 
     def _basic_action_prep(self, ch: Character, consume_action: bool) -> None:
         if ch.encounters:
@@ -489,7 +489,7 @@ class Engine:
         actions: EncounterActions,
         entity_type: Optional[str],
         entity_name: Optional[str],
-        events: List[Event],
+        records: List[Record],
     ) -> List[Effect]:
         rolls = rolls[:]
 
@@ -618,7 +618,7 @@ class Engine:
         choices: Choices,
         rolls: List[int],
         selections: Dict[int, int],
-        events: List[Event],
+        records: List[Record],
     ) -> List[Effect]:
         if choices.is_random:
             rnd = defaultdict(int)
@@ -662,10 +662,10 @@ class Engine:
                 effects.extend(choice.cost)
         return effects
 
-    # currently we assume nothing in here adds to the current list of events,
+    # currently we assume nothing in here adds to the current list of records,
     # to avoid confusing the player when additional stuff shows up in the
     # outcome, but there's probably nothing strictly wrong if it did
-    def _finish_turn(self, ch: Character, events: List[Event]) -> None:
+    def _finish_turn(self, ch: Character, records: List[Record]) -> None:
         self._bad_reputation_check(ch)
         if ch.encounters:
             return
@@ -683,7 +683,7 @@ class Engine:
                             1,
                         )
                     ],
-                    events,
+                    records,
                 )
 
         ch.turn_reset()

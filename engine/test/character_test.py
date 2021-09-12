@@ -17,7 +17,7 @@ from picaro.engine.types import (
     EffectType,
     Emblem,
     EncounterContextType,
-    Feat,
+    Rule,
     HookType,
     JobType,
 )
@@ -86,13 +86,13 @@ class CharacterTest(TestCase):
         ch._data.skill_xp["Foo"] = 70
         emblem = Emblem(
             name="Foo Boost",
-            feats=[Feat(hook=HookType.SKILL_RANK, subtype="Foo", value=2)],
+            rules=[Rule(hook=HookType.SKILL_RANK, subtype="Foo", value=2)],
         )
         ch._data.emblems.append(emblem)
         self.assertEqual(ch.get_skill_rank("Foo"), 5)
         emblem = Emblem(
             name="Generic Boost",
-            feats=[Feat(hook=HookType.SKILL_RANK, subtype=None, value=2)],
+            rules=[Rule(hook=HookType.SKILL_RANK, subtype=None, value=2)],
         )
         ch._data.emblems.append(emblem)
         self.assertEqual(ch.get_skill_rank("Foo"), 6)  # capped at 6
@@ -102,10 +102,10 @@ class CharacterTest(TestCase):
         ch._data.coins = 3
 
         effects = [Effect(type=EffectType.MODIFY_COINS, value=1)]
-        events = []
-        outcome = ch.apply_outcome(effects, EncounterContextType.JOB, events)
+        records = []
+        outcome = ch.apply_outcome(effects, EncounterContextType.JOB, records)
         self.assertEqual(ch.coins, 4)
-        ec = [e for e in events if e.type == EffectType.MODIFY_COINS]
+        ec = [e for e in records if e.type == EffectType.MODIFY_COINS]
         self.assertEqual(len(ec), 1)
         self.assertEqual(ec[0].old_value, 3)
         self.assertEqual(ec[0].new_value, 4)
@@ -114,10 +114,10 @@ class CharacterTest(TestCase):
             Effect(type=EffectType.MODIFY_COINS, value=6),
             Effect(type=EffectType.MODIFY_COINS, value=4),
         ]
-        events = []
-        outcome = ch.apply_outcome(effects, EncounterContextType.JOB, events)
+        records = []
+        outcome = ch.apply_outcome(effects, EncounterContextType.JOB, records)
         self.assertEqual(ch.coins, 14)
-        ec = [e for e in events if e.type == EffectType.MODIFY_COINS]
+        ec = [e for e in records if e.type == EffectType.MODIFY_COINS]
         self.assertEqual(len(ec), 1)
         self.assertEqual(ec[0].old_value, 4)
         self.assertEqual(ec[0].new_value, 14)
@@ -129,9 +129,9 @@ class CharacterTest(TestCase):
             Effect(type=EffectType.MODIFY_XP, subtype="Fishing", value=3),
             Effect(type=EffectType.MODIFY_XP, subtype="Fishing", value=1),
         ]
-        events = []
-        outcome = ch.apply_outcome(effects, EncounterContextType.JOB, events)
-        ec = [e for e in events if e.type == EffectType.MODIFY_XP]
+        records = []
+        outcome = ch.apply_outcome(effects, EncounterContextType.JOB, records)
+        ec = [e for e in records if e.type == EffectType.MODIFY_XP]
         self.assertEqual(len(ec), 1)
         self.assertEqual(ec[0].subtype, "Fishing")
         self.assertEqual(ec[0].old_value, 0)
@@ -144,21 +144,21 @@ class CharacterTest(TestCase):
 
         emblem = Emblem(
             name="Speed Boost",
-            feats=[Feat(hook=HookType.INIT_SPEED, subtype=None, value=2)],
+            rules=[Rule(hook=HookType.INIT_SPEED, subtype=None, value=2)],
         )
         ch._data.emblems.append(emblem)
         self.assertEqual(ch.get_init_speed(), 5)
 
         emblem = Emblem(
             name="Speed Penalty",
-            feats=[Feat(hook=HookType.INIT_SPEED, subtype=None, value=-4)],
+            rules=[Rule(hook=HookType.INIT_SPEED, subtype=None, value=-4)],
         )
         ch._data.emblems.append(emblem)
         self.assertEqual(ch.get_init_speed(), 1)
 
         emblem = Emblem(
             name="Speed Penalty",
-            feats=[Feat(hook=HookType.INIT_SPEED, subtype=None, value=-3)],
+            rules=[Rule(hook=HookType.INIT_SPEED, subtype=None, value=-3)],
         )
         ch._data.emblems.append(emblem)
         self.assertEqual(ch.get_init_speed(), 0)

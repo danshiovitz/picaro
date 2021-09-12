@@ -137,7 +137,7 @@ class HookType(Enum):
 
 
 @dataclass(frozen=True)
-class Feat:
+class Rule:
     hook: HookType
     value: int
     subtype: Optional[str]
@@ -146,7 +146,7 @@ class Feat:
 @dataclass(frozen=True)
 class Emblem:
     name: str
-    feats: Sequence[Feat]
+    rules: Sequence[Rule]
 
 
 @dataclass(frozen=True)
@@ -322,7 +322,7 @@ class OracleStatus(Enum):
 
 
 @dataclass(frozen=True)
-class Event(Generic[T]):
+class Record(Generic[T]):
     id: str
     entity_type: EntityType
     entity_name: str
@@ -363,8 +363,8 @@ class Event(Generic[T]):
         old: T,
         new: T,
         comments: List[str],
-    ) -> "Event":
-        return Event[T](
+    ) -> "Record":
+        return Record[T](
             make_id(),
             EntityType.TOKEN,
             name,
@@ -384,8 +384,8 @@ class Event(Generic[T]):
         old: T,
         new: T,
         comments: List[str],
-    ) -> "Event":
-        return Event[T](
+    ) -> "Record":
+        return Record[T](
             make_id(), EntityType.CHARACTER, name, type, subtype, old, new, comments
         )
 
@@ -398,8 +398,8 @@ class Event(Generic[T]):
         old: T,
         new: T,
         comments: List[str],
-    ) -> "Event":
-        return Event[T](
+    ) -> "Record":
+        return Record[T](
             make_id(), EntityType.PROJECT, name, type, subtype, old, new, comments
         )
 
@@ -412,8 +412,8 @@ class Event(Generic[T]):
         old: T,
         new: T,
         comments: List[str],
-    ) -> "Event":
-        return Event[T](
+    ) -> "Record":
+        return Record[T](
             make_id(),
             EntityType.TASK,
             name,
@@ -427,7 +427,7 @@ class Event(Generic[T]):
 
 @dataclass(frozen=True)
 class Outcome:
-    events: Sequence[Event]
+    records: Sequence[Record]
 
 
 @dataclass(frozen=True)

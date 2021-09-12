@@ -4,7 +4,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 from picaro.common.utils import clamp
 
 from .exceptions import BadStateException, IllegalMoveException
-from .types import Effect, EffectType, EntityType, Event, make_id
+from .types import Effect, EffectType, EntityType, Record, make_id
 
 # the assumed usage of these classes is something like
 #   coins_maker = lambda: IntEntityField(EffectType.MODIFY_COINS, None, ...)
@@ -22,7 +22,7 @@ class EntityField:
         self,
         entity: "Entity",
         split_effects: Dict[Tuple[EntityType, Optional[str]], List[Effect]],
-        events: List[Event],
+        records: List[Record],
         enforce_costs: bool,
     ) -> None:
         effects = split_effects.pop((self._type, self._subtype), [])
@@ -30,7 +30,7 @@ class EntityField:
             return
         self._entity = entity
         self._split_effects = split_effects
-        self._events = events
+        self._records = records
         # put relative adjustments first just because it seems better ("set to 3, add 1" = 3, not 4)
         # sort by value at the end to get a consistent sort, and to ensure costs aren't paid by
         # stuff from this turn
@@ -96,10 +96,10 @@ class IntEntityField(EntityField):
         )
         if self._cur_value == self._init_value and not self._comments:
             return
-        add_event = self._set_v(self._entity, self._cur_value)
-        if add_event:
-            self._events.append(
-                Event(
+        add_record = self._set_v(self._entity, self._cur_value)
+        if add_record:
+            self._records.append(
+                Record(
                     make_id(),
                     self._entity.ENTITY_TYPE,
                     self._entity.name,
@@ -188,9 +188,9 @@ class Entity:
     def apply_outcome(
         self,
         effects: List[Effect],
-        events: List[Event],
+        records: List[Record],
     ) -> None:
-        self._apply_effects(effects, events, False)
+        self._apply_effects(effects, records, False)
 
     # This one is for when the character is doing a thing in exchange for another thing
     # (like trading a Steel resource for 5 xp). If the character has 3 coins, and this has
@@ -198,14 +198,14 @@ class Entity:
     def apply_bargain(
         self,
         effects: List[Effect],
-        events: List[Event],
+        records: List[Record],
     ) -> None:
-        self._apply_effects(effects, events, True)
+        self._apply_effects(effects, records, True)
 
     def _apply_effects(
         self,
         effects: List[Effect],
-        events: List[Event],
+        records: List[Record],
         enforce_costs: bool,
     ) -> None:
         effects_split = defaultdict(list)
@@ -215,6 +215,6 @@ class Entity:
         for field_func in self.FIELDS:
             for f in field_func(effects_split):
                 ffs.append((f._type, f._subtype))
-                f.apply_single(self, effects_split, events, enforce_costs)
+                f.apply_single(self, effects_split, records, enforce_costs)
         if effects_split:
             raise Exception(f"Effects remaining unprocessed ({ffs}): {effects_split}")

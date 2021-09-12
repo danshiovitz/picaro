@@ -19,7 +19,7 @@ from picaro.engine.project import (
 )
 from picaro.engine.snapshot import Hex, Token
 from picaro.engine.storage import ConnectionManager, with_connection
-from picaro.engine.types import Country, Effect, EffectType, EntityType, Event
+from picaro.engine.types import Country, Effect, EffectType, EntityType, Record
 
 
 class ProjectTest(TestCase):
@@ -82,14 +82,14 @@ class ProjectTest(TestCase):
         with Task.load("Operation Meatloaf Task 1") as task:
             self.assertEqual(task.status, TaskStatus.UNASSIGNED)
             self.assertEqual(task.xp, 0)
-            events: List[Event] = []
-            task.apply_outcome([Effect(type=EffectType.TIME_PASSES, value=1)], events)
+            records: List[Record] = []
+            task.apply_outcome([Effect(type=EffectType.TIME_PASSES, value=1)], records)
             self.assertEqual(task.xp, 1)
             self.assertEqual(task.status, TaskStatus.UNASSIGNED)
             self.assertEqual(task.max_xp, 25)
             for _ in range(100):
                 task.apply_outcome(
-                    [Effect(type=EffectType.TIME_PASSES, value=1)], events
+                    [Effect(type=EffectType.TIME_PASSES, value=1)], records
                 )
             self.assertEqual(task.extra.turns_waited, 101)
             self.assertEqual(task.xp, task.max_xp)
@@ -107,10 +107,10 @@ class ProjectTest(TestCase):
         with Task.load("Operation Meatloaf Task 1") as task:
             self.assertEqual(task.status, TaskStatus.UNASSIGNED)
             self.assertEqual(task.xp, 0)
-            events: List[Event] = []
+            records: List[Record] = []
             task.apply_outcome(
                 [Effect(type=EffectType.MODIFY_RESOURCES, subtype="Stone", value=1)],
-                events,
+                records,
             )
             self.assertEqual(task.xp, 5)
             task.apply_outcome(
@@ -118,19 +118,19 @@ class ProjectTest(TestCase):
                     Effect(type=EffectType.MODIFY_RESOURCES, subtype="Stone", value=2),
                     Effect(type=EffectType.MODIFY_RESOURCES, subtype="Timber", value=1),
                 ],
-                events,
+                records,
             )
             self.assertEqual(task.xp, 20)
             with self.assertRaises(IllegalMoveException):
                 task.apply_outcome(
                     [Effect(type=EffectType.MODIFY_RESOURCES, subtype="Wine", value=1)],
-                    events,
+                    records,
                 )
             self.assertEqual(task.status, TaskStatus.UNASSIGNED)
             self.assertEqual(task.max_xp, 25)
             task.apply_outcome(
                 [Effect(type=EffectType.MODIFY_RESOURCES, subtype="Timber", value=10)],
-                events,
+                records,
             )
             self.assertEqual(task.extra.given_resources, {"Stone": 3, "Timber": 11})
             self.assertEqual(task.xp, task.max_xp)
@@ -148,34 +148,34 @@ class ProjectTest(TestCase):
         with Task.load("Operation Meatloaf Task 1") as task:
             self.assertEqual(task.status, TaskStatus.UNASSIGNED)
             self.assertEqual(task.xp, 0)
-            events: List[Event] = []
+            records: List[Record] = []
 
             wrong_guesses = task.extra.possible_hexes - set(task.extra.secret_hex)
             possible_size = len(task.extra.possible_hexes)
 
             for wrong in wrong_guesses:
                 task.apply_outcome(
-                    [Effect(type=EffectType.EXPLORE, value=wrong)], events
+                    [Effect(type=EffectType.EXPLORE, value=wrong)], records
                 )
                 self.assertEqual(task.xp, 0)
                 self.assertEqual(len(task.extra.possible_hexes), possible_size - 1)
                 self.assertEqual(task.extra.explored_hexes, {wrong})
-                self.assertEqual(events, [])
+                self.assertEqual(records, [])
                 break
 
-            task.apply_outcome([Effect(type=EffectType.EXPLORE, value="ZZ11")], events)
+            task.apply_outcome([Effect(type=EffectType.EXPLORE, value="ZZ11")], records)
             self.assertEqual(task.xp, 0)
             self.assertEqual(
                 len(task.extra.possible_hexes), possible_size - 1
             )  # did not decrement
             self.assertEqual(len(task.extra.explored_hexes), 1)  # did not increment
-            self.assertEqual(events, [])
+            self.assertEqual(records, [])
 
             task.apply_outcome(
-                [Effect(type=EffectType.EXPLORE, value=task.extra.secret_hex)], events
+                [Effect(type=EffectType.EXPLORE, value=task.extra.secret_hex)], records
             )
             self.assertEqual(task.xp, task.max_xp)
-            self.assertEqual(len(events), 1)
+            self.assertEqual(len(records), 1)
             self.assertEqual(task.status, TaskStatus.FINISHED)
 
         with Task.load("Operation Meatloaf Task 1") as task:
@@ -190,18 +190,18 @@ class ProjectTest(TestCase):
         with Task.load("Operation Meatloaf Task 1") as task:
             self.assertEqual(task.status, TaskStatus.UNASSIGNED)
             self.assertEqual(task.xp, 0)
-            events: List[Event] = []
+            records: List[Record] = []
 
-            task.apply_outcome([Effect(type=EffectType.MODIFY_XP, value=3)], events)
+            task.apply_outcome([Effect(type=EffectType.MODIFY_XP, value=3)], records)
             self.assertEqual(task.xp, 3)
             self.assertEqual(task.status, TaskStatus.UNASSIGNED)
 
-            task.apply_outcome([Effect(type=EffectType.MODIFY_XP, value=-5)], events)
+            task.apply_outcome([Effect(type=EffectType.MODIFY_XP, value=-5)], records)
             self.assertEqual(task.xp, 0)
             self.assertEqual(task.status, TaskStatus.UNASSIGNED)
 
             self.assertEqual(task.max_xp, 25)
-            task.apply_outcome([Effect(type=EffectType.MODIFY_XP, value=25)], events)
+            task.apply_outcome([Effect(type=EffectType.MODIFY_XP, value=25)], records)
             self.assertEqual(task.xp, task.max_xp)
             self.assertEqual(task.status, TaskStatus.FINISHED)
 

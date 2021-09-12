@@ -10,7 +10,7 @@ from unittest import TestCase, main
 from picaro.engine.exceptions import IllegalMoveException
 from picaro.engine.oracle import Oracle
 from picaro.engine.storage import ConnectionManager, with_connection
-from picaro.engine.types import Effect, EffectType, Event, OracleStatus
+from picaro.engine.types import Effect, EffectType, Record, OracleStatus
 
 
 class OracleTest(TestCase):

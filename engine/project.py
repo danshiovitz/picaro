@@ -45,7 +45,7 @@ from .types import (
     EffectType,
     EncounterEffect,
     EntityType,
-    Event,
+    Record,
     TaskStatus,
     TaskType,
     ProjectStatus,
@@ -58,7 +58,7 @@ from .types import (
 class Task(Entity, ReadOnlyWrapper):
     ENTITY_TYPE = EntityType.TASK
     FIELDS = [
-        lambda evs: ModifyResourcesMetaField.make_fields(evs),
+        lambda recs: ModifyResourcesMetaField.make_fields(recs),
         lambda _vs: [TimePassesMetaField()],
         lambda _vs: [ExploreHexMetaField()],
         # project tasks don't have subtype for xp, unlike characters
@@ -232,13 +232,13 @@ class Task(Entity, ReadOnlyWrapper):
             extra=snapshot_extra,
         )
 
-    def start(self, character_name: str, events: List[Event]) -> None:
+    def start(self, character_name: str, records: List[Record]) -> None:
         if self.status != TaskStatus.UNASSIGNED:
             raise BadStateException(f"Task is in {self.status.name}, not unassigned")
         self._data.participants = [character_name]
         self._data.status = TaskStatus.IN_PROGRESS
-        events.append(
-            Event.for_task(
+        records.append(
+            Record.for_task(
                 self.name,
                 EffectType.START_TASK,
                 None,
@@ -248,14 +248,14 @@ class Task(Entity, ReadOnlyWrapper):
             )
         )
 
-    def do_return(self, character_name: str, events: List[Event]) -> None:
+    def do_return(self, character_name: str, records: List[Record]) -> None:
         if self.status != TaskStatus.IN_PROGRESS:
             raise BadStateException(f"Task is in {self.status.name}, not in progress")
         self._data.participants.remove(character_name)
         if not self._data.participants:
             self._data.status = TaskStatus.UNASSIGNED
-        events.append(
-            Event.for_task(
+        records.append(
+            Record.for_task(
                 self.name,
                 EffectType.RETURN_TASK,
                 None,
@@ -354,7 +354,7 @@ class ModifyResourcesMetaField(IntEntityField):
             )
         )
 
-        # generate a regular event for the project gaining resources
+        # generate a regular record for the project gaining resources
         return True
 
     @classmethod
@@ -440,7 +440,7 @@ class ModifyXpField(IntEntityField):
         entity._data.xp = val
         if entity._data.xp == entity._data.max_xp:
             entity._data.status = TaskStatus.FINISHED
-        return True  # just generate the standard event
+        return True  # just generate the standard record
 
 
 def load_project_type(name: str) -> ProjectType:
@@ -477,7 +477,7 @@ class Project(ReadOnlyWrapper):
                     choices=Choices.make_special(type=SpecialChoiceType.DELIVER),
                 ),
             ],
-            events=[],
+            records=[],
         )
 
     @classmethod

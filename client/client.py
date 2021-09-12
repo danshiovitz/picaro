@@ -33,7 +33,7 @@ from picaro.server.api_types import *
 from .common import BadStateException, IllegalMoveException
 from .generate import generate_game_v2
 from .read import ComplexReader, read_selections, read_text
-from .render import render_effect, render_emblem, render_encounter_effect, render_event
+from .render import render_effect, render_emblem, render_encounter_effect, render_record
 
 S = TypeVar("S")
 T = TypeVar("T")
@@ -158,9 +158,7 @@ class Client:
                 print(line)
 
         else:
-            for line in self._make_small_map(
-                ch, board, show_country=self.args.country
-            ):
+            for line in self._make_small_map(ch, board, show_country=self.args.country):
                 print(line)
 
         if board.tokens:
@@ -340,8 +338,8 @@ class Client:
                         ]
 
                     resp = self._post(*pargs)
-                    if resp.outcome.events:
-                        self._display_events(ch, resp.outcome.events)
+                    if resp.outcome.records:
+                        self._display_records(ch, resp.outcome.records)
                         print("[Hit return]")
                         input()
                     return
@@ -367,8 +365,8 @@ class Client:
             print()
             return False
 
-        if resp.outcome.events:
-            self._display_events(ch, resp.outcome.events)
+        if resp.outcome.records:
+            self._display_records(ch, resp.outcome.records)
             print("[Hit return]")
             input()
         else:
@@ -427,8 +425,8 @@ class Client:
             print()
             return False
 
-        if resp.outcome.events:
-            self._display_events(ch, resp.outcome.events)
+        if resp.outcome.records:
+            self._display_records(ch, resp.outcome.records)
             print("[Hit return]")
             input()
         else:
@@ -497,8 +495,8 @@ class Client:
             print()
             return False
 
-        if resp.outcome.events:
-            self._display_events(ch, resp.outcome.events)
+        if resp.outcome.records:
+            self._display_records(ch, resp.outcome.records)
             print("[Hit return]")
             input()
         else:
@@ -707,8 +705,8 @@ class Client:
             print()
             return False
 
-        if resp.outcome.events:
-            self._display_events(ch, resp.outcome.events)
+        if resp.outcome.records:
+            self._display_records(ch, resp.outcome.records)
             print("[Hit return]")
             input()
             return True
@@ -735,8 +733,8 @@ class Client:
             print(e)
             print()
             return False
-        if resp.outcome.events:
-            self._display_events(ch, resp.outcome.events)
+        if resp.outcome.records:
+            self._display_records(ch, resp.outcome.records)
             print("[Hit return]")
             input()
             return True
@@ -749,8 +747,8 @@ class Client:
             print(e)
             print()
             return False
-        if resp.outcome.events:
-            self._display_events(ch, resp.outcome.events)
+        if resp.outcome.records:
+            self._display_records(ch, resp.outcome.records)
             print("[Hit return]")
             input()
             return True
@@ -791,7 +789,7 @@ class Client:
             return False
         print()
         print(f"The outcome of your encounter:")
-        self._display_events(ch, resp.outcome.events)
+        self._display_records(ch, resp.outcome.records)
         print("[Hit return]")
         input()
         return True
@@ -885,12 +883,12 @@ class Client:
             choices={k: v for k, v in selections.items() if v > 0},
         )
 
-    def _display_events(self, ch: Character, events: List[Event]) -> None:
-        if not events:
+    def _display_records(self, ch: Character, records: List[Record]) -> None:
+        if not records:
             return
 
-        for event in events:
-            print(render_event(ch, event))
+        for record in records:
+            print(render_record(ch, record))
 
     def _travel(self, dirs: str, ch: Character) -> bool:
         if not dirs:
@@ -951,8 +949,8 @@ class Client:
                 print()
                 return False
             ch = self._get(f"/character", Character)
-            if resp.outcome.events:
-                self._display_events(ch, resp.outcome.events)
+            if resp.outcome.records:
+                self._display_records(ch, resp.outcome.records)
                 print("[Hit return]")
                 input()
                 return True
@@ -971,8 +969,8 @@ class Client:
             print(e)
             print()
             return False
-        if resp.outcome.events:
-            self._display_events(ch, resp.outcome.events)
+        if resp.outcome.records:
+            self._display_records(ch, resp.outcome.records)
             print("[Hit return]")
             input()
             return True

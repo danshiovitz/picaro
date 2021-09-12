@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, TypeVar
 from picaro.server.api_types import *
 
 from .common import IllegalMoveException
-from .render import render_effect, render_feat
+from .render import render_effect, render_rule
 
 
 def read_text(prompt: str, textbox: bool = False) -> str:
@@ -46,7 +46,7 @@ def read_text(prompt: str, textbox: bool = False) -> str:
 #   discovery start=AD12
 # > add emblem
 # What's the name of the emblem? Lord of the Hats
-# What feats does the emblem provide?
+# What rules does the emblem provide?
 # > modify search skill +1
 # > done
 
@@ -172,57 +172,57 @@ class ComplexReader:
             prompt, init, self.default_entity, effect_choices, render_effect
         )
 
-    def read_feats(
+    def read_rules(
         self,
         prompt: str,
-        init: List[Feat],
-    ) -> List[Feat]:
+        init: List[Rule],
+    ) -> List[Rule]:
         skills = self.skills
-        feat_choices = [
+        rule_choices = [
             (
                 "Modify init tableau age <amount>",
-                lambda ln, e: self._lparse_feat(HookType.INIT_TABLEAU_AGE, e, ln),
+                lambda ln, e: self._lparse_rule(HookType.INIT_TABLEAU_AGE, e, ln),
             ),
             (
                 "Modify init turns <amount>",
-                lambda ln, e: self._lparse_feat(HookType.INIT_TURNS, e, ln),
+                lambda ln, e: self._lparse_rule(HookType.INIT_TURNS, e, ln),
             ),
             (
                 "Modify max health <amount>",
-                lambda ln, e: self._lparse_feat(HookType.MAX_HEALTH, e, ln),
+                lambda ln, e: self._lparse_rule(HookType.MAX_HEALTH, e, ln),
             ),
             (
                 "Modify max luck <amount>",
-                lambda ln, e: self._lparse_feat(HookType.MAX_LUCK, e, ln),
+                lambda ln, e: self._lparse_rule(HookType.MAX_LUCK, e, ln),
             ),
             (
                 "Modify max tableau size <amount>",
-                lambda ln, e: self._lparse_feat(HookType.MAX_TABLEAU_SIZE, e, ln),
+                lambda ln, e: self._lparse_rule(HookType.MAX_TABLEAU_SIZE, e, ln),
             ),
             (
                 "Modify skill rank <amount> <skill>",
-                lambda ln, e: self._lparse_feat(
+                lambda ln, e: self._lparse_rule(
                     HookType.SKILL_RANK, e, ln, subtypes=skills
                 ),
             ),
             (
                 "Modify skill reliability <amount> <skill>",
-                lambda ln, e: self._lparse_feat(
+                lambda ln, e: self._lparse_rule(
                     HookType.RELIABLE_SKILL, e, ln, subtypes=skills
                 ),
             ),
             (
                 "Modify init speed <amount>",
-                lambda ln, e: self._lparse_feat(HookType.INIT_SPEED, e, ln),
+                lambda ln, e: self._lparse_rule(HookType.INIT_SPEED, e, ln),
             ),
             (
                 "Modify resource limit <amount>",
-                lambda ln, e: self._lparse_feat(HookType.MAX_RESOURCES, e, ln),
+                lambda ln, e: self._lparse_rule(HookType.MAX_RESOURCES, e, ln),
             ),
         ]
 
         return self._read_complex(
-            prompt, init, self.default_entity, feat_choices, render_feat
+            prompt, init, self.default_entity, rule_choices, render_rule
         )
 
     def _read_complex(
@@ -374,10 +374,10 @@ class ComplexReader:
         line: str,
     ) -> Tuple[Emblem, str]:
         name, line = self._lparse_str("name", line)
-        feats = self.read_feats("Enter feats for this emblem:", [])
-        return Emblem(name, feats), line
+        rules = self.read_rules("Enter rules for this emblem:", [])
+        return Emblem(name, rules), line
 
-    def _lparse_feat(
+    def _lparse_rule(
         self,
         hook_type: HookType,
         ent: Optional[Tuple[EntityType, str]],
@@ -391,7 +391,7 @@ class ComplexReader:
         else:
             subtype = None
         return (
-            Feat(
+            Rule(
                 hook=hook_type,
                 value=val,
                 subtype=subtype,

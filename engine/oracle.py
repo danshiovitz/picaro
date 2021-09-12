@@ -6,7 +6,7 @@ from .exceptions import BadStateException, IllegalMoveException
 from .game import load_game
 from .snapshot import Oracle as snapshot_Oracle
 from .storage import ObjectStorageBase, ReadOnlyWrapper
-from .types import Effect, Event, OracleStatus, make_id
+from .types import Effect, Record, OracleStatus, make_id
 
 
 class Oracle(ReadOnlyWrapper):
@@ -80,7 +80,9 @@ class Oracle(ReadOnlyWrapper):
             proposal=self.proposal,
         )
 
-    def answer(self, character_name: str, response: str, proposal: List[Event]) -> None:
+    def answer(
+        self, character_name: str, response: str, proposal: List[Record]
+    ) -> None:
         if self.status != OracleStatus.WAITING:
             raise BadStateException(f"This oracle is in {self.state.name}, not waiting")
         if self.petitioner == character_name:
@@ -91,7 +93,7 @@ class Oracle(ReadOnlyWrapper):
         self._data.status = OracleStatus.ANSWERED
 
     # note we don't execute the proposal here, we do it in the engine
-    # (to avoid a circular dependency around the apply-event code)
+    # (to avoid a circular dependency around the apply-record code)
     def finish(self, character_name: str, confirm: bool) -> None:
         if self.status != OracleStatus.ANSWERED:
             raise BadStateException(

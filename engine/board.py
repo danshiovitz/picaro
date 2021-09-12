@@ -23,7 +23,7 @@ from .types import (
     EffectType,
     EncounterContextType,
     EntityType,
-    Event,
+    Record,
     FullCard,
     ResourceCard,
     TemplateCard,
@@ -58,7 +58,7 @@ class ActiveBoard:
         type: EntityType,
         location: str,
         actions: Optional[Sequence[Action]],
-        events: List[Event],
+        records: List[Record],
     ) -> None:
         found = False
         try:
@@ -75,7 +75,7 @@ class ActiveBoard:
         )
         # this validates location so we don't have to:
         self.move_token(
-            name, location, adjacent=False, comments=["Token created"], events=events
+            name, location, adjacent=False, comments=["Token created"], records=records
         )
 
     def remove_token(self, token_name: str) -> None:
@@ -88,7 +88,7 @@ class ActiveBoard:
         to: str,
         adjacent: bool,
         comments: List[str],
-        events: List[Event],
+        records: List[Record],
     ) -> None:
         token = TokenStorage.load_by_name(token_name)
         if to == self.NOWHERE:
@@ -113,8 +113,8 @@ class ActiveBoard:
 
         token = dataclasses.replace(token, location=to)
         TokenStorage.update(token)
-        events.append(
-            Event(
+        records.append(
+            Record(
                 make_id(),
                 token.type,
                 token.name,
@@ -248,9 +248,7 @@ class ActiveBoard:
 
     def draw_resource_card(self, hex_name: str) -> ResourceCard:
         hx = HexStorage.load_by_name(hex_name)
-        resource_deck = ResourceDeckStorage.maybe_load_by_country(
-            hx.country
-        )
+        resource_deck = ResourceDeckStorage.maybe_load_by_country(hx.country)
         if resource_deck is None:
             resource_deck = ResourceDeck(country=hx.country, deck=[])
             ResourceDeckStorage.insert(resource_deck)
@@ -445,9 +443,7 @@ class ResourceDeckStorage(ObjectStorageBase[ResourceDeck]):
         return cls._select_helper([], {})
 
     @classmethod
-    def maybe_load_by_country(
-        cls, country: str
-    ) -> Optional[ResourceDeck]:
+    def maybe_load_by_country(cls, country: str) -> Optional[ResourceDeck]:
         decks = cls._select_helper(
             ["country = :country"],
             {"country": country},
