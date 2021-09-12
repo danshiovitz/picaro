@@ -52,7 +52,6 @@ class ProjectTest(TestCase):
                         coordinate=coord,
                         terrain="Plains",
                         country="Alpha",
-                        region="1",
                         danger=2,
                     )
                 )

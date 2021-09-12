@@ -229,7 +229,6 @@ class ActiveBoard:
             name=hx.name,
             terrain=hx.terrain,
             country=hx.country,
-            region=hx.region,
             coordinate=CubeCoordinate(x=hx.x, y=hx.y, z=hx.z).to_offset(),
             danger=hx.danger,
         )
@@ -249,19 +248,19 @@ class ActiveBoard:
 
     def draw_resource_card(self, hex_name: str) -> ResourceCard:
         hx = HexStorage.load_by_name(hex_name)
-        resource_deck = ResourceDeckStorage.maybe_load_by_country_region(
-            hx.country, hx.region
+        resource_deck = ResourceDeckStorage.maybe_load_by_country(
+            hx.country
         )
         if resource_deck is None:
-            resource_deck = ResourceDeck(country=hx.country, region=hx.region, deck=[])
+            resource_deck = ResourceDeck(country=hx.country, deck=[])
             ResourceDeckStorage.insert(resource_deck)
         if not resource_deck.deck:
-            resource_deck.deck = self._make_resource_deck(hx.country, hx.region)
+            resource_deck.deck = self._make_resource_deck(hx.country)
         card = resource_deck.deck.pop(0)
         ResourceDeckStorage.update(resource_deck)
         return card
 
-    def _make_resource_deck(self, country: str, region: str) -> List[ResourceCard]:
+    def _make_resource_deck(self, country: str) -> List[ResourceCard]:
         countries = CountryStorage.load()
         resources = set(load_game().resources)
 
@@ -310,7 +309,6 @@ def _translate_from_snapshot_hex(hx: snapshot_Hex) -> "Hex":
         name=hx.name,
         terrain=hx.terrain,
         country=hx.country,
-        region=hx.region,
         x=cube.x,
         y=cube.y,
         z=cube.z,
@@ -333,7 +331,6 @@ class Hex:
     name: str
     terrain: str
     country: str
-    region: str
     x: int
     y: int
     z: int
@@ -354,7 +351,6 @@ class HexDeck:
 @dataclass
 class ResourceDeck:
     country: str
-    region: str
     deck: List[ResourceCard]
 
 
@@ -442,19 +438,19 @@ class HexDeckStorage(ObjectStorageBase[HexDeck]):
 
 class ResourceDeckStorage(ObjectStorageBase[ResourceDeck]):
     TABLE_NAME = "resource_deck"
-    PRIMARY_KEYS = {"country", "region"}
+    PRIMARY_KEYS = {"country"}
 
     @classmethod
     def load(cls) -> List[ResourceDeck]:
         return cls._select_helper([], {})
 
     @classmethod
-    def maybe_load_by_country_region(
-        cls, country: str, region: str
+    def maybe_load_by_country(
+        cls, country: str
     ) -> Optional[ResourceDeck]:
         decks = cls._select_helper(
-            ["country = :country", "region = :region"],
-            {"country": country, "region": region},
+            ["country = :country"],
+            {"country": country},
         )
         if not decks:
             return None

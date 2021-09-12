@@ -63,7 +63,6 @@ class Client:
         get_board_parser = subparsers.add_parser("board")
         get_board_parser.set_defaults(cmd=lambda cli: cli.get_board())
         get_board_parser.add_argument("--country", "--countries", action="store_true")
-        get_board_parser.add_argument("--region", "--regions", action="store_true")
         get_board_parser.add_argument("--large", action="store_true")
         get_board_parser.add_argument("--center", type=str, default=None)
 
@@ -136,7 +135,7 @@ class Client:
                 color, symbol = self.terrains[hx.terrain]
                 body1 = hx.name + " "
                 body2 = (hx.country + "     ")[0:5]
-                body2 = body2[0:4] + hx.region[0]
+                body2 = body2[0:5]
 
                 if hx.name in tokens:
                     body2 = (
@@ -160,7 +159,7 @@ class Client:
 
         else:
             for line in self._make_small_map(
-                ch, board, show_country=self.args.country, show_region=self.args.region
+                ch, board, show_country=self.args.country
             ):
                 print(line)
 
@@ -176,19 +175,11 @@ class Client:
                 ccount[hx.country] += 1
             print(sorted(ccount.items()))
 
-        if self.args.region:
-            rcount: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
-            for hx in board.hexes:
-                rcount[hx.country][hx.region] += 1
-            for ct, rs in rcount.items():
-                print(f"{ct}: {sorted(rs.items())}")
-
     def _make_small_map(
         self,
         ch: Character,
         board: Board,
         show_country: bool = False,
-        show_region: bool = False,
         center: Optional[OffsetCoordinate] = None,
         radius: int = 2,
         encounters: Optional[Set[str]] = None,
@@ -230,8 +221,6 @@ class Client:
             color, symbol = self.terrains[hx.terrain]
             if show_country:
                 symbol = hx.country[0]
-            elif show_region:
-                symbol = hx.region[0]
             return color + rev + symbol + colors.reset
 
         return render_simple(set(coords), 1, display, center=center, radius=radius)

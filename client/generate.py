@@ -174,7 +174,6 @@ def generate(
             coordinate=coord,
             terrain=terrain[coord],
             country=random.choice(Countries),
-            region=str(random.choice(range(6)) + 1),
             danger=1,
         )
 
@@ -346,7 +345,6 @@ def generate_from_mini(
     neighbors_map = calc_offset_neighbor_map(num_rows, num_columns)
     _adjust_terrain(terrain, neighbors_map)
     country_map, capitol_coords = _make_country_map(terrain, neighbors_map)
-    region_map = _make_region_map(country_map, neighbors_map)
     cap_set = {c for c in capitol_coords}
     country_data = {}
 
@@ -359,7 +357,6 @@ def generate_from_mini(
             coordinate=coord,
             terrain=terrain[coord],
             country=country_map[coord],
-            region=region_map[coord],
             danger=2,
         )
 
@@ -512,56 +509,6 @@ def _make_country_map(
             ret[c] = "Wild"
 
     return ret, best_capitols
-
-
-def _make_region_map(
-    country_map: Dict[OffsetCoordinate, str],
-    neighbors_map: Dict[OffsetCoordinate, Set[OffsetCoordinate]],
-) -> Dict[OffsetCoordinate, str]:
-    ret = {c: "Unassigned" for c in country_map}
-
-    countries = set(country_map.values())
-
-    for ctry in countries:
-        best_score = -9999
-        best_assignment = None
-
-        for _ in range(10):
-            unassigned = {
-                c
-                for c, n in ret.items()
-                if n == "Unassigned" and country_map[c] == ctry
-            }
-            if ctry != "Wild":
-                regions = [str(i + 1) for i in range(6)]
-                if len(unassigned) <= len(regions) * 2:
-                    print(f"Too few unassigned items: {len(unassigned)}")
-                    continue
-                capitols = dict(zip(random.sample(unassigned, len(regions)), regions))
-            else:
-                groups = _find_contiguous(unassigned, neighbors_map)
-                capitols = {}
-                for grp in groups:
-                    num_pick = max(len(grp) // 50, 1)
-                    locs = random.sample(grp, num_pick)
-                    for loc in locs:
-                        capitols[loc] = str(len(capitols) + 1)
-
-            assignment = _assign_countries(unassigned, capitols, neighbors_map)
-            score = _score_assignment(assignment)
-            if best_assignment is None or score > best_score:
-                best_score = score
-                best_assignment = assignment
-
-        assert best_assignment is not None
-        for c, n in best_assignment.items():
-            ret[c] = n
-
-    for c in ret:
-        if ret[c] == "Unassigned":
-            ret[c] = "Wild"
-
-    return ret
 
 
 def _find_area(

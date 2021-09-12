@@ -28,7 +28,6 @@ class Hex:
     coordinate: OffsetCoordinate
     terrain: str
     country: str
-    region: str
     danger: int
 
 
