@@ -289,9 +289,7 @@ class Client:
                 if task.desc:
                     print(f"    {task.desc}")
                 if task.type == TaskType.CHALLENGE:
-                    print(
-                        f"    Skills: {', '.join(sorted(task.extra.base_skills))}; Difficulty: {task.extra.difficulty}"
-                    )
+                    print(f"    Skills: {', '.join(sorted(task.extra.skills))}")
                 elif task.type == TaskType.RESOURCE:
                     print(
                         f"    Wanted: {', '.join(sorted(task.extra.wanted_resources))}; Given: {task.extra.given_resources}"
@@ -544,17 +542,21 @@ class Client:
     def _play_turn(self) -> None:
         while True:
             ch = self._get(f"/character", Character)
-            if ch.encounters:
+            if ch.encounter:
                 print()
                 self._encounter(ch)
                 print()
                 continue
-            if not ch.acted_this_turn and ch.remaining_turns > 0:
+            if ch.acted_this_turn and ch.speed == 0:
+                print("[Ending the turn.]")
+                self._end_turn(ch)
+                continue
+
+            if ch.remaining_turns > 0:
                 self._display_play(ch)
                 self._input_play_action()
                 continue
-            if ch.remaining_turns <= 0:
-                self._display_play(ch)
+            self._display_play(ch)
             return
 
     def _display_play(self, ch: Character) -> None:
@@ -591,7 +593,7 @@ class Client:
                 display.append(
                     f"{ascii_lowercase[idx]}. ({card.age}) {card.name} [{card.location} {dist(card.route)}]:"
                 )
-                if card.type == EncounterType.CHALLENGE:
+                if card.type == FullCardType.CHALLENGE:
                     display.append(f"       {self._check_str(card.data[0], ch)}")
                 else:
                     display.append("")
@@ -640,7 +642,7 @@ class Client:
     def _input_play_action(self) -> bool:
         while True:
             ch = self._get(f"/character", Character)
-            if ch.encounters:
+            if ch.encounter:
                 return False
             print("Action? ", end="")
             line = input().lower().strip()
@@ -692,7 +694,7 @@ class Client:
         # if we didn't make it to the card's location uneventfully,
         # then exit to let the player deal with the encounter and
         # perhaps then make another choice for their main action
-        if ch.location != card.location or ch.encounters:
+        if ch.location != card.location or ch.encounter:
             # return true to force input play method to exit also
             return True
 
@@ -721,7 +723,7 @@ class Client:
         # if we didn't make it to the token's location uneventfully,
         # then exit to let the player deal with the encounter and
         # perhaps then make another choice for their main action
-        if ch.location != token.location or ch.encounters:
+        if ch.location != token.location or ch.encounter:
             # return true to force input play method to exit also
             return True
 
@@ -758,24 +760,24 @@ class Client:
         return True
 
     def _encounter(self, ch: Character) -> bool:
-        line = ch.encounters[0].name
-        if ch.encounters[0].signs:
-            signs = ", ".join(ch.encounters[0].signs)
+        line = ch.encounter.name
+        if ch.encounter.signs:
+            signs = ", ".join(ch.encounter.signs)
             line += f" [signs: {signs}]"
         print(line)
-        if ch.encounters[0].desc:
-            print(ch.encounters[0].desc)
+        if ch.encounter.desc:
+            print(ch.encounter.desc)
 
         return self._input_encounter_action(ch)
 
     def _input_encounter_action(self, ch: Character) -> bool:
-        if ch.encounters[0].type == EncounterType.CHALLENGE:
+        if ch.encounter.type == EncounterType.CHALLENGE:
             actions = self._input_encounter_checks(
-                ch, ch.encounters[0].data, ch.encounters[0].rolls
+                ch, ch.encounter.data, ch.encounter.rolls
             )
-        elif ch.encounters[0].type == EncounterType.CHOICE:
+        elif ch.encounter.type == EncounterType.CHOICE:
             actions = self._input_encounter_choices(
-                ch, ch.encounters[0].data, ch.encounters[0].rolls
+                ch, ch.encounter.data, ch.encounter.rolls
             )
         else:
             raise Exception("Encounter with no checks or choices?")
@@ -957,7 +959,7 @@ class Client:
                 print("[Hit return]")
                 input()
                 return True
-            if ch.encounters:
+            if ch.encounter:
                 print(f"Your journey is interrupted in {ch.location}!")
                 return True
             elif ch.speed <= 0 and ch.location != route[-1]:

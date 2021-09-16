@@ -50,6 +50,8 @@ def render_record(ch: Character, record: Record) -> str:
             line += f"emblem was updated to {render_gadget(record.new_value)}."
         else:
             line = f"* {subj} gained the emblem {render_gadget(record.new_value)}"
+    elif record.type == EffectType.QUEUE_ENCOUNTER:
+        line = f"* {subj} had the encounter {render_template_card(record.new_value)}"
     elif record.type == EffectType.MODIFY_LOCATION:
         if subj == "You":
             line = f"* {subj} are "
@@ -96,7 +98,7 @@ def render_record(ch: Character, record: Record) -> str:
     return line
 
 
-def render_encounter_effect(eff: EncounterEffect) -> str:
+def render_encounter_effect(val: EncounterEffect) -> str:
     names = {
         EncounterEffect.NOTHING: "nothing",
         EncounterEffect.GAIN_COINS: "+coins",
@@ -116,7 +118,7 @@ def render_encounter_effect(eff: EncounterEffect) -> str:
         EncounterEffect.LOSE_LEADERSHIP: "-leadership",
         EncounterEffect.TRANSPORT: "-transport",
     }
-    return names.get(eff, eff.name)
+    return names.get(val, val.name)
 
 
 def render_effect(eff: Effect) -> str:
@@ -161,6 +163,8 @@ def render_effect(eff: Effect) -> str:
         return ("use activity" if eff.value <= 0 else "refresh activity") + entity
     elif eff.type == EffectType.ADD_EMBLEM:
         return "add an emblem (" + render_gadget(eff.value) + ")" + entity
+    elif eff.type == EffectType.QUEUE_ENCOUNTER:
+        return "queue an encounter (" + render_template_card(eff.value) + ")" + entity
     elif eff.type == EffectType.MODIFY_LOCATION:
         return f"move to {eff.value}{entity}"
     elif eff.type == EffectType.MODIFY_JOB:
@@ -196,3 +200,7 @@ def render_rule(rule: Rule) -> str:
     if rule.subtype:
         name = rule.subtype + " " + name
     return f"{rule.value:+} {name}"
+
+
+def render_template_card(card: TemplateCard) -> str:
+    return card.name

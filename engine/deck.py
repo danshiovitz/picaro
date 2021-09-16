@@ -49,7 +49,7 @@ def make_card(
     deck: Optional[TemplateDeck],
     val: TemplateCard,
     difficulty: int,
-    context: EncounterContextType,
+    context_type: EncounterContextType,
 ) -> FullCard:
     if val.type == TemplateCardType.CHOICE:
         data = val.data
@@ -69,8 +69,8 @@ def make_card(
         skill_bag.extend(sk * 6)
 
         all_skills = list(load_game().skills)
-        reward_bag = _make_reward_bag(deck, challenge, context)
-        penalty_bag = _make_penalty_bag(deck, challenge, context)
+        reward_bag = _make_reward_bag(deck, challenge, context_type)
+        penalty_bag = _make_penalty_bag(deck, challenge, context_type)
         if challenge.difficulty is not None:
             difficulty = challenge.difficulty
         data = [
@@ -85,8 +85,11 @@ def make_card(
             ),
         ]
         card_type = FullCardType.CHALLENGE
+    elif val.type == TemplateCardType.SPECIAL:
+        data = val.data
+        card_type = FullCardType.SPECIAL
     else:
-        raise Exception("XXXX SUPPORT SPECIAL CARD")
+        raise Exception(f"Unknown card type {val.type.name}")
 
     all_zodiacs = load_game().zodiacs
     signs = random.sample(all_zodiacs, 2) if not val.unsigned else []
@@ -99,6 +102,7 @@ def make_card(
         type=card_type,
         data=data,
         signs=signs,
+        context_type=context_type,
         entity_type=val.entity_type,
         entity_name=val.entity_name,
     )

@@ -57,6 +57,7 @@ class EffectType(Enum):
     MODIFY_SPEED = enum_auto()
     MODIFY_ACTIVITY = enum_auto()
     ADD_EMBLEM = enum_auto()
+    QUEUE_ENCOUNTER = enum_auto()
     MODIFY_LOCATION = enum_auto()
     MODIFY_JOB = enum_auto()
     # effects mostly for projects
@@ -101,6 +102,8 @@ class Effect(Generic[T]):
 
         if type_val == EffectType.ADD_EMBLEM:
             return Gadget
+        elif type_val == EffectType.QUEUE_ENCOUNTER:
+            return TemplateCard
         elif type_val in (EffectType.MODIFY_LOCATION, EffectType.MODIFY_JOB):
             return str
         else:
@@ -143,10 +146,25 @@ class Rule:
     subtype: Optional[str]
 
 
+class TriggerType(Enum):
+    MOVE_HEX = enum_auto()
+    TURN_BEGIN = enum_auto()
+    TURN_END = enum_auto()
+
+
+@dataclass(frozen=True)
+class Trigger:
+    type: TriggerType
+    effects: List[Effect]
+    subtype: Optional[str]
+
+
 @dataclass(frozen=True)
 class Gadget:
     name: str
-    rules: Sequence[Rule]
+    desc: Optional[str]
+    rules: Sequence[Rule] = ()
+    triggers: Sequence[Trigger] = ()
 
 
 @dataclass(frozen=True)
@@ -176,10 +194,6 @@ class Challenge:
     difficulty: Optional[int] = None
 
 
-class SpecialChoiceType(Enum):
-    DELIVER = enum_auto()
-
-
 @dataclass(frozen=True)
 class Choices:
     # this is the min/max overall selection count
@@ -190,17 +204,6 @@ class Choices:
     # this cost and benefit apply (once) if you make any selections at all
     cost: Sequence[Effect] = ()
     benefit: Sequence[Effect] = ()
-    special_type: Optional[SpecialChoiceType] = None
-
-    @classmethod
-    def make_special(cls, type: SpecialChoiceType) -> "Choices":
-        return Choices(
-            min_choices=0,
-            max_choices=0,
-            is_random=False,
-            choice_list=[],
-            special_type=type,
-        )
 
 
 class TemplateCardType(Enum):
@@ -234,7 +237,7 @@ class TemplateCard:
         elif type_val == TemplateCardType.CHOICE:
             return Choices
         else:
-            return Tuple[str, Any]
+            return str
 
 
 @dataclass(frozen=True)
@@ -247,6 +250,15 @@ class TemplateDeck:
 class FullCardType(Enum):
     CHALLENGE = enum_auto()
     CHOICE = enum_auto()
+    SPECIAL = enum_auto()
+
+
+class EncounterContextType(Enum):
+    JOB = enum_auto()
+    TRAVEL = enum_auto()
+    CAMP = enum_auto()
+    ACTION = enum_auto()
+    SYSTEM = enum_auto()
 
 
 @dataclass(frozen=True)
@@ -257,6 +269,7 @@ class FullCard:
     type: FullCardType
     data: Any
     signs: Sequence[str]
+    context_type: EncounterContextType
     entity_type: Optional[EntityType] = None
     entity_name: Optional[str] = None
 
@@ -273,6 +286,8 @@ class FullCard:
             return Sequence[EncounterCheck]
         elif type_val == FullCardType.CHOICE:
             return Choices
+        elif type_val == FullCardType.SPECIAL:
+            return str
         else:
             raise Exception(f"Unknown full card type: {type_val.name}")
 
@@ -302,22 +317,14 @@ class Availability:
 @dataclass(frozen=True)
 class Action:
     name: str
-    choices: Choices
-
-
-class EncounterContextType(Enum):
-    JOB = enum_auto()
-    TRAVEL = enum_auto()
-    CAMP = enum_auto()
-    ACTION = enum_auto()
-    SYSTEM = enum_auto()
+    cost: Sequence[Effect] = ()
+    benefit: Sequence[Effect] = ()
 
 
 @dataclass(frozen=True)
 class Encounter:
     card: FullCard
     rolls: Sequence[int]
-    context_type: EncounterContextType
 
 
 @dataclass(frozen=True)
@@ -400,6 +407,8 @@ class Record(Generic[T]):
 
         if type_val == EffectType.ADD_EMBLEM:
             return Gadget
+        elif type_val == EffectType.QUEUE_ENCOUNTER:
+            return Optional[TemplateCard]
         elif type_val in (
             EffectType.MODIFY_JOB,
             EffectType.MODIFY_LOCATION,

@@ -11,6 +11,8 @@ from picaro.engine.types import (
     Effect,
     EncounterCheck,
     EntityType,
+    FullCard,
+    FullCardType,
     Gadget,
     Job,
     OracleStatus,
@@ -138,7 +140,7 @@ class EncounterType(Enum):
 class TableauCard:
     id: str
     name: str
-    type: EncounterType
+    type: FullCardType
     data: Any
     age: int
     location: str
@@ -150,14 +152,14 @@ class TableauCard:
         return "type"
 
     @classmethod
-    def any_type(cls, type_val: Union[EncounterType, str]) -> type:
+    def any_type(cls, type_val: Union[FullCardType, str]) -> type:
         if type(type_val) is str:
-            type_val = EncounterType[type_val]
+            type_val = FullCardType[type_val]
 
-        if type_val == EncounterType.CHALLENGE:
+        if type_val == FullCardType.CHALLENGE:
             return Sequence[EncounterCheck]
-        elif type_val == EncounterType.CHOICE:
-            return Choices
+        elif type_val in (FullCardType.CHOICE, FullCardType.SPECIAL):
+            return str
         else:
             raise Exception(f"Unknown encounter type: {type_val.name}")
 
@@ -185,7 +187,7 @@ class Encounter:
         elif type_val == EncounterType.CHOICE:
             return Choices
         else:
-            raise Exception(f"Unknown encounter type: {type_val.name}")
+            raise Exception(f"Unexpected encounter type: {type_val.name}")
 
 
 @dataclass(frozen=True)
@@ -208,7 +210,8 @@ class Character:
     speed: int
     max_speed: int
     tableau: Sequence[TableauCard]
-    encounters: Sequence[Encounter]
+    encounter: Optional[Encounter]
+    queued: Sequence[FullCard]
     emblems: Sequence[Gadget]
     tasks: Sequence[Task]
 

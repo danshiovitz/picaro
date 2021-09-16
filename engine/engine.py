@@ -311,8 +311,6 @@ class Engine:
             records: List[Record] = []
             self._basic_action_prep(ch, consume_action=True)
             ch.queue_tableau_card(card_id)
-            if ch.acted_this_turn() and not ch.encounters:
-                self._finish_turn(ch, records)
             return Outcome(records=records)
 
     @with_connection()
@@ -339,12 +337,8 @@ class Engine:
             action, token_type, token_name = board.get_token_action(
                 token_name, action_name
             )
-            ch.queue_template(
-                self._action_to_template(action, token_type, token_name),
-                context_type=EncounterContextType.ACTION,
-            )
-            if ch.acted_this_turn() and not ch.encounters:
-                self._finish_turn(ch, records)
+            ch.apply_bargain(action.cost, records)
+            ch.apply_outcome(action.benefit, records)
             return Outcome(records=records)
 
     def _action_to_template(
@@ -366,8 +360,6 @@ class Engine:
             records: List[Record] = []
             self._basic_action_prep(ch, consume_action=True)
             ch.queue_camp_card()
-            if ch.acted_this_turn() and not ch.encounters:
-                self._finish_turn(ch, records)
             return Outcome(records=records)
 
     @with_connection()
@@ -392,16 +384,14 @@ class Engine:
                         records,
                     )
             ch.queue_travel_card(new_loc)
-            if ch.acted_this_turn() and not ch.encounters:
-                self._finish_turn(ch, records)
             return Outcome(records=records)
 
     @with_connection()
     def end_turn(self, *, player_id: int, game_id: int, character_name: str) -> Outcome:
         with Character.load(character_name) as ch:
             records: List[Record] = []
-            self._basic_action_prep(ch, consume_action=True)
-            if not ch.encounters:
+            self._basic_action_prep(ch, consume_action=False)
+            if not ch.has_encounters():
                 self._finish_turn(ch, records)
             return Outcome(records=records)
 
@@ -417,7 +407,10 @@ class Engine:
         with Character.load(character_name) as ch:
             records: List[Record] = []
 
-            encounter = ch.pop_encounter()
+            if not ch.encounter:
+                raise BadStateException("No encounter is currently active.")
+
+            encounter = ch.encounter
             if encounter.card.type == FullCardType.CHALLENGE:
                 effects = self._eval_challenge(
                     ch,
@@ -452,7 +445,7 @@ class Engine:
                 entity_type, entity_name = entity
                 if entity_type == EntityType.CHARACTER:
                     if entity_name == ch.name:
-                        if encounter.context_type == EncounterContextType.ACTION:
+                        if encounter.card.context_type == EncounterContextType.ACTION:
                             ch.apply_bargain(cur_effects, records)
                         else:
                             ch.apply_outcome(cur_effects, records)
@@ -467,24 +460,22 @@ class Engine:
                         f"Unexpected entity in effect: {entity_type} {entity_name}"
                     )
 
-            if ch.acted_this_turn() and not ch.encounters:
-                self._finish_turn(ch, records)
+            ch.encounter_finished()
+
             return Outcome(records=records)
 
     def _basic_action_prep(self, ch: Character, consume_action: bool) -> None:
-        if ch.encounters:
+        if ch.has_encounters():
             raise BadStateException("An encounter is currently active.")
         if consume_action:
             if not ch.check_set_flag(TurnFlags.ACTED):
                 raise BadStateException("You have already acted this turn.")
 
     def _travel_prep(self, ch: Character) -> None:
-        if ch.encounters:
+        if ch.has_encounters():
             raise BadStateException("An encounter is currently active.")
         if ch.speed <= 0:
             raise IllegalMoveException(f"You have no remaining speed.")
-        if ch.acted_this_turn():
-            raise IllegalMoveException(f"You can't move in a turn after having acted.")
 
     def _eval_challenge(
         self,
@@ -496,7 +487,7 @@ class Engine:
         entity_name: Optional[str],
         records: List[Record],
     ) -> List[Effect]:
-        rolls = rolls[:]
+        rolls = list(rolls[:])
 
         # validate the actions by rerunning them (note this also updates luck)
         for adj in actions.adjusts or []:
@@ -517,7 +508,7 @@ class Engine:
             raise BadStateException("Computed luck/rolls doesn't match?")
 
         if actions.flee:
-            return
+            return []
 
         effects = []
 
@@ -672,11 +663,11 @@ class Engine:
     # outcome, but there's probably nothing strictly wrong if it did
     def _finish_turn(self, ch: Character, records: List[Record]) -> None:
         self._bad_reputation_check(ch)
-        if ch.encounters:
+        if ch.has_encounters():
             return
 
         self._discard_resources(ch)
-        if ch.encounters:
+        if ch.has_encounters():
             return
 
         with Task.load_for_character(ch.name) as current:

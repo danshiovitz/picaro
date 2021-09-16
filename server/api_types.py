@@ -26,6 +26,7 @@ from picaro.engine.types import (
     EncounterCheck,
     EncounterEffect,
     EntityType,
+    FullCardType,
     Gadget,
     OracleStatus,
     Outcome,
@@ -36,6 +37,8 @@ from picaro.engine.types import (
     TaskStatus,
     TaskType,
     TableauCard,
+    TemplateCard,
+    TemplateCardType,
     TemplateDeck,
 )
 

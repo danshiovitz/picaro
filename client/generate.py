@@ -21,6 +21,8 @@ from picaro.server.api_types import (
     Hex,
     Job,
     ProjectType,
+    TemplateCard,
+    TemplateCardType,
     TemplateDeck,
     Token,
 )
@@ -249,26 +251,18 @@ def generate_map_v2() -> Tuple[List[Hex], List[Token], List[Country]]:
             actions = [
                 Action(
                     name="Trade",
-                    choices=Choices(
-                        min_choices=0,
-                        max_choices=99,
-                        is_random=False,
-                        choice_list=[
-                            Choice(
-                                cost=[
-                                    Effect(
-                                        type=EffectType.MODIFY_RESOURCES,
-                                        subtype=rs,
-                                        value=-1,
-                                    )
-                                ],
-                                benefit=[Effect(type=EffectType.MODIFY_COINS, value=5)],
-                                max_choices=99,
-                            )
-                            for rs in mine_rs.values()
-                        ],
-                        cost=[Effect(type=EffectType.MODIFY_ACTIVITY, value=-1)],
-                    ),
+                    benefit=[
+                        Effect(
+                            type=EffectType.QUEUE_ENCOUNTER,
+                            value=TemplateCard(
+                                copies=1,
+                                name="Trade",
+                                desc="...",
+                                type=TemplateCardType.SPECIAL,
+                                data="trade",
+                            ),
+                        ),
+                    ],
                 ),
             ]
             token = Token(
@@ -284,24 +278,13 @@ def generate_map_v2() -> Tuple[List[Hex], List[Token], List[Country]]:
             actions = [
                 Action(
                     name=f"Gather {mine_rs[hx.country]}",
-                    choices=Choices(
-                        min_choices=0,
-                        max_choices=1,
-                        is_random=False,
-                        choice_list=[
-                            Choice(
-                                cost=(
-                                    Effect(type=EffectType.MODIFY_ACTIVITY, value=-1),
-                                ),
-                                benefit=(
-                                    Effect(
-                                        type=EffectType.MODIFY_RESOURCES,
-                                        subtype=mine_rs[hx.country],
-                                        value=1,
-                                    ),
-                                ),
-                            )
-                        ],
+                    cost=(Effect(type=EffectType.MODIFY_ACTIVITY, value=-1),),
+                    benefit=(
+                        Effect(
+                            type=EffectType.MODIFY_RESOURCES,
+                            subtype=mine_rs[hx.country],
+                            value=1,
+                        ),
                     ),
                 ),
             ]

@@ -56,15 +56,14 @@ from .types import (
     EncounterContextType,
     EncounterEffect,
     EntityType,
+    FullCard,
     FullCardType,
     Gadget,
     Record,
     Rule,
     RuleType,
-    FullCard,
     JobType,
     Outcome,
-    SpecialChoiceType,
     TableauCard,
     TemplateCard,
     TemplateCardType,
@@ -103,6 +102,7 @@ class Character(Entity, ReadOnlyWrapper):
         lambda _vs: [ModifyLocationField()],
         lambda _vs: [ModifyActivityField()],
         lambda _vs: [AddEmblemField()],
+        lambda _vs: [QueueEncounterField()],
         lambda _vs: [SimpleIntEntityField("coins", "coins", EffectType.MODIFY_COINS)],
         lambda _vs: [
             SimpleIntEntityField(
@@ -120,6 +120,8 @@ class Character(Entity, ReadOnlyWrapper):
         lambda _vs: [
             SimpleIntEntityField("turns", "remaining_turns", EffectType.MODIFY_TURNS)
         ],
+        # speed gets reset to its max each turn, but we allow it to go over
+        # within a turn
         lambda _vs: [SimpleIntEntityField("speed", "speed", EffectType.MODIFY_SPEED)],
         lambda recs: SimpleDictIntEntityField.make_fields(
             recs, "xp", "skill_xp", EffectType.MODIFY_XP
@@ -142,7 +144,8 @@ class Character(Entity, ReadOnlyWrapper):
             luck=0,
             emblems=[],
             tableau=[],
-            encounters=[],
+            encounter=None,
+            queued=[],
             job_deck=[],
             travel_deck=[],
             camp_deck=[],
@@ -178,6 +181,9 @@ class Character(Entity, ReadOnlyWrapper):
     def acted_this_turn(self) -> None:
         return TurnFlags.ACTED in self._data.turn_flags
 
+    def has_encounters(self) -> None:
+        return self.encounter or self.queued
+
     def get_snapshot(self) -> snapshot_Character:
         all_skills = load_game().skills
         board = load_board()
@@ -208,9 +214,10 @@ class Character(Entity, ReadOnlyWrapper):
                 self._tableau_snapshot(c, routes[c.location])
                 for c in self._data.tableau
             ),
-            encounters=tuple(
-                self._encounter_snapshot(e) for e in self._data.encounters
-            ),
+            encounter=self._encounter_snapshot(self._data.encounter)
+            if self._data.encounter
+            else None,
+            queued=tuple(self._data.queued),
             emblems=tuple(self._data.emblems),
             tasks=tuple(tasks),
         )
@@ -219,17 +226,17 @@ class Character(Entity, ReadOnlyWrapper):
         self, card: TableauCard, route: Sequence[str]
     ) -> Sequence[snapshot_TableauCard]:
         if card.card.type == FullCardType.CHALLENGE:
-            card_type = snapshot_EncounterType.CHALLENGE
             # in the future might be able to preview more checks so leaving them as lists
             data = card.card.data[0:1]
-        else:
-            card_type = snapshot_EncounterType.CHOICE
+        elif card.card.type == FullCardType.CHOICE:
+            data = "choice"
+        elif card.card.type == FullCardType.SPECIAL:
             data = card.card.data
 
         return snapshot_TableauCard(
             id=card.card.id,
             name=card.card.name,
-            type=card_type,
+            type=card.card.type,
             data=data,
             age=card.age,
             location=card.location,
@@ -238,18 +245,16 @@ class Character(Entity, ReadOnlyWrapper):
         )
 
     def _encounter_snapshot(self, encounter: Encounter) -> Sequence[snapshot_Encounter]:
-        if encounter.card.type == FullCardType.CHALLENGE:
-            card_type = snapshot_EncounterType.CHALLENGE
-            data = encounter.card.data
-        else:
-            card_type = snapshot_EncounterType.CHOICE
-            data = encounter.card.data
-
+        card_type = (
+            snapshot_EncounterType.CHALLENGE
+            if encounter.card.type == FullCardType.CHALLENGE
+            else snapshot_EncounterType.CHOICE
+        )
         return snapshot_Encounter(
             name=encounter.card.name,
             desc=encounter.card.desc,
             type=card_type,
-            data=data,
+            data=encounter.card.data,
             signs=encounter.card.signs,
             rolls=encounter.rolls,
         )
@@ -262,23 +267,23 @@ class Character(Entity, ReadOnlyWrapper):
             raise IllegalMoveException(
                 f"You must be in hex {card.location} for that encounter."
             )
-        self._queue_encounter(card.card, context_type=EncounterContextType.JOB)
+        self._queue_encounter(card.card)
 
     def queue_template(
         self, template: TemplateCard, context_type: EncounterContextType
     ) -> None:
         card = make_card(None, template, 1, context_type)
-        self._queue_encounter(card, context_type=context_type)
+        self._queue_encounter(card)
 
     def queue_camp_card(self) -> None:
         card = self._draw_camp_card()
-        self._queue_encounter(card, context_type=EncounterContextType.CAMP)
+        self._queue_encounter(card)
 
     def queue_travel_card(self, location) -> None:
         if TurnFlags.HAD_TRAVEL_ENCOUNTER not in self._data.turn_flags:
             card = self._draw_travel_card(location)
             if card:
-                self._queue_encounter(card, context_type=EncounterContextType.TRAVEL)
+                self._queue_encounter(card)
                 self._data.turn_flags.add(TurnFlags.HAD_TRAVEL_ENCOUNTER)
 
     def step(self, location: str, records: List[Record]) -> None:
@@ -331,11 +336,119 @@ class Character(Entity, ReadOnlyWrapper):
             TableauCard(card=full_card, location=location, age=age, is_extra=True)
         )
 
-    def pop_encounter(self) -> Encounter:
-        if not self._data.encounters:
-            raise BadStateException("There is no active encounter.")
+    def encounter_finished(self) -> None:
+        if self._data.queued:
+            card = self._data.queued.pop(0)
+            self._data.encounter = self._make_encounter(card)
+        else:
+            self._data.encounter = None
 
-        return self._data.encounters.pop(0)
+    def _queue_encounter(self, card: FullCard) -> None:
+        if self._data.encounter:
+            self._data.queued.append(card)
+        else:
+            self._data.encounter = self._make_encounter(card)
+
+    def _make_encounter(self, card: FullCard) -> Encounter:
+        if card.type == FullCardType.SPECIAL:
+            card = self._actualize_special_card(card)
+
+        rolls = []
+        if card.type == FullCardType.CHALLENGE:
+            for chk in card.data:
+                bonus = self.get_skill_rank(chk.skill)
+                roll_val = random.randint(1, 8)
+                if roll_val <= self._calc_rule(RuleType.RELIABLE_SKILL, chk.skill):
+                    roll_val = random.randint(1, 8)
+                rolls.append(roll_val + bonus)
+        elif card.type == FullCardType.CHOICE:
+            if card.data.is_random:
+                rolls.extend(
+                    random.randint(1, len(card.data.choice_list))
+                    for _ in range(card.data.max_choices)
+                )
+        else:
+            raise Exception(f"Unknown card type: {card.type.name}")
+
+        return Encounter(
+            card=card,
+            rolls=rolls,
+        )
+
+    def _actualize_special_card(
+        self,
+        card: FullCard,
+    ) -> FullCard:
+        special_type = card.data
+        if special_type == "trade":
+            all_resources = load_game().resources
+            card_type = FullCardType.CHOICE
+            data = Choices(
+                min_choices=0,
+                max_choices=sum(self.resources.values()),
+                is_random=False,
+                choice_list=[
+                    Choice(
+                        cost=[
+                            Effect(
+                                type=EffectType.MODIFY_RESOURCES, subtype=rs, value=-1
+                            )
+                        ],
+                        benefit=[
+                            Effect(
+                                type=EffectType.MODIFY_COINS,
+                                value=5,
+                            )
+                        ],
+                        max_choices=self.resources[rs],
+                    )
+                    for rs in all_resources
+                    if self.resources.get(rs, 0) > 0
+                ],
+                cost=[Effect(type=EffectType.MODIFY_ACTIVITY, value=-1)],
+            )
+        elif special_type == "deliver":
+            card_type = FullCardType.CHOICE
+            task_rs: List[Tuple[str, str]] = []
+            with Task.load_for_character(self.name) as tasks:
+                for task in tasks:
+                    if (
+                        task.project_name != card.entity_name
+                        or task.type != TaskType.RESOURCE
+                        or task.status != TaskStatus.IN_PROGRESS
+                    ):
+                        continue
+                    extra = cast(TaskExtraResource, task.extra)
+                    task_rs.extend((task.name, rs) for rs in extra.wanted_resources)
+            data = Choices(
+                min_choices=0,
+                max_choices=99,
+                is_random=False,
+                choice_list=[
+                    Choice(
+                        cost=[
+                            Effect(
+                                type=EffectType.MODIFY_RESOURCES, subtype=rs, value=-1
+                            )
+                        ],
+                        benefit=[
+                            Effect(
+                                entity_type=EntityType.TASK,
+                                entity_name=task_name,
+                                type=EffectType.MODIFY_RESOURCES,
+                                subtype=rs,
+                                value=1,
+                            )
+                        ],
+                        max_choices=self.resources.get(rs, 0),
+                    )
+                    for task_name, rs in task_rs
+                ],
+                cost=[Effect(type=EffectType.MODIFY_ACTIVITY, value=-1)],
+            )
+        else:
+            raise Exception(f"Unknown special type: {special_type}")
+        return dataclasses.replace(card, type=card_type, data=data)
 
     def discard_job_card(self, num_cards: int) -> None:
         if num_cards <= 0:
@@ -472,77 +585,6 @@ class Character(Entity, ReadOnlyWrapper):
             raise BadStateException(f"No such encounter card found ({card_id})")
         return self._data.tableau.pop(idx[0])
 
-    def _queue_encounter(
-        self, card: FullCard, context_type: EncounterContextType
-    ) -> None:
-        rolls = []
-        if card.type == FullCardType.CHALLENGE:
-            for chk in card.data:
-                bonus = self.get_skill_rank(chk.skill)
-                roll_val = random.randint(1, 8)
-                if roll_val <= self._calc_rule(RuleType.RELIABLE_SKILL, chk.skill):
-                    roll_val = random.randint(1, 8)
-                rolls.append(roll_val + bonus)
-        else:
-            if card.data.special_type:
-                card = dataclasses.replace(
-                    card, data=self._make_special_choices(card.data, card)
-                )
-            if card.data.is_random:
-                rolls.extend(
-                    random.randint(1, len(card.data.choice_list))
-                    for _ in range(card.data.max_choices)
-                )
-        self._data.encounters.append(
-            Encounter(
-                card=card,
-                rolls=rolls,
-                context_type=context_type,
-            )
-        )
-
-    def _make_special_choices(self, choices: Choices, card: FullCard) -> Choices:
-        if choices.special_type == SpecialChoiceType.DELIVER:
-            task_rs: List[Tuple[str, str]] = []
-            with Task.load_for_character(self.name) as tasks:
-                for task in tasks:
-                    if (
-                        task.project_name != card.entity_name
-                        or task.type != TaskType.RESOURCE
-                        or task.status != TaskStatus.IN_PROGRESS
-                    ):
-                        continue
-                    extra = cast(TaskExtraResource, task.extra)
-                    task_rs.extend((task.name, rs) for rs in extra.wanted_resources)
-            return Choices(
-                min_choices=0,
-                max_choices=99,
-                is_random=False,
-                choice_list=[
-                    Choice(
-                        cost=[
-                            Effect(
-                                type=EffectType.MODIFY_RESOURCES, subtype=rs, value=-1
-                            )
-                        ],
-                        benefit=[
-                            Effect(
-                                entity_type=EntityType.TASK,
-                                entity_name=task_name,
-                                type=EffectType.MODIFY_RESOURCES,
-                                subtype=rs,
-                                value=1,
-                            )
-                        ],
-                        max_choices=self.resources.get(rs, 0),
-                    )
-                    for task_name, rs in task_rs
-                ],
-                cost=[Effect(type=EffectType.MODIFY_ACTIVITY, value=-1)],
-            )
-        else:
-            raise Exception(f"Unknown special choice type: {choices.special_type}")
-
     def _schedule_promotion(self, job_name: str) -> None:
         job = load_job(job_name)
         deck = load_deck(job.deck_name)
@@ -560,7 +602,7 @@ class Character(Entity, ReadOnlyWrapper):
                 ],
             )
         emblems = [
-            Gadget(name=f"Veteran {job_name}", rules=ee) for ee in emblem_effects
+            Gadget(name=f"Veteran {job_name}", desc=None, rules=ee) for ee in emblem_effects
         ]
         extra = [[] for ee in emblems]
         extra[0].append(Effect(type=EffectType.MODIFY_XP, subtype=None, value=10))
@@ -672,7 +714,8 @@ class Character(Entity, ReadOnlyWrapper):
             name="Rest and Relaxation",
             desc=f"What happens at camp stays at camp",
             unsigned=True,
-            choices=Choices(
+            type=TemplateCardType.CHOICE,
+            data=Choices(
                 min_choices=0,
                 max_choices=1,
                 is_random=False,
@@ -981,7 +1024,7 @@ class AddEmblemField(EntityField):
         if old_idxs:
             old_emblem = self._entity._data.emblems.pop(old_idxs[0])
             new_emblem = Gadget(
-                name=effect.value.name, rules=old_emblem.rules + effect.value.rules
+                name=effect.value.name, desc=None, rules=old_emblem.rules + effect.value.rules, triggers=old_emblem.triggers + effect.value.triggers,
             )
         else:
             old_emblem = None
@@ -996,6 +1039,34 @@ class AddEmblemField(EntityField):
                 self._subtype,
                 old_emblem,
                 new_emblem,
+                [],
+            )
+        )
+
+
+class QueueEncounterField(EntityField):
+    def __init__(self):
+        super().__init__("emblems", EffectType.QUEUE_ENCOUNTER, None)
+
+    def _update(
+        self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool
+    ) -> None:
+        template = effect.value
+        # this isn't right but probably ok for now
+        context_type = (
+            EncounterContextType.ACTION if enforce_costs else EncounterContextType.JOB
+        )
+        card = make_card(None, template, 1, context_type)
+        self._entity._queue_encounter(card)
+        self._records.append(
+            Record(
+                make_id(),
+                self._entity.ENTITY_TYPE,
+                self._entity.name,
+                self._type,
+                self._subtype,
+                None,
+                template,
                 [],
             )
         )
@@ -1034,7 +1105,8 @@ class CharacterData:
     luck: int
     emblems: List[Gadget]
     tableau: List[TableauCard]
-    encounters: List[Encounter]
+    encounter: Optional[Encounter]
+    queued: List[FullCard]
     job_deck: List[FullCard]
     travel_deck: List[TravelCard]
     camp_deck: List[FullCard]

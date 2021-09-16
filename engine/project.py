@@ -50,7 +50,6 @@ from .types import (
     TaskType,
     ProjectStatus,
     ProjectType,
-    SpecialChoiceType,
     TemplateCard,
     TemplateCardType,
 )
@@ -476,7 +475,18 @@ class Project(ReadOnlyWrapper):
             actions=[
                 Action(
                     name="Deliver",
-                    choices=Choices.make_special(type=SpecialChoiceType.DELIVER),
+                    benefit=[
+                        Effect(
+                            type=EffectType.QUEUE_ENCOUNTER,
+                            value=TemplateCard(
+                                copies=1,
+                                name="Deliver",
+                                desc="...",
+                                type=TemplateCardType.SPECIAL,
+                                data="deliver",
+                            ),
+                        ),
+                    ],
                 ),
             ],
             records=[],
@@ -699,7 +709,7 @@ class ProjectStorage(ObjectStorageBase[ProjectData]):
 
     @classmethod
     def load_by_status(cls, status: ProjectStatus) -> List[ProjectData]:
-        return cls._select_helper(["status = :status"], {"status": status})
+        return cls._select_helper(["status = :status"], {"status": status.name})
 
     @classmethod
     def create(cls, project: ProjectData) -> int:

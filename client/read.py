@@ -153,6 +153,14 @@ class ComplexReader:
                 ),
             ),
             (
+                "Queue encounter",
+                lambda ln: self._lparse_effect(
+                    EffectType.QUEUE_ENCOUNTER,
+                    ln,
+                    lparse_val=lambda ln: fixup(self._lparse_template_card(ln)),
+                ),
+            ),
+            (
                 "Random transport <distance>",
                 lambda ln: self._lparse_effect(EffectType.TRANSPORT, ln),
             ),
