@@ -99,25 +99,25 @@ class Server:
     def start_task(self, game_id: int, character_name: str) -> StartTaskResponse:
         player_id = self._extract_player_id()
         req = self._read_body(StartTaskRequest)
-        outcome = self._engine.start_task(
+        records = self._engine.start_task(
             task_name=req.task_name,
             player_id=player_id,
             game_id=game_id,
             character_name=character_name,
         )
-        return StartTaskResponse(outcome=outcome)
+        return StartTaskResponse(records=records)
 
     @wrap_errors()
     def return_task(self, game_id: int, character_name: str) -> ReturnTaskResponse:
         player_id = self._extract_player_id()
         req = self._read_body(ReturnTaskRequest)
-        outcome = self._engine.return_task(
+        records = self._engine.return_task(
             task_name=req.task_name,
             player_id=player_id,
             game_id=game_id,
             character_name=character_name,
         )
-        return ReturnTaskResponse(outcome=outcome)
+        return ReturnTaskResponse(records=records)
 
     @wrap_errors()
     def get_oracles(self, game_id: int, character_name: str) -> SearchOraclesResponse:
@@ -148,20 +148,20 @@ class Server:
     def create_oracle(self, game_id: int, character_name: str) -> CreateOracleResponse:
         player_id = self._extract_player_id()
         req = self._read_body(CreateOracleRequest)
-        id, outcome = self._engine.create_oracle(
+        id, records = self._engine.create_oracle(
             request=req.request,
             payment_selections=req.payment_selections,
             player_id=player_id,
             game_id=game_id,
             character_name=character_name,
         )
-        return CreateOracleResponse(id=id, outcome=outcome)
+        return CreateOracleResponse(id=id, records=records)
 
     @wrap_errors()
     def answer_oracle(self, game_id: int, character_name: str) -> AnswerOracleResponse:
         player_id = self._extract_player_id()
         req = self._read_body(AnswerOracleRequest)
-        outcome = self._engine.answer_oracle(
+        records = self._engine.answer_oracle(
             oracle_id=req.id,
             response=req.response,
             proposal=req.proposal,
@@ -169,7 +169,7 @@ class Server:
             game_id=game_id,
             character_name=character_name,
         )
-        return AnswerOracleResponse(outcome=outcome)
+        return AnswerOracleResponse(records=records)
 
     @wrap_errors()
     def confirm_oracle(
@@ -177,84 +177,84 @@ class Server:
     ) -> ConfirmOracleResponse:
         player_id = self._extract_player_id()
         req = self._read_body(ConfirmOracleRequest)
-        outcome = self._engine.confirm_oracle(
+        records = self._engine.confirm_oracle(
             oracle_id=req.id,
             confirm=req.confirm,
             player_id=player_id,
             game_id=game_id,
             character_name=character_name,
         )
-        return ConfirmOracleResponse(outcome=outcome)
+        return ConfirmOracleResponse(records=records)
 
     @wrap_errors()
     def do_job(self, game_id: int, character_name: str) -> JobResponse:
         player_id = self._extract_player_id()
         req = self._read_body(JobRequest)
-        outcome = self._engine.do_job(
+        records = self._engine.do_job(
             req.card_id,
             player_id=player_id,
             game_id=game_id,
             character_name=character_name,
         )
-        return JobResponse(outcome=outcome)
+        return JobResponse(records=records)
 
     @wrap_errors()
     def token_action(self, game_id: int, character_name: str) -> TokenActionResponse:
         player_id = self._extract_player_id()
         req = self._read_body(TokenActionRequest)
-        outcome = self._engine.token_action(
+        records = self._engine.token_action(
             req.token,
             req.action,
             player_id=player_id,
             game_id=game_id,
             character_name=character_name,
         )
-        return TokenActionResponse(outcome=outcome)
+        return TokenActionResponse(records=records)
 
     @wrap_errors()
     def travel(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(TravelRequest)
-        outcome = self._engine.travel(
+        records = self._engine.travel(
             req.step,
             player_id=player_id,
             game_id=game_id,
             character_name=character_name,
         )
-        return TravelResponse(outcome=outcome)
+        return TravelResponse(records=records)
 
     @wrap_errors()
     def camp(self, game_id: int, character_name: str) -> CampResponse:
         player_id = self._extract_player_id()
         req = self._read_body(CampRequest)
-        outcome = self._engine.camp(
+        records = self._engine.camp(
             player_id=player_id, game_id=game_id, character_name=character_name
         )
         if not req.rest:
             raise BadStateException("Rest is false!")
         else:
-            return CampResponse(outcome=outcome)
+            return CampResponse(records=records)
 
     @wrap_errors()
     def resolve_encounter(self, game_id: int, character_name: str) -> Any:
         player_id = self._extract_player_id()
         req = self._read_body(ResolveEncounterRequest)
-        outcome = self._engine.resolve_encounter(
+        records = self._engine.resolve_encounter(
             req.actions,
             player_id=player_id,
             game_id=game_id,
             character_name=character_name,
         )
-        return ResolveEncounterResponse(outcome=outcome)
+        return ResolveEncounterResponse(records=records)
 
     @wrap_errors()
     def end_turn(self, game_id: int, character_name: str) -> EndTurnResponse:
         player_id = self._extract_player_id()
         req = self._read_body(EndTurnRequest)
-        outcome = self._engine.end_turn(
+        records = self._engine.end_turn(
             player_id=player_id, game_id=game_id, character_name=character_name
         )
-        return EndTurnResponse(outcome=outcome)
+        return EndTurnResponse(records=records)
 
     @wrap_errors()
     def create_game(self) -> CreateGameResponse:

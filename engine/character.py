@@ -54,7 +54,7 @@ from .types import (
     Encounter,
     EncounterActions,
     EncounterContextType,
-    EncounterEffect,
+    Outcome,
     EntityType,
     FullCard,
     FullCardType,
@@ -63,7 +63,6 @@ from .types import (
     Rule,
     RuleType,
     JobType,
-    Outcome,
     TableauCard,
     TemplateCard,
     TemplateCardType,
@@ -602,7 +601,8 @@ class Character(Entity, ReadOnlyWrapper):
                 ],
             )
         emblems = [
-            Gadget(name=f"Veteran {job_name}", desc=None, rules=ee) for ee in emblem_effects
+            Gadget(name=f"Veteran {job_name}", desc=None, rules=ee)
+            for ee in emblem_effects
         ]
         extra = [[] for ee in emblems]
         extra[0].append(Effect(type=EffectType.MODIFY_XP, subtype=None, value=10))
@@ -1024,7 +1024,10 @@ class AddEmblemField(EntityField):
         if old_idxs:
             old_emblem = self._entity._data.emblems.pop(old_idxs[0])
             new_emblem = Gadget(
-                name=effect.value.name, desc=None, rules=old_emblem.rules + effect.value.rules, triggers=old_emblem.triggers + effect.value.triggers,
+                name=effect.value.name,
+                desc=None,
+                rules=old_emblem.rules + effect.value.rules,
+                triggers=old_emblem.triggers + effect.value.triggers,
             )
         else:
             old_emblem = None

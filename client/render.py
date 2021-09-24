@@ -98,25 +98,25 @@ def render_record(ch: Character, record: Record) -> str:
     return line
 
 
-def render_encounter_effect(val: EncounterEffect) -> str:
+def render_outcome(val: Outcome) -> str:
     names = {
-        EncounterEffect.NOTHING: "nothing",
-        EncounterEffect.GAIN_COINS: "+coins",
-        EncounterEffect.GAIN_XP: "+xp",
-        EncounterEffect.GAIN_REPUTATION: "+reputation",
-        EncounterEffect.GAIN_HEALING: "+healing",
-        EncounterEffect.GAIN_RESOURCES: "+resources",
-        EncounterEffect.GAIN_TURNS: "+turns",
-        EncounterEffect.GAIN_PROJECT_XP: "+project",
-        EncounterEffect.GAIN_SPEED: "+speed",
-        EncounterEffect.LOSE_COINS: "-coins",
-        EncounterEffect.LOSE_REPUTATION: "-reputation",
-        EncounterEffect.DAMAGE: "-damage",
-        EncounterEffect.LOSE_RESOURCES: "-resources",
-        EncounterEffect.LOSE_TURNS: "-turns",
-        EncounterEffect.LOSE_SPEED: "-speed",
-        EncounterEffect.LOSE_LEADERSHIP: "-leadership",
-        EncounterEffect.TRANSPORT: "-transport",
+        Outcome.NOTHING: "nothing",
+        Outcome.GAIN_COINS: "+coins",
+        Outcome.GAIN_XP: "+xp",
+        Outcome.GAIN_REPUTATION: "+reputation",
+        Outcome.GAIN_HEALING: "+healing",
+        Outcome.GAIN_RESOURCES: "+resources",
+        Outcome.GAIN_TURNS: "+turns",
+        Outcome.GAIN_PROJECT_XP: "+project",
+        Outcome.GAIN_SPEED: "+speed",
+        Outcome.LOSE_COINS: "-coins",
+        Outcome.LOSE_REPUTATION: "-reputation",
+        Outcome.DAMAGE: "-damage",
+        Outcome.LOSE_RESOURCES: "-resources",
+        Outcome.LOSE_TURNS: "-turns",
+        Outcome.LOSE_SPEED: "-speed",
+        Outcome.LOSE_LEADERSHIP: "-leadership",
+        Outcome.TRANSPORT: "-transport",
     }
     return names.get(val, val.name)
 

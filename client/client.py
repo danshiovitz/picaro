@@ -33,7 +33,7 @@ from picaro.server.api_types import *
 from .common import BadStateException, IllegalMoveException
 from .generate import generate_game_v2
 from .read import ComplexReader, read_selections, read_text
-from .render import render_effect, render_gadget, render_encounter_effect, render_record
+from .render import render_effect, render_gadget, render_outcome, render_record
 
 S = TypeVar("S")
 T = TypeVar("T")
@@ -336,8 +336,8 @@ class Client:
                         ]
 
                     resp = self._post(*pargs)
-                    if resp.outcome.records:
-                        self._display_records(ch, resp.outcome.records)
+                    if resp.records:
+                        self._display_records(ch, resp.records)
                         print("[Hit return]")
                         input()
                     return
@@ -363,8 +363,8 @@ class Client:
             print()
             return False
 
-        if resp.outcome.records:
-            self._display_records(ch, resp.outcome.records)
+        if resp.records:
+            self._display_records(ch, resp.records)
             print("[Hit return]")
             input()
         else:
@@ -423,8 +423,8 @@ class Client:
             print()
             return False
 
-        if resp.outcome.records:
-            self._display_records(ch, resp.outcome.records)
+        if resp.records:
+            self._display_records(ch, resp.records)
             print("[Hit return]")
             input()
         else:
@@ -493,8 +493,8 @@ class Client:
             print()
             return False
 
-        if resp.outcome.records:
-            self._display_records(ch, resp.outcome.records)
+        if resp.records:
+            self._display_records(ch, resp.records)
             print("[Hit return]")
             input()
         else:
@@ -632,8 +632,8 @@ class Client:
         return actions
 
     def _check_str(self, check: EncounterCheck, ch: Character) -> str:
-        reward_name = render_encounter_effect(check.reward)
-        penalty_name = render_encounter_effect(check.penalty)
+        reward_name = render_outcome(check.reward)
+        penalty_name = render_outcome(check.penalty)
         return (
             f"{check.skill} (1d8{ch.skills[check.skill]:+}) vs {check.target_number} "
             f"({reward_name} / {penalty_name})"
@@ -710,8 +710,8 @@ class Client:
             print()
             return False
 
-        if resp.outcome.records:
-            self._display_records(ch, resp.outcome.records)
+        if resp.records:
+            self._display_records(ch, resp.records)
             print("[Hit return]")
             input()
             return True
@@ -738,8 +738,8 @@ class Client:
             print(e)
             print()
             return False
-        if resp.outcome.records:
-            self._display_records(ch, resp.outcome.records)
+        if resp.records:
+            self._display_records(ch, resp.records)
             print("[Hit return]")
             input()
             return True
@@ -752,8 +752,8 @@ class Client:
             print(e)
             print()
             return False
-        if resp.outcome.records:
-            self._display_records(ch, resp.outcome.records)
+        if resp.records:
+            self._display_records(ch, resp.records)
             print("[Hit return]")
             input()
             return True
@@ -794,7 +794,7 @@ class Client:
             return False
         print()
         print(f"The outcome of your encounter:")
-        self._display_records(ch, resp.outcome.records)
+        self._display_records(ch, resp.records)
         print("[Hit return]")
         input()
         return True
@@ -954,8 +954,8 @@ class Client:
                 print()
                 return False
             ch = self._get(f"/character", Character)
-            if resp.outcome.records:
-                self._display_records(ch, resp.outcome.records)
+            if resp.records:
+                self._display_records(ch, resp.records)
                 print("[Hit return]")
                 input()
                 return True
@@ -974,8 +974,8 @@ class Client:
             print(e)
             print()
             return False
-        if resp.outcome.records:
-            self._display_records(ch, resp.outcome.records)
+        if resp.records:
+            self._display_records(ch, resp.records)
             print("[Hit return]")
             input()
             return True

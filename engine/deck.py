@@ -10,7 +10,7 @@ from .types import (
     Choices,
     EncounterCheck,
     EncounterContextType,
-    EncounterEffect,
+    Outcome,
     FullCard,
     FullCardType,
     TemplateCard,
@@ -112,8 +112,8 @@ def _make_check(
     deck: TemplateDeck,
     difficulty: int,
     skill_bag: List[str],
-    reward_bag: List[EncounterEffect],
-    penalty_bag: List[EncounterEffect],
+    reward_bag: List[Outcome],
+    penalty_bag: List[Outcome],
 ) -> EncounterCheck:
     tn = _difficulty_to_target_number(deck, difficulty)
     # fuzz the tns a bit
@@ -145,17 +145,17 @@ def _make_check(
 # originally had this as a deck, but I think it works better to have more hot/cold variance
 def _make_reward_bag(
     deck: TemplateDeck, challenge: Challenge, context: EncounterContextType
-) -> List[EncounterEffect]:
+) -> List[Outcome]:
     reward_bag = []
-    reward_bag.extend([EncounterEffect.GAIN_COINS, EncounterEffect.GAIN_REPUTATION] * 4)
+    reward_bag.extend([Outcome.GAIN_COINS, Outcome.GAIN_REPUTATION] * 4)
     reward_bag.extend(challenge.rewards * 4)
     reward_bag.extend(
         [
-            EncounterEffect.GAIN_RESOURCES,
-            EncounterEffect.GAIN_HEALING,
-            EncounterEffect.GAIN_PROJECT_XP,
-            EncounterEffect.GAIN_SPEED,
-            EncounterEffect.NOTHING,
+            Outcome.GAIN_RESOURCES,
+            Outcome.GAIN_HEALING,
+            Outcome.GAIN_PROJECT_XP,
+            Outcome.GAIN_SPEED,
+            Outcome.NOTHING,
         ]
         * 1
     )
@@ -164,22 +164,22 @@ def _make_reward_bag(
 
 def _make_penalty_bag(
     deck: TemplateDeck, challenge: Challenge, context: EncounterContextType
-) -> List[EncounterEffect]:
+) -> List[Outcome]:
     penalty_bag = []
     if context == EncounterContextType.TRAVEL:
-        penalty_bag.extend([EncounterEffect.LOSE_SPEED] * 8)
-        penalty_bag.extend([EncounterEffect.DAMAGE] * 4)
+        penalty_bag.extend([Outcome.LOSE_SPEED] * 8)
+        penalty_bag.extend([Outcome.DAMAGE] * 4)
     else:
-        penalty_bag.extend([EncounterEffect.DAMAGE] * 12)
+        penalty_bag.extend([Outcome.DAMAGE] * 12)
     penalty_bag.extend(challenge.penalties * 6)
     penalty_bag.extend(
         [
-            EncounterEffect.NOTHING,
-            EncounterEffect.LOSE_REPUTATION,
-            EncounterEffect.LOSE_RESOURCES,
-            EncounterEffect.LOSE_COINS,
-            EncounterEffect.TRANSPORT,
-            EncounterEffect.LOSE_LEADERSHIP,
+            Outcome.NOTHING,
+            Outcome.LOSE_REPUTATION,
+            Outcome.LOSE_RESOURCES,
+            Outcome.LOSE_COINS,
+            Outcome.TRANSPORT,
+            Outcome.LOSE_LEADERSHIP,
         ]
         * 1
     )

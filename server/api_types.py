@@ -24,12 +24,11 @@ from picaro.engine.types import (
     EffectType,
     EncounterActions,
     EncounterCheck,
-    EncounterEffect,
+    Outcome,
     EntityType,
     FullCardType,
     Gadget,
     OracleStatus,
-    Outcome,
     ProjectType,
     Record,
     Rule,
@@ -61,7 +60,7 @@ class StartTaskRequest:
 
 @dataclass(frozen=True)
 class StartTaskResponse:
-    outcome: Outcome
+    records: Sequence[Record]
 
 
 @dataclass(frozen=True)
@@ -71,7 +70,7 @@ class ReturnTaskRequest:
 
 @dataclass(frozen=True)
 class ReturnTaskResponse:
-    outcome: Outcome
+    records: Sequence[Record]
 
 
 @dataclass(frozen=True)
@@ -108,7 +107,7 @@ class CreateOracleRequest:
 @dataclass(frozen=True)
 class CreateOracleResponse:
     id: str
-    outcome: Outcome
+    records: Sequence[Record]
 
 
 @dataclass(frozen=True)
@@ -120,7 +119,7 @@ class AnswerOracleRequest:
 
 @dataclass(frozen=True)
 class AnswerOracleResponse:
-    outcome: Outcome
+    records: Sequence[Record]
 
 
 @dataclass(frozen=True)
@@ -131,7 +130,7 @@ class ConfirmOracleRequest:
 
 @dataclass(frozen=True)
 class ConfirmOracleResponse:
-    outcome: Outcome
+    records: Sequence[Record]
 
 
 @dataclass(frozen=True)
@@ -141,7 +140,7 @@ class JobRequest:
 
 @dataclass(frozen=True)
 class JobResponse:
-    outcome: Outcome
+    records: Sequence[Record]
 
 
 @dataclass(frozen=True)
@@ -152,7 +151,7 @@ class TokenActionRequest:
 
 @dataclass(frozen=True)
 class TokenActionResponse:
-    outcome: Outcome
+    records: Sequence[Record]
 
 
 @dataclass(frozen=True)
@@ -162,7 +161,7 @@ class CampRequest:
 
 @dataclass(frozen=True)
 class CampResponse:
-    outcome: Outcome
+    records: Sequence[Record]
 
 
 @dataclass(frozen=True)
@@ -172,7 +171,7 @@ class TravelRequest:
 
 @dataclass(frozen=True)
 class TravelResponse:
-    outcome: Outcome
+    records: Sequence[Record]
 
 
 @dataclass(frozen=True)
@@ -182,7 +181,7 @@ class EndTurnRequest:
 
 @dataclass(frozen=True)
 class EndTurnResponse:
-    outcome: Outcome
+    records: Sequence[Record]
 
 
 @dataclass(frozen=True)
@@ -192,7 +191,7 @@ class ResolveEncounterRequest:
 
 @dataclass(frozen=True)
 class ResolveEncounterResponse:
-    outcome: Outcome
+    records: Sequence[Record]
 
 
 @dataclass(frozen=True)

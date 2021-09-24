@@ -34,11 +34,10 @@ from .types import (
     EncounterActions,
     EncounterCheck,
     EncounterContextType,
-    EncounterEffect,
+    Outcome,
     EntityType,
     FullCardType,
     Record,
-    Outcome,
     TemplateCard,
     TemplateCardType,
 )
@@ -58,7 +57,7 @@ class Engine:
     ) -> None:
         with Character.load(character_name) as ch:
             loc = ch.get_snapshot().location
-            ch.apply_outcome(
+            ch.apply_regardless(
                 [
                     Effect(type=EffectType.MODIFY_COINS, value=50),
                     Effect(type=EffectType.MODIFY_RESOURCES, value=10),
@@ -149,7 +148,7 @@ class Engine:
         player_id: int,
         game_id: int,
         character_name: str,
-    ) -> Outcome:
+    ) -> Sequence[Record]:
         with Task.load(task_name) as task:
             with Character.load(character_name) as ch:
                 with Task.load_for_character(character_name) as current:
@@ -170,7 +169,7 @@ class Engine:
                     ch.discard_job_cards(6)
 
                 task.start(ch.name, records)
-                return Outcome(records=records)
+                return records
 
     @with_connection()
     def return_task(
@@ -180,12 +179,12 @@ class Engine:
         player_id: int,
         game_id: int,
         character_name: str,
-    ) -> Outcome:
+    ) -> Sequence[Record]:
         with Task.load(task_name) as task:
             with Character.load(character_name) as ch:
                 records: List[Record] = []
                 task.do_return(ch.name, records)
-                return Outcome(records=records)
+                return records
 
     @with_connection()
     def get_skills(
@@ -251,7 +250,7 @@ class Engine:
         player_id: int,
         game_id: int,
         character_name: str,
-    ) -> Tuple[str, Outcome]:
+    ) -> Tuple[str, Sequence[Record]]:
         with Character.load(character_name) as ch:
             with Oracle.load_for_petitioner(ch.name) as current:
                 if len(current) >= ch.get_max_oracles():
@@ -264,7 +263,7 @@ class Engine:
             payment = self._eval_choices(occ, [], payment_selections, records)
             ch.apply_bargain(payment, records)
             id = Oracle.create(ch.name, payment, request)
-            return id, Outcome(records=records)
+            return id, records
 
     @with_connection()
     def answer_oracle(
@@ -276,12 +275,12 @@ class Engine:
         player_id: int,
         game_id: int,
         character_name: str,
-    ) -> Outcome:
+    ) -> Sequence[Record]:
         with Oracle.load(oracle_id) as oracle:
             with Character.load(character_name) as ch:
                 records: List[Record] = []
                 oracle.answer(ch.name, response, proposal)
-                return Outcome(records=records)
+                return records
 
     @with_connection()
     def confirm_oracle(
@@ -292,7 +291,7 @@ class Engine:
         player_id: int,
         game_id: int,
         character_name: str,
-    ) -> Outcome:
+    ) -> Sequence[Record]:
         with Oracle.load(oracle_id) as oracle:
             with Character.load(character_name) as ch:
                 records: List[Record] = []
@@ -301,17 +300,17 @@ class Engine:
                     oracle.finish(ch.name, confirm=True)
                 else:
                     oracle.finish(ch.name, confirm=False)
-                return Outcome(records=records)
+                return records
 
     @with_connection()
     def do_job(
         self, card_id: int, *, player_id: int, game_id: int, character_name: str
-    ) -> Outcome:
+    ) -> Sequence[Record]:
         with Character.load(character_name) as ch:
             records: List[Record] = []
             self._basic_action_prep(ch, consume_action=True)
             ch.queue_tableau_card(card_id)
-            return Outcome(records=records)
+            return records
 
     @with_connection()
     def token_action(
@@ -322,7 +321,7 @@ class Engine:
         player_id: int,
         game_id: int,
         character_name: str,
-    ) -> Outcome:
+    ) -> Sequence[Record]:
         with Character.load(character_name) as ch:
             records: List[Record] = []
             self._basic_action_prep(ch, consume_action=False)
@@ -338,34 +337,23 @@ class Engine:
                 token_name, action_name
             )
             ch.apply_bargain(action.cost, records)
-            ch.apply_outcome(action.benefit, records)
-            return Outcome(records=records)
-
-    def _action_to_template(
-        self, action: Action, entity_type: EntityType, entity_name: str
-    ) -> TemplateCard:
-        return TemplateCard(
-            copies=1,
-            name=action.name,
-            desc="Choose your action:",
-            type=TemplateCardType.CHOICE,
-            data=action.choices,
-            entity_type=entity_type,
-            entity_name=entity_name,
-        )
+            ch.apply_regardless(action.benefit, records)
+            return records
 
     @with_connection()
-    def camp(self, player_id: int, game_id: int, character_name: str) -> Outcome:
+    def camp(
+        self, player_id: int, game_id: int, character_name: str
+    ) -> Sequence[Record]:
         with Character.load(character_name) as ch:
             records: List[Record] = []
             self._basic_action_prep(ch, consume_action=True)
             ch.queue_camp_card()
-            return Outcome(records=records)
+            return records
 
     @with_connection()
     def travel(
         self, step: str, *, player_id: int, game_id: int, character_name: str
-    ) -> Outcome:
+    ) -> Sequence[Record]:
         with Character.load(character_name) as ch:
             self._travel_prep(ch)
             records: List[Record] = []
@@ -374,7 +362,7 @@ class Engine:
             new_loc = board.get_token_location(ch.name)
             with Task.load_for_character(ch.name) as current:
                 for cur in current:
-                    cur.apply_outcome(
+                    cur.apply_regardless(
                         [
                             Effect(
                                 EffectType.EXPLORE,
@@ -384,16 +372,18 @@ class Engine:
                         records,
                     )
             ch.queue_travel_card(new_loc)
-            return Outcome(records=records)
+            return records
 
     @with_connection()
-    def end_turn(self, *, player_id: int, game_id: int, character_name: str) -> Outcome:
+    def end_turn(
+        self, *, player_id: int, game_id: int, character_name: str
+    ) -> Sequence[Record]:
         with Character.load(character_name) as ch:
             records: List[Record] = []
             self._basic_action_prep(ch, consume_action=False)
             if not ch.has_encounters():
                 self._finish_turn(ch, records)
-            return Outcome(records=records)
+            return records
 
     @with_connection()
     def resolve_encounter(
@@ -403,7 +393,7 @@ class Engine:
         player_id: int,
         game_id: int,
         character_name: str,
-    ) -> Outcome:
+    ) -> Sequence[Record]:
         with Character.load(character_name) as ch:
             records: List[Record] = []
 
@@ -448,13 +438,13 @@ class Engine:
                         if encounter.card.context_type == EncounterContextType.ACTION:
                             ch.apply_bargain(cur_effects, records)
                         else:
-                            ch.apply_outcome(cur_effects, records)
+                            ch.apply_regardless(cur_effects, records)
                     else:
                         with Character.load(entity_name) as other_ch:
-                            other_ch.apply_outcome(cur_effects, records)
+                            other_ch.apply_regardless(cur_effects, records)
                 elif entity_type == EntityType.TASK:
                     with Task.load(entity_name) as task:
-                        task.apply_outcome(cur_effects, records)
+                        task.apply_regardless(cur_effects, records)
                 else:
                     raise Exception(
                         f"Unexpected entity in effect: {entity_type} {entity_name}"
@@ -462,7 +452,7 @@ class Engine:
 
             ch.encounter_finished()
 
-            return Outcome(records=records)
+            return records
 
     def _basic_action_prep(self, ch: Character, consume_action: bool) -> None:
         if ch.has_encounters():
@@ -525,10 +515,10 @@ class Engine:
         mcs = defaultdict(int)
 
         sum_til = lambda v: (v * v + v) // 2
-        for enc_eff, cnt in ocs.items():
+        for outcome, cnt in ocs.items():
             effects.extend(
-                self._convert_encounter_effect(
-                    enc_eff, cnt, ch, checks[0].skill, entity_type, entity_name
+                self._convert_outcome(
+                    outcome, cnt, ch, checks[0].skill, entity_type, entity_name
                 )
             )
         if failures > 0:
@@ -542,9 +532,9 @@ class Engine:
 
         return effects
 
-    def _convert_encounter_effect(
+    def _convert_outcome(
         self,
-        enc_eff: EncounterEffect,
+        outcome: Outcome,
         cnt: int,
         ch: Character,
         default_skill: str,
@@ -552,39 +542,39 @@ class Engine:
         entity_name: Optional[str],
     ) -> List[Effect]:
         sum_til = lambda v: (v * v + v) // 2
-        if enc_eff == EncounterEffect.GAIN_COINS:
+        if outcome == Outcome.GAIN_COINS:
             return [Effect(type=EffectType.MODIFY_COINS, value=sum_til(cnt))]
-        elif enc_eff == EncounterEffect.LOSE_COINS:
+        elif outcome == Outcome.LOSE_COINS:
             return [Effect(type=EffectType.MODIFY_COINS, value=-cnt)]
-        elif enc_eff == EncounterEffect.GAIN_REPUTATION:
+        elif outcome == Outcome.GAIN_REPUTATION:
             return [Effect(type=EffectType.MODIFY_REPUTATION, value=sum_til(cnt))]
-        elif enc_eff == EncounterEffect.LOSE_REPUTATION:
+        elif outcome == Outcome.LOSE_REPUTATION:
             return [Effect(type=EffectType.MODIFY_REPUTATION, value=-cnt)]
-        elif enc_eff == EncounterEffect.GAIN_HEALING:
+        elif outcome == Outcome.GAIN_HEALING:
             return [Effect(type=EffectType.MODIFY_HEALTH, value=cnt * 3)]
-        elif enc_eff == EncounterEffect.DAMAGE:
+        elif outcome == Outcome.DAMAGE:
             return [Effect(type=EffectType.MODIFY_HEALTH, value=-sum_til(cnt))]
-        elif enc_eff == EncounterEffect.GAIN_XP:
+        elif outcome == Outcome.GAIN_XP:
             return [
                 Effect(type=EffectType.MODIFY_XP, subtype=default_skill, value=cnt * 5)
             ]
-        elif enc_eff == EncounterEffect.GAIN_RESOURCES:
+        elif outcome == Outcome.GAIN_RESOURCES:
             return [Effect(type=EffectType.MODIFY_RESOURCES, value=cnt)]
-        elif enc_eff == EncounterEffect.LOSE_RESOURCES:
+        elif outcome == Outcome.LOSE_RESOURCES:
             return [Effect(type=EffectType.MODIFY_RESOURCES, value=-cnt)]
-        elif enc_eff == EncounterEffect.GAIN_TURNS:
+        elif outcome == Outcome.GAIN_TURNS:
             return [Effect(type=EffectType.MODIFY_TURNS, value=cnt)]
-        elif enc_eff == EncounterEffect.LOSE_TURNS:
+        elif outcome == Outcome.LOSE_TURNS:
             return [Effect(type=EffectType.MODIFY_TURNS, value=-cnt)]
-        elif enc_eff == EncounterEffect.GAIN_SPEED:
+        elif outcome == Outcome.GAIN_SPEED:
             return [Effect(type=EffectType.MODIFY_SPEED, value=cnt * 2)]
-        elif enc_eff == EncounterEffect.LOSE_SPEED:
+        elif outcome == Outcome.LOSE_SPEED:
             return [Effect(type=EffectType.MODIFY_SPEED, value=-cnt)]
-        elif enc_eff == EncounterEffect.TRANSPORT:
+        elif outcome == Outcome.TRANSPORT:
             return [Effect(type=EffectType.TRANSPORT, value=cnt * 5)]
-        elif enc_eff == EncounterEffect.LOSE_LEADERSHIP:
+        elif outcome == Outcome.LOSE_LEADERSHIP:
             return [Effect(type=EffectType.LEADERSHIP, value=-cnt)]
-        elif enc_eff == EncounterEffect.GAIN_PROJECT_XP:
+        elif outcome == Outcome.GAIN_PROJECT_XP:
             use_name: Optional[str] = None
             if entity_type is not None and entity_type == EntityType.TASK:
                 use_name = entity_name
@@ -604,10 +594,10 @@ class Engine:
                 ]
             else:
                 return []
-        elif enc_eff == EncounterEffect.NOTHING:
+        elif outcome == Outcome.NOTHING:
             return []
         else:
-            raise Exception(f"Unknown effect: {enc_eff}")
+            raise Exception(f"Unknown effect: {outcome}")
 
     def _eval_choices(
         self,
@@ -660,7 +650,7 @@ class Engine:
 
     # currently we assume nothing in here adds to the current list of records,
     # to avoid confusing the player when additional stuff shows up in the
-    # outcome, but there's probably nothing strictly wrong if it did
+    # records, but there's probably nothing strictly wrong if it did
     def _finish_turn(self, ch: Character, records: List[Record]) -> None:
         self._bad_reputation_check(ch)
         if ch.has_encounters():
@@ -672,7 +662,7 @@ class Engine:
 
         with Task.load_for_character(ch.name) as current:
             for cur in current:
-                cur.apply_outcome(
+                cur.apply_regardless(
                     [
                         Effect(
                             EffectType.TIME_PASSES,

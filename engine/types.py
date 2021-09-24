@@ -27,7 +27,7 @@ def make_id() -> str:
     return "".join(random.choice(ascii_lowercase) for _ in range(12))
 
 
-class EncounterEffect(Enum):
+class Outcome(Enum):
     NOTHING = enum_auto()
     GAIN_COINS = enum_auto()
     GAIN_XP = enum_auto()
@@ -171,8 +171,8 @@ class Gadget:
 class EncounterCheck:
     skill: str
     target_number: int
-    reward: EncounterEffect
-    penalty: EncounterEffect
+    reward: Outcome
+    penalty: Outcome
 
 
 @dataclass(frozen=True)
@@ -189,8 +189,8 @@ class Choice:
 @dataclass(frozen=True)
 class Challenge:
     skills: Sequence[str]
-    rewards: Sequence[EncounterEffect]
-    penalties: Sequence[EncounterEffect]
+    rewards: Sequence[Outcome]
+    penalties: Sequence[Outcome]
     difficulty: Optional[int] = None
 
 
@@ -489,11 +489,6 @@ class Record(Generic[T]):
             new,
             comments,
         )
-
-
-@dataclass(frozen=True)
-class Outcome:
-    records: Sequence[Record]
 
 
 @dataclass(frozen=True)

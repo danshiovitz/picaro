@@ -107,7 +107,7 @@ class CharacterTest(TestCase):
 
         effects = [Effect(type=EffectType.MODIFY_COINS, value=1)]
         records = []
-        outcome = ch.apply_outcome(effects, records)
+        ch.apply_regardless(effects, records)
         self.assertEqual(ch.coins, 4)
         ec = [e for e in records if e.type == EffectType.MODIFY_COINS]
         self.assertEqual(len(ec), 1)
@@ -119,7 +119,7 @@ class CharacterTest(TestCase):
             Effect(type=EffectType.MODIFY_COINS, value=4),
         ]
         records = []
-        outcome = ch.apply_outcome(effects, records)
+        ch.apply_regardless(effects, records)
         self.assertEqual(ch.coins, 14)
         ec = [e for e in records if e.type == EffectType.MODIFY_COINS]
         self.assertEqual(len(ec), 1)
@@ -134,7 +134,7 @@ class CharacterTest(TestCase):
             Effect(type=EffectType.MODIFY_XP, subtype="Fishing", value=1),
         ]
         records = []
-        outcome = ch.apply_outcome(effects, records)
+        ch.apply_regardless(effects, records)
         ec = [e for e in records if e.type == EffectType.MODIFY_XP]
         self.assertEqual(len(ec), 1)
         self.assertEqual(ec[0].subtype, "Fishing")

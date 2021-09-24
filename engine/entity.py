@@ -185,7 +185,7 @@ class Entity:
     # This one is for when the character has done a thing, and this is the outcome,
     # which applies in all cases. If the character has 3 coins, and this has an effect
     # of -10 coins, the character ends up with 0 coins and life goes on.
-    def apply_outcome(
+    def apply_regardless(
         self,
         effects: List[Effect],
         records: List[Record],
