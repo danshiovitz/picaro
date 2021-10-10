@@ -1,0 +1,38 @@
+{
+  "name": "Travel",
+  "base_skills": [],
+  "cards": [
+    {
+      "copies": 2,
+      "name": "A Find Along The Way",
+      "desc": "...",
+      "type": "CHOICE",
+      "data": {
+        "min_choices": 1,
+        "max_choices": 1,
+        "is_random": true,
+        "choice_list": [
+            {"benefit": [{"type": "MODIFY_COINS", "value": 1}]},
+            {"benefit": [{"type": "MODIFY_COINS", "value": 6}]},
+            {"benefit": [{"type": "MODIFY_RESOURCES", "value": 1}]},
+            {"benefit": [{"type": "MODIFY_HEALTH", "value": 3}]}
+        ]
+      }
+    },
+    {
+      "copies": 2,
+      "name": "Shortcut",
+      "desc": "...",
+      "type": "CHOICE",
+      "data": {
+        "min_choices": 1,
+        "max_choices": 1,
+        "is_random": true,
+        "choice_list": [
+            {"benefit": [{"type": "MODIFY_SPEED", "value": 1}]},
+            {"benefit": [{"type": "MODIFY_SPEED", "value": 2}]}
+        ]
+      }
+    }
+  ]
+}

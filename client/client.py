@@ -17,9 +17,10 @@ from typing import (
     Type,
     TypeVar,
 )
+from urllib.parse import quote as url_quote
 from urllib.request import HTTPErrorProcessor, Request, build_opener, urlopen
 
-from picaro.client.colors import colors
+from picaro.common.exceptions import BadStateException, IllegalMoveException
 from picaro.common.hexmap.display import (
     CubeCoordinate,
     DisplayInfo,
@@ -30,10 +31,11 @@ from picaro.common.hexmap.display import (
 from picaro.common.serializer import deserialize, serialize
 from picaro.server.api_types import *
 
-from .common import BadStateException, IllegalMoveException
+from .cache import LookupCache
+from .colors import colors
 from .generate import generate_game_v2
 from .read import ComplexReader, read_selections, read_text
-from .render import render_effect, render_gadget, render_outcome, render_record
+from .render import render_gadget, render_outcome, render_record
 
 S = TypeVar("S")
 T = TypeVar("T")
@@ -44,7 +46,7 @@ class NonThrowingHTTPErrorProcessor(HTTPErrorProcessor):
         return response
 
 
-class Client:
+class Client(LookupCache):
     @classmethod
     def run(cls) -> None:
         args = cls.parse_args()
@@ -55,7 +57,7 @@ class Client:
     def parse_args(cls) -> Namespace:
         parser = ArgumentParser()
         parser.add_argument("--host", type=str, default="http://localhost:8080")
-        parser.add_argument("--game_id", type=int, default=1)
+        parser.add_argument("--game_name", type=str, default="Hyboria")
         parser.add_argument("--name", type=str, required=True)
         parser.set_defaults(cmd=lambda cli: parser.print_help())
         subparsers = parser.add_subparsers()
@@ -70,30 +72,12 @@ class Client:
         get_character_parser.set_defaults(cmd=lambda cli: cli.get_character())
         get_character_parser.add_argument("--all", action="store_true")
 
-        do_projects_parser = subparsers.add_parser("projects")
-        do_projects_parser.set_defaults(cmd=lambda cli: cli.do_projects())
-        do_projects_parser.add_argument("--all", action="store_true")
-        do_projects_parser.add_argument("--start", action="store_true")
-        do_projects_parser.add_argument("--do_return", "--return", action="store_true")
-
-        do_oracle_parser = subparsers.add_parser("oracle")
-        oracle_subparsers = do_oracle_parser.add_subparsers()
-        create_oracle_parser = oracle_subparsers.add_parser("create")
-        create_oracle_parser.set_defaults(cmd=lambda cli: cli.create_oracle())
-        answer_oracle_parser = oracle_subparsers.add_parser("answer")
-        answer_oracle_parser.set_defaults(cmd=lambda cli: cli.answer_oracle())
-        confirm_oracle_parser = oracle_subparsers.add_parser("confirm")
-        confirm_oracle_parser.set_defaults(cmd=lambda cli: cli.confirm_oracle())
-        list_oracle_parser = oracle_subparsers.add_parser("list")
-        list_oracle_parser.set_defaults(cmd=lambda cli: cli.list_oracles())
-
         play_parser = subparsers.add_parser("play")
         play_parser.set_defaults(cmd=lambda cli: cli.play())
         play_parser.add_argument("--season", action="store_true")
 
         generate_parser = subparsers.add_parser("generate")
         generate_parser.set_defaults(cmd=lambda cli: cli.generate_game())
-        generate_parser.add_argument("--game_name", type=str, required=True)
         generate_parser.add_argument("--json_dir", type=str, required=True)
 
         return parser.parse_args()
@@ -116,16 +100,25 @@ class Client:
             "Coastal": (colors.fg.cyan, ";"),
             "Arctic": (colors.bold, "/"),
         }
+        self.game_uuid_map: Dict[str, str] = {}
+        self.cached_entities: Dict[str, Entity] = {}
+        self.cached_hexes: List[Hex] = []
+        self.cached_resources: List[str] = []
+        self.cached_skills: List[str] = []
+        self.cached_jobs: List[Job] = []
+
         self.opener = build_opener(NonThrowingHTTPErrorProcessor)
 
     def get_board(self) -> None:
         ch = self._get(f"/character", Character)
         board = self._get(f"/board", Board)
-        coords = {hx.coordinate: hx for hx in board.hexes}
+        entities = self.lookup_entities()
 
-        tokens: Dict[str, List[Token]] = defaultdict(list)
-        for tok in board.tokens:
-            tokens[tok.location].append(tok)
+        coords = {hx.coordinate: hx for hx in board.hexes}
+        tokens: Dict[str, List[Entity]] = defaultdict(list)
+        for entity in entities:
+            for location in entity.locations:
+                tokens[location].append(entity)
 
         if self.args.large:
 
@@ -161,11 +154,11 @@ class Client:
             for line in self._make_small_map(ch, board, show_country=self.args.country):
                 print(line)
 
-        if board.tokens:
+        if entities:
             print()
-            for tok in board.tokens:
-                if tok.type == "Character" or len(tok.route) <= 5:
-                    print(tok)
+            for entity in entities:
+                if entity.type == EntityType.CHARACTER:
+                    print(entity)
 
         if self.args.country:
             ccount: Dict[str, int] = defaultdict(int)
@@ -177,21 +170,23 @@ class Client:
         self,
         ch: Character,
         board: Board,
-        show_country: bool = False,
         center: Optional[OffsetCoordinate] = None,
         radius: int = 2,
-        encounters: Optional[Set[str]] = None,
+        show_country: bool = False,
+        show_encounters: bool = False,
     ) -> List[str]:
         coords = {hx.coordinate: hx for hx in board.hexes}
 
-        tokens: Dict[str, List[Token]] = defaultdict(list)
-        for tok in board.tokens:
-            tokens[tok.location].append(tok)
+        tokens: Dict[str, List[Entity]] = defaultdict(list)
+        for entity in self.lookup_entities():
+            for location in entity.locations:
+                tokens[location].append(entity)
+
+        encounters = (
+            {card.location for card in ch.tableau} if show_encounters else set()
+        )
 
         flagged_hexes = set()
-        for task in ch.tasks:
-            if task.type == TaskType.DISCOVERY:
-                flagged_hexes |= set(task.extra.possible_hexes)
 
         def display(coord: OffsetCoordinate) -> str:
             hx = coords[coord]
@@ -201,19 +196,17 @@ class Client:
             if hx.name in tokens:
                 if tokens[hx.name][0].type == EntityType.CHARACTER:
                     return colors.bold + "@" + colors.reset
-                elif tokens[hx.name][0].type == EntityType.CITY:
-                    return colors.fg.red + rev + "#" + colors.reset
-                elif tokens[hx.name][0].type == EntityType.MINE:
-                    return (
-                        colors.bg.magenta + colors.fg.black + rev + "*" + colors.reset
-                    )
-                elif tokens[hx.name][0].type == EntityType.PROJECT:
-                    return colors.bold + colors.bg.orange + rev + "P" + colors.reset
-                elif tokens[hx.name][0].type == EntityType.TASK:
-                    return colors.bold + colors.bg.orange + rev + "T" + colors.reset
+                elif tokens[hx.name][0].type == EntityType.LANDMARK:
+                    if tokens[hx.name][0].subtype == "city":
+                        return colors.fg.red + rev + "#" + colors.reset
+                    elif tokens[hx.name][0].subtype == "mine":
+                        color = colors.bg.magenta + colors.fg.black + rev
+                        return color + "*" + colors.reset
+                    else:
+                        return colors.bold + colors.bg.orange + rev + "?" + colors.reset
                 else:
                     return colors.bold + colors.fg.green + rev + "?" + colors.reset
-            elif encounters is not None and hx.name in encounters:
+            elif hx.name in encounters:
                 return colors.bold + colors.bg.red + rev + "!" + colors.reset
 
             color, symbol = self.terrains[hx.terrain]
@@ -225,7 +218,7 @@ class Client:
 
     def get_character(self) -> None:
         ch = self._get(f"/character", Character)
-        print(f"{ch.name} ({ch.player_id}) - a {ch.job} [{ch.location}]")
+        print(f"{ch.name} ({ch.player_uuid}) - a {ch.job} [{ch.location}]")
         print(f"Health: {ch.health}   Coins: {ch.coins}   Reputation: {ch.reputation}")
         resources = ", ".join(f"{v} {n}" for n, v in ch.resources.items())
         print(f"Resources: {resources}")
@@ -242,287 +235,6 @@ class Client:
         if not ch.emblems:
             print("* None")
         print()
-
-    def do_projects(self) -> None:
-        ch = self._get(f"/character", Character)
-
-        is_all = "?all=true" if self.args.all or self.args.start else ""
-        resp = self._get(f"/projects{is_all}", SearchProjectsResponse)
-        projects = resp.projects
-        print(f"All Current Projects:" if is_all else "Your Current Projects:")
-        if not projects:
-            print("* None")
-            return
-
-        choices = []
-        for project in projects:
-            print(
-                f"* {project.name} ({project.type}, {project.status.name}) @ {project.target_hex}"
-            )
-            print(f"  {project.desc}")
-            print(f"  Tasks:")
-            tasks = project.tasks
-            if self.args.start:
-                tasks = [s for s in tasks if s.status == TaskStatus.UNASSIGNED]
-            elif self.args.do_return:
-                tasks = [
-                    s
-                    for s in tasks
-                    if s.status == TaskStatus.IN_PROGRESS and ch.name in s.participants
-                ]
-
-            if not tasks:
-                print("  * None")
-                print()
-                continue
-            for task in tasks:
-                if self.args.start or self.args.do_return:
-                    ltr = ascii_lowercase[len(choices)]
-                    choices.append(task.name)
-                    print(
-                        f"  {ltr}. {task.name} ({task.type.name}) - {task.xp}/{task.max_xp}"
-                    )
-                else:
-                    print(
-                        f"  * {task.name} ({task.type.name}, {task.status.name}) - {task.xp}/{task.max_xp} [{', '.join(task.participants)}]"
-                    )
-                if task.desc:
-                    print(f"    {task.desc}")
-                if task.type == TaskType.CHALLENGE:
-                    print(f"    Skills: {', '.join(sorted(task.extra.skills))}")
-                elif task.type == TaskType.RESOURCE:
-                    print(
-                        f"    Wanted: {', '.join(sorted(task.extra.wanted_resources))}; Given: {task.extra.given_resources}"
-                    )
-                elif task.type == TaskType.WAITING:
-                    print(f"    Turns Waited: {task.extra.turns_waited}")
-                elif task.type == TaskType.DISCOVERY:
-                    print(
-                        f"    Possible Hexes: {', '.join(sorted(task.extra.possible_hexes))}"
-                    )
-                else:
-                    print(f"    Unknown Task Type: {task.extra}")
-
-        if (self.args.start or self.args.do_return) and choices:
-            verb = "start" if self.args.start else "return"
-            while True:
-                print(f"Task to {verb}? ", end="")
-                line = input().lower().strip()
-                if not line:
-                    continue
-
-                if line[0] == "q":
-                    print(f"[Not {verb}ing any task]")
-                    return
-
-                c_idx = ascii_lowercase.index(line[0])
-                if c_idx >= len(choices):
-                    print("No such task!")
-                    print()
-                    continue
-
-                try:
-                    if self.args.start:
-                        pargs = [
-                            f"/projects/start",
-                            StartTaskRequest(choices[c_idx]),
-                            StartTaskResponse,
-                        ]
-                    else:
-                        pargs = [
-                            f"/projects/return",
-                            ReturnTaskRequest(choices[c_idx]),
-                            ReturnTaskResponse,
-                        ]
-
-                    resp = self._post(*pargs)
-                    if resp.records:
-                        self._display_records(ch, resp.records)
-                        print("[Hit return]")
-                        input()
-                    return
-                except IllegalMoveException as e:
-                    print(e)
-                    print()
-                    continue
-
-    def create_oracle(self) -> None:
-        ch = self._get(f"/character", Character)
-        resp = self._get(f"/oracles/cost", GetOracleCostResponse)
-        print(f"How will you pay for the oracle?")
-        selections = read_selections(resp.cost, [])
-        request = read_text("Describe the request you make:", textbox=True)
-        try:
-            resp = self._post(
-                f"/oracles/create",
-                CreateOracleRequest(request=request, payment_selections=selections),
-                CreateOracleResponse,
-            )
-        except IllegalMoveException as e:
-            print(e)
-            print()
-            return False
-
-        if resp.records:
-            self._display_records(ch, resp.records)
-            print("[Hit return]")
-            input()
-        else:
-            print("Your request has been sent")
-
-    def answer_oracle(self) -> None:
-        ch = self._get(f"/character", Character)
-        resp = self._get(f"/oracles?free=true", SearchOraclesResponse)
-        oracles = resp.oracles
-
-        print("Oracles awaiting answers:")
-        if not oracles:
-            print(" * None")
-            return
-        for idx, oracle in enumerate(oracles):
-            self._display_oracle_item(oracle, bullet=f"{ascii_lowercase[idx]}.")
-        print(" q. Quit")
-        while True:
-            print("Which? ", end="")
-            line = input().strip().lower()
-            if not line:
-                continue
-            if line[0] == "q":
-                return
-            oidx = ascii_lowercase.find(line[0])
-            if oidx < 0 or oidx >= len(oracles):
-                print("No such oracle?")
-                continue
-            oracle = oracles[oidx]
-            break
-
-        payment = ", ".join(render_effect(e) for e in oracle.payment)
-        print(
-            f"Petitioner: {oracle.petitioner}    Payment: {payment}    [{', '.join(oracle.signs)}]"
-        )
-        print(oracle.request)
-        response = read_text("Give your response:", textbox=True)
-        board = self._get(f"/board", Board)
-        skills = self._get(f"/skills", SearchSkillsResponse).skills
-        jobs = self._get(f"/jobs", SearchJobsResponse).jobs
-        reader = ComplexReader(
-            default_entity=(EntityType.CHARACTER, oracle.petitioner),
-            board=board,
-            skills=skills,
-            jobs=jobs,
-        )
-        proposal = reader.read_effects("Propose mechanics for this oracle:", [])
-        try:
-            resp = self._post(
-                f"/oracles/answer",
-                AnswerOracleRequest(id=oracle.id, response=response, proposal=proposal),
-                AnswerOracleResponse,
-            )
-        except IllegalMoveException as e:
-            print(e)
-            print()
-            return False
-
-        if resp.records:
-            self._display_records(ch, resp.records)
-            print("[Hit return]")
-            input()
-        else:
-            print("Your response has been sent")
-
-    def confirm_oracle(self) -> None:
-        ch = self._get(f"/character", Character)
-        resp = self._get(f"/oracles", SearchOraclesResponse)
-        oracles = [o for o in resp.oracles if o.status == OracleStatus.ANSWERED]
-
-        print("Oracles awaiting confirmation:")
-        if not oracles:
-            print(" * None")
-            return
-        for idx, oracle in enumerate(oracles):
-            self._display_oracle_item(oracle, bullet=f"{ascii_lowercase[idx]}.")
-        print(" q. Quit")
-        while True:
-            print("Which? ", end="")
-            line = input().strip().lower()
-            if not line:
-                continue
-            if line[0] == "q":
-                return
-            oidx = ascii_lowercase.find(line[0])
-            if oidx < 0 or oidx >= len(oracles):
-                print("No such oracle?")
-                continue
-            oracle = oracles[oidx]
-            break
-
-        print("The request:")
-        print(oracle.request)
-        print()
-        print("The response:")
-        print(oracle.response)
-        for eff in oracle.proposal:
-            print(f" * {render_effect(eff)}")
-
-        confirm = None
-        while True:
-            print("You can confirm, reject, or quit: ", end="")
-            line = input().strip().lower()
-            if not line:
-                continue
-            if line[0] == "q":
-                return
-            elif line[0] == "c":
-                confirm = True
-                break
-            elif line[0] == "r":
-                confirm = False
-                break
-            else:
-                print("???")
-                continue
-
-        try:
-            resp = self._post(
-                f"/oracles/confirm",
-                ConfirmOracleRequest(id=oracle.id, confirm=confirm),
-                ConfirmOracleResponse,
-            )
-        except IllegalMoveException as e:
-            print(e)
-            print()
-            return False
-
-        if resp.records:
-            self._display_records(ch, resp.records)
-            print("[Hit return]")
-            input()
-        else:
-            print(f"You have {'confirm' if confirm else 'reject'}ed this oracle.")
-
-    def list_oracles(self) -> None:
-        ch = self._get(f"/character", Character)
-        resp = self._get(f"/oracles", SearchOraclesResponse)
-        oracles = resp.oracles
-
-        print("Current Oracles:")
-        if not oracles:
-            print(" * None")
-            return
-        for oracle in oracles:
-            self._display_oracle_item(oracle)
-
-    def _display_oracle_item(self, oracle: Oracle, bullet: str = "*") -> None:
-        if len(oracle.request) > 70:
-            rt = oracle.request[0:70] + "..."
-        else:
-            rt = oracle.request
-        rt = rt.replace("\n", " ")
-        print(f" {bullet} {rt}")
-        sp = " " * len(bullet)
-        print(
-            f" {sp} Petitioner: {oracle.petitioner}   Granter: {oracle.granter or '<none>'}   Status: {oracle.status.name.lower()}"
-        )
 
     def play(self) -> None:
         while True:
@@ -549,28 +261,31 @@ class Client:
                 continue
             if ch.acted_this_turn and ch.speed == 0:
                 print("[Ending the turn.]")
-                self._end_turn(ch)
+                self._end_turn()
                 continue
 
             if ch.remaining_turns > 0:
-                self._display_play(ch)
-                self._input_play_action()
+                input_callbacks = self._display_play(ch)
+                self._input_play_action(input_callbacks)
                 continue
             self._display_play(ch)
             return
 
-    def _display_play(self, ch: Character) -> None:
+    def _display_play(self, ch: Character) -> Dict[str, Callable[[str], bool]]:
         board = self._get(f"/board", Board)
-        encounters = {card.location for card in ch.tableau}
 
         ch_hex = [hx for hx in board.hexes if hx.name == ch.location][0]
         minimap = self._make_small_map(
-            ch, board, center=ch_hex.coordinate, radius=4, encounters=encounters
+            ch,
+            board,
+            center=ch_hex.coordinate,
+            radius=4,
+            show_encounters=True,
         )
 
         display = []
         display.append(
-            f"{ch.name} ({ch.player_id}) - a {ch.job} [{ch.location}, in {ch_hex.country}]"
+            f"{ch.name} ({ch.player_uuid}) - a {ch.job} [{ch.location}, in {ch_hex.country}]"
         )
         display.append("")
         display.append(
@@ -582,33 +297,11 @@ class Client:
         display.append("")
 
         if ch.remaining_turns:
+            lines, input_callbacks = self._compute_inputs(ch)
+            display.extend(lines)
+        else:
+            input_callbacks: Dict[str, Callable[[str], bool]] = {}
 
-            def dist(route) -> str:
-                ret = f"- {len(route)} away"
-                if len(route) > ch.speed:
-                    ret += " (too far)"
-                return ret
-
-            for idx, card in enumerate(ch.tableau):
-                display.append(
-                    f"{ascii_lowercase[idx]}. ({card.age}) {card.name} [{card.location} {dist(card.route)}]:"
-                )
-                if card.type == FullCardType.CHALLENGE:
-                    display.append(f"       {self._check_str(card.data[0], ch)}")
-                else:
-                    display.append("")
-
-            actions = self._available_actions(board)
-            for idx, token_action in enumerate(actions):
-                token, action = token_action
-                display.append(
-                    f"{ascii_lowercase[idx + 9]}. {action.name} [{token.location} {dist(token.route)}]"
-                )
-
-            display.append("q. Quit")
-            display.append("t. Travel (uio.jkl)")
-            display.append("x. Camp")
-            display.append("z. End Turn (if you don't want to do a job or camp)")
         while len(display) < len(minimap):
             display.append("")
 
@@ -625,11 +318,74 @@ class Client:
         for line in display:
             print(line)
         print()
+        return input_callbacks
 
-    def _available_actions(self, board: Board) -> List[Tuple[Token, Action]]:
-        actions = [(t, a) for t in board.tokens for a in t.actions if len(t.route) <= 5]
-        actions.sort(key=lambda v: (v[0].location, len(v[0].route), v[1].name))
-        return actions
+    def _compute_inputs(
+        self, ch: Character
+    ) -> Tuple[List[str], Dict[str, Callable[[str], bool]]]:
+        lines: List[str] = []
+        inputs: Dict[str, Callable[[str], bool]] = {}
+
+        def dist(route) -> str:
+            if route.type == RouteType.GLOBAL:
+                return "global"
+            elif route.type == RouteType.UNAVAILABLE:
+                return "unavailable"
+            ret = route.steps[-1] if route.steps else ch.location
+            ret += f" - {len(route.steps)} away"
+            if len(route.steps) > ch.speed:
+                ret += " (too far)"
+            return ret
+
+        idx = 0
+        for card in ch.tableau:
+            bullet = ascii_lowercase[idx]
+            lines.append(f"{bullet}. ({card.age}) {card.name} [{dist(card.route)}]:")
+            if card.type == FullCardType.CHALLENGE:
+                lines.append(f"       {self._check_str(card.data[0], ch)}")
+            else:
+                lines.append("")
+            # can't save card in lambda because it gets reassigned
+            inputs[bullet] = lambda _, uuid=card.uuid, route=card.route: self._job(
+                uuid, route
+            )
+            idx += 1
+
+        actions = list(self._get(f"/actions", SearchActionsResponse).actions)
+
+        def route_sort(route):
+            if route.type == RouteType.GLOBAL:
+                return 1001
+            elif route.type == RouteType.UNAVAILABLE:
+                return 1002
+            else:
+                return len(route.steps)
+
+        actions.sort(key=lambda v: (route_sort(v.route), v.name, v.uuid))
+
+        for action in actions:
+            bullet = ascii_lowercase[idx]
+            lines.append(f"{bullet}. {action.name} [{dist(action.route)}]")
+            # can't save action in lambda because it gets reassigned
+            inputs[
+                bullet
+            ] = lambda _, uuid=action.uuid, route=action.route: self._perform_action(
+                uuid, route
+            )
+            idx += 1
+            if idx > 10:
+                break
+
+        lines.append("q. Quit")
+        inputs["q"] = lambda _: self._quit()
+        lines.append("t. Travel (uio.jkl)")
+        inputs["t"] = lambda d: self._travel(d, ch.location, ch.speed)
+        lines.append("x. Camp")
+        inputs["x"] = lambda _: self._camp()
+        lines.append("z. End Turn (if you don't want to do a job or camp)")
+        inputs["z"] = lambda _: self._end_turn()
+
+        return lines, inputs
 
     def _check_str(self, check: EncounterCheck, ch: Character) -> str:
         reward_name = render_outcome(check.reward)
@@ -639,125 +395,131 @@ class Client:
             f"({reward_name} / {penalty_name})"
         )
 
-    def _input_play_action(self) -> bool:
+    def _input_play_action(
+        self, input_callbacks: Dict[str, Callable[[str], bool]]
+    ) -> None:
         while True:
             ch = self._get(f"/character", Character)
             if ch.encounter:
-                return False
+                return
             print("Action? ", end="")
             line = input().lower().strip()
             if not line:
                 continue
-            if line[0] in "abcdefg":
-                c_idx = "abcdefg".index(line[0])
-                if c_idx < len(ch.tableau):
-                    if self._job(ch.tableau[c_idx], ch):
-                        return True
-                else:
-                    print("No such encounter card!")
-                    print()
-                    continue
-            elif line[0] in "jklmnop":
-                c_idx = "jklmnop".index(line[0])
-                board = self._get(f"/board", Board)
-                actions = self._available_actions(board)
-                if c_idx < len(actions):
-                    token, action = actions[c_idx]
-                    if self._token_action(token, action, ch):
-                        return True
-                else:
-                    print("No such action!")
-                    print()
-                    continue
-            elif line[0] == "q":
-                print("Bye!")
-                sys.exit(0)
-            elif line[0] == "t":
-                ww = re.split(r"\s+", line, 2)
-                dirs = "" if len(ww) == 1 else ww[1]
-                self._travel(dirs, ch)
-                return False
-            elif line[0] == "x":
-                if self._camp(ch):
-                    return True
-            elif line[0] == "z":
-                if self._end_turn(ch):
-                    return True
-            else:
+            if line[0] not in input_callbacks:
                 print("Unknown action")
                 print()
                 continue
 
-    def _job(self, card: TableauCard, ch: Character) -> bool:
-        self._travel_route(card.route, ch)
-        ch = self._get(f"/character", Character)
+            try:
+                records = input_callbacks[line[0]](line[1:].strip())
+                break
+            except IllegalMoveException as e:
+                print(e)
+                print()
+                continue
+
+        if records:
+            ch = self._get(f"/character", Character)
+            self._display_records(ch, records)
+            print("[Hit return]")
+            input()
+
+    def _job(self, card_uuid: str, route: Route) -> Sequence[Record]:
         # if we didn't make it to the card's location uneventfully,
         # then exit to let the player deal with the encounter and
         # perhaps then make another choice for their main action
-        if ch.location != card.location or ch.encounter:
-            # return true to force input play method to exit also
-            return True
+        if not self._travel_route(route):
+            return []
 
         # otherwise start the main job
-        try:
-            resp = self._post(
-                f"/play/job",
-                JobRequest(card_id=card.id),
-                JobResponse,
-            )
-        except IllegalMoveException as e:
-            print(e)
-            print()
-            return False
+        resp = self._post(
+            f"/play/job",
+            JobRequest(card_uuid=card_uuid),
+            JobResponse,
+        )
 
-        if resp.records:
-            self._display_records(ch, resp.records)
-            print("[Hit return]")
-            input()
-            return True
-        return True
+        return resp.records
 
-    def _token_action(self, token: Token, action: Action, ch: Character) -> bool:
-        self._travel_route(token.route, ch)
-        ch = self._get(f"/character", Character)
-        # if we didn't make it to the token's location uneventfully,
+    def _perform_action(self, action_uuid: str, route: Route) -> Sequence[Record]:
+        # if we didn't make it to the action's location uneventfully,
         # then exit to let the player deal with the encounter and
         # perhaps then make another choice for their main action
-        if ch.location != token.location or ch.encounter:
-            # return true to force input play method to exit also
-            return True
+        if not self._travel_route(route):
+            return []
 
         # otherwise start the action
-        try:
-            resp = self._post(
-                f"/play/token_action",
-                TokenActionRequest(token=token.name, action=action.name),
-                TokenActionResponse,
-            )
-        except IllegalMoveException as e:
-            print(e)
-            print()
-            return False
-        if resp.records:
-            self._display_records(ch, resp.records)
-            print("[Hit return]")
-            input()
-            return True
-        return True
+        resp = self._post(
+            f"/play/action",
+            ActionRequest(action_uuid=action_uuid),
+            ActionResponse,
+        )
+        return resp.records
 
-    def _camp(self, ch: Character) -> bool:
-        try:
-            resp = self._post(f"/play/camp", CampRequest(rest=True), CampResponse)
-        except IllegalMoveException as e:
-            print(e)
+    def _quit(self) -> None:
+        print("Bye!")
+        sys.exit(0)
+
+    def _travel(self, dir_str: str, start_loc: str, speed: int) -> Sequence[Record]:
+        ww = re.split(r"\s+", dirstr, 2)
+        dirs = "" if len(ww) == 1 else ww[1]
+
+        if not dirs:
+            print(f"No directions supplied!")
             print()
-            return False
-        if resp.records:
-            self._display_records(ch, resp.records)
-            print("[Hit return]")
-            input()
-            return True
-        return True
+            return []
+
+        board = self._get(f"/board", Board)
+
+        cubes = {
+            CubeCoordinate.from_row_col(hx.coordinate.row, hx.coordinate.column): hx
+            for hx in board.hexes
+        }
+        ch_hex = [hx for hx in board.hexes if hx.name == start_loc][0]
+        cur = CubeCoordinate.from_row_col(
+            ch_hex.coordinate.row, ch_hex.coordinate.column
+        )
+
+        dir_map = {
+            "u": (-1, +1, 0),
+            "i": (0, +1, -1),
+            "o": (+1, 0, -1),
+            ".": (0, 0, 0),
+            "j": (-1, 0, +1),
+            "k": (0, -1, +1),
+            "l": (+1, -1, 0),
+        }
+
+        steps = []
+        for d in dirs:
+            if d not in dir_map:
+                print(f"Bad direction {d}; should be in uio.jkl")
+                print()
+                return False
+            xm, ym, zm = dir_map[d]
+            cur = cur.step(xm, ym, zm)
+            if cur not in cubes:
+                print("That route leaves the board!")
+                print()
+                return False
+            steps.append(cubes[cur].name)
+
+        if len(steps) > speed:
+            print(f"You have only {speed} speed remaining.")
+            print()
+            return
+
+        self._travel_route(Route(type=RouteType.NORMAL, steps=steps))
+        # records are always accounted for within travel_route
+        return []
+
+    def _camp(self) -> Sequence[Record]:
+        resp = self._post(f"/play/camp", CampRequest(rest=True), CampResponse)
+        return resp.records
+
+    def _end_turn(self) -> Sequence[Record]:
+        resp = self._post(f"/play/end_turn", EndTurnRequest(), EndTurnResponse)
+        return resp.records
 
     def _encounter(self, ch: Character) -> bool:
         line = ch.encounter.name
@@ -773,11 +535,11 @@ class Client:
     def _input_encounter_action(self, ch: Character) -> bool:
         if ch.encounter.type == EncounterType.CHALLENGE:
             actions = self._input_encounter_checks(
-                ch, ch.encounter.data, ch.encounter.rolls
+                ch, ch.encounter.uuid, ch.encounter.data, ch.encounter.rolls
             )
         elif ch.encounter.type == EncounterType.CHOICE:
             actions = self._input_encounter_choices(
-                ch, ch.encounter.data, ch.encounter.rolls
+                ch, ch.encounter.uuid, ch.encounter.data, ch.encounter.rolls
             )
         else:
             raise Exception("Encounter with no checks or choices?")
@@ -800,10 +562,14 @@ class Client:
         return True
 
     def _input_encounter_checks(
-        self, ch: Character, checks: Sequence[EncounterCheck], rolls: Sequence[int]
-    ) -> EncounterActions:
+        self,
+        ch: Character,
+        enc_uuid: str,
+        checks: Sequence[EncounterCheck],
+        rolls: Sequence[int],
+    ) -> EncounterCommands:
         rolls = list(rolls[:])
-        luck = ch.luck
+        luck_spent = 0
         transfers = []
         adjusts = []
         flee = False
@@ -820,11 +586,11 @@ class Client:
             if not line:
                 continue
             if line[0] == "f":
-                if luck <= 0:
-                    print(f"Insufficient luck ({luck}) to flee!")
+                if ch.luck - luck_spent <= 0:
+                    print(f"Insufficient luck to flee!")
                     continue
                 flee = True
-                luck -= 1
+                luck_spent += 1
                 break
             elif line[0] == "t":
                 m = re.match(r"^t\w*\s+([0-9]+)\s+([0-9]+)$", line)
@@ -854,36 +620,38 @@ class Client:
                 if not (0 <= adj_c < len(rolls)):
                     print(f"Bad adjust check: {adj_c + 1}")
                     continue
-                if luck <= 0:
-                    print(f"Luck has insufficient value ({luck})")
+                if ch.luck - luck_spent <= 0:
+                    print(f"Luck has insufficient value")
                     continue
                 adjusts.append(adj_c)
                 rolls[adj_c] += 1
-                luck -= 1
+                luck_spent += 1
             elif line[0] == "g":
                 break
             else:
                 print("Unknown command!")
                 continue
 
-        return EncounterActions(
+        return EncounterCommands(
+            encounter_uuid=enc_uuid,
             flee=flee,
             transfers=transfers,
             adjusts=adjusts,
-            luck=luck,
+            luck_spent=luck_spent,
             rolls=rolls,
             choices={},
         )
 
     def _input_encounter_choices(
-        self, ch: Character, choices: Choices, rolls: Sequence[int]
-    ) -> EncounterActions:
-        selections = read_selections(choices, rolls)
-        return EncounterActions(
+        self, ch: Character, enc_uuid: str, choices: Choices, rolls: Sequence[int]
+    ) -> EncounterCommands:
+        selections = read_selections(choices, rolls, self)
+        return EncounterCommands(
+            encounter_uuid=enc_uuid,
             flee=False,
             transfers=[],
             adjusts=[],
-            luck=ch.luck,
+            luck_spent=0,
             rolls=rolls,
             choices={k: v for k, v in selections.items() if v > 0},
         )
@@ -893,114 +661,104 @@ class Client:
             return
 
         for record in records:
-            print(render_record(ch, record))
+            print(render_record(ch, record, self))
 
-    def _travel(self, dirs: str, ch: Character) -> bool:
-        if not dirs:
-            print(f"No directions supplied!")
-            print()
+    def _travel_route(self, route: Route) -> bool:
+        if route.type == RouteType.GLOBAL:
+            return True
+        elif route.type == RouteType.UNAVAILABLE:
+            print(f"There's no obvious way to get there.")
             return False
 
-        board = self._get(f"/board", Board)
+        for step in route.steps:
+            resp = self._post(f"/play/travel", TravelRequest(step=step), TravelResponse)
 
-        cubes = {
-            CubeCoordinate.from_row_col(hx.coordinate.row, hx.coordinate.column): hx
-            for hx in board.hexes
-        }
-        ch_hex = [hx for hx in board.hexes if hx.name == ch.location][0]
-        cur = CubeCoordinate.from_row_col(
-            ch_hex.coordinate.row, ch_hex.coordinate.column
-        )
-
-        dir_map = {
-            "u": (-1, +1, 0),
-            "i": (0, +1, -1),
-            "o": (+1, 0, -1),
-            ".": (0, 0, 0),
-            "j": (-1, 0, +1),
-            "k": (0, -1, +1),
-            "l": (+1, -1, 0),
-        }
-
-        route = []
-        for d in dirs:
-            if d not in dir_map:
-                print(f"Bad direction {d}; should be in uio.jkl")
-                print()
-                return False
-            xm, ym, zm = dir_map[d]
-            cur = cur.step(xm, ym, zm)
-            if cur not in cubes:
-                print("That route leaves the board!")
-                print()
-                return False
-            route.append(cubes[cur].name)
-
-        if len(route) > ch.speed:
-            print(f"You have only {ch.speed} speed remaining.")
-            print()
-            return False
-
-        return self._travel_route(route, ch)
-
-    def _travel_route(self, route: Sequence[str], ch: Character) -> bool:
-        for step in route:
-            try:
-                resp = self._post(
-                    f"/play/travel", TravelRequest(step=step), TravelResponse
-                )
-            except IllegalMoveException as e:
-                print(e)
-                print()
-                return False
             ch = self._get(f"/character", Character)
+            # if there are records, display but keep walking:
             if resp.records:
                 self._display_records(ch, resp.records)
                 print("[Hit return]")
                 input()
-                return True
+
             if ch.encounter:
                 print(f"Your journey is interrupted in {ch.location}!")
-                return True
-            elif ch.speed <= 0 and ch.location != route[-1]:
+                return False
+            elif ch.speed <= 0 and ch.location != route.steps[-1]:
                 print(f"You only make it to {ch.location} this turn.")
-                return True
-        return True
-
-    def _end_turn(self, ch: Character) -> bool:
-        try:
-            resp = self._post(f"/play/end_turn", EndTurnRequest(), EndTurnResponse)
-        except IllegalMoveException as e:
-            print(e)
-            print()
-            return False
-        if resp.records:
-            self._display_records(ch, resp.records)
-            print("[Hit return]")
-            input()
-            return True
+                return False
         return True
 
     def generate_game(self) -> None:
         game_name = self.args.game_name
         json_dir = Path(self.args.json_dir)
         data = generate_game_v2(game_name, json_dir)
-        # special handling since player name and game id aren't used
-        url = self.base_url + "/game/create"
+        # special handling since player name and game uuid aren't used
+        url = self.base_url + "/games/create"
         request = Request(url, data=serialize(data).encode("utf-8"))
         resp = self._http_common(request, CreateGameResponse)
         print(f"Generated game named {self.args.game_name} (id {resp.game_id})")
 
+    def lookup_entity(self, entity_uuid: str) -> Entity:
+        for entity in self.lookup_entities():
+            if entity.uuid == entity_uuid:
+                return entity
+        raise Exception(f"Still can't find {entity_uuid} in {self.cached_entities}")
+
+    def lookup_entities(self) -> List[Entity]:
+        if not self.cached_entities:
+            entities = self._get(
+                f"/entities?details=False", SearchEntitiesResponse
+            ).entities
+            self.cached_entities = {e.uuid: e for e in entities}
+        return list(self.cached_entities.values())
+
+    def lookup_hexes(self) -> List[Hex]:
+        if not self.cached_hexes:
+            hexes = self._get(f"/hexes", SearchHexesResponse).hexes
+            self.cached_hexes = hexes
+        return self.cached_hexes
+
+    def lookup_resources(self) -> List[str]:
+        if not self.cached_resources:
+            resources = self._get(f"/resources", SearchResourcesResponse).resources
+            self.cached_resources = resources
+        return self.cached_resources
+
+    def lookup_skills(self) -> List[str]:
+        if not self.cached_skills:
+            skills = self._get(f"/skills", SearchSkillsResponse).skills
+            self.cached_skills = skills
+        return self.cached_skills
+
+    def lookup_jobs(self) -> List[Job]:
+        if not self.cached_jobs:
+            jobs = self._get(f"/jobs", SearchJobsResponse).jobs
+            self.cached_jobs = jobs
+        return self.cached_jobs
+
+    def _find_game_uuid(self) -> None:
+        game_name = self.args.game_name
+        if game_name not in self.game_uuid_map:
+            # special handling since we don't have game uuid yet
+            url = self.base_url + f"/games?name={url_quote(game_name)}"
+            request = Request(url)
+            resp = self._http_common(request, SearchGamesResponse)
+            for game in resp.games:
+                self.game_uuid_map[game.name] = game.uuid
+        return self.game_uuid_map[game_name]
+
     def _get(self, path: str, cls: Type[T]) -> T:
+        game_uuid = self._find_game_uuid()
         url = self.base_url
-        url += f"/game/{self.args.game_id}/{self.args.name}"
+        url += f"/game/{game_uuid}/{self.args.name}"
         url += path
         request = Request(url)
         return self._http_common(request, cls)
 
     def _post(self, path: str, input_val: S, cls: Type[T]) -> T:
+        game_uuid = self._find_game_uuid()
         url = self.base_url
-        url += f"/game/{self.args.game_id}/{self.args.name}"
+        url += f"/game/{game_uuid}/{self.args.name}"
         url += path
         request = Request(url, data=serialize(input_val).encode("utf-8"))
         return self._http_common(request, cls)

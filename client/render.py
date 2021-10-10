@@ -2,9 +2,10 @@ from typing import Optional
 
 from picaro.common.text import conj_list
 from picaro.server.api_types import *
+from .cache import LookupCache
 
 
-def render_record(ch: Character, record: Record) -> str:
+def render_record(ch: Character, record: Record, cache: LookupCache) -> str:
     def render_single_int(record: Record) -> str:
         if record.new_value > record.old_value:
             return f"increased to {record.new_value}"
@@ -14,12 +15,12 @@ def render_record(ch: Character, record: Record) -> str:
             return f"remained at {record.new_value}"
 
     line = "* "
-    subj = record.entity_name
-    if record.entity_type == EntityType.CHARACTER and record.entity_name == ch.name:
+    subj = cache.lookup_entity(record.entity_uuid).name
+    if record.entity_uuid == ch.uuid:
         line += "Your "
         subj = "You"
     else:
-        line += record.entity_name + "'s "
+        line += subj + "'s "
 
     if record.type == EffectType.MODIFY_ACTIVITY:
         if record.new_value <= 0 and record.old_value > 0:
@@ -45,6 +46,8 @@ def render_record(ch: Character, record: Record) -> str:
         line += "remaining turns have " + render_single_int(record)
     elif record.type == EffectType.MODIFY_SPEED:
         line += "speed has " + render_single_int(record)
+    elif record.type == EffectType.MODIFY_LUCK:
+        line += "luck has " + render_single_int(record)
     elif record.type == EffectType.ADD_EMBLEM:
         if record.old_value:
             line += f"emblem was updated to {render_gadget(record.new_value)}."
@@ -52,7 +55,9 @@ def render_record(ch: Character, record: Record) -> str:
             line = f"* {subj} gained the emblem {render_gadget(record.new_value)}"
     elif record.type == EffectType.QUEUE_ENCOUNTER:
         line = f"* {subj} had the encounter {render_template_card(record.new_value)}"
-    elif record.type == EffectType.MODIFY_LOCATION:
+    elif (
+        record.type == EffectType.MODIFY_LOCATION or record.type == EffectType.TRANSPORT
+    ):
         if subj == "You":
             line = f"* {subj} are "
         else:
@@ -69,26 +74,12 @@ def render_record(ch: Character, record: Record) -> str:
             line = f"* {subj} have "
         else:
             line = f"* {subj} has "
-        if record.new_value:
+        if record.new_value <= 0:
             line += f"lost in a leadership challenge"
+        elif record.new_value > 1:
+            line += f"triumphed in a leadership challenge"
         else:
             line += f"survived a leadership challenge"
-    elif record.type == EffectType.START_TASK:
-        # in the record the project is the subject and the character is the
-        # object, but we want to display it the other way around
-        if record.new_value == ch.name:
-            line = f"* You have "
-        else:
-            line = f"* {record.new_value} has "
-        line += f"started the task {record.entity_name}"
-    elif record.type == EffectType.RETURN_TASK:
-        # in the record the project is the subject and the character is the
-        # object, but we want to display it the other way around
-        if record.new_value == ch.name:
-            line = f"* You have "
-        else:
-            line = f"* {record.new_value} has "
-        line += f"returned the task {record.entity_name}"
     else:
         line += f"UNKNOWN EVENT TYPE: {record}"
 
@@ -121,7 +112,7 @@ def render_outcome(val: Outcome) -> str:
     return names.get(val, val.name)
 
 
-def render_effect(eff: Effect) -> str:
+def render_effect(eff: Effect, cache: LookupCache) -> str:
     def _std_mod(word: str, coll: bool = False, subtype: Optional[str] = None) -> str:
         ln = "set to " if eff.is_absolute else ""
         ln += f"{eff.value:+} "
@@ -134,8 +125,8 @@ def render_effect(eff: Effect) -> str:
         return ln
 
     entity = ""
-    if eff.entity_name:
-        entity = f" for {eff.entity_name}"
+    if eff.entity_uuid:
+        entity = f" for {cache.lookup_entity(eff.entity_uuid).name}"
 
     if eff.type == EffectType.MODIFY_COINS:
         return _std_mod("coin") + entity
@@ -151,6 +142,8 @@ def render_effect(eff: Effect) -> str:
             if eff.subtype is None
             else _std_mod("resource", subtype=eff.subtype)
         ) + entity
+    elif eff.type == EffectType.MODIFY_LUCK:
+        return _std_mod("luck", coll=True) + entity
     elif eff.type == EffectType.MODIFY_TURNS:
         return _std_mod("turn") + entity
     elif eff.type == EffectType.MODIFY_SPEED:
@@ -169,37 +162,49 @@ def render_effect(eff: Effect) -> str:
         return f"move to {eff.value}{entity}"
     elif eff.type == EffectType.MODIFY_JOB:
         return f"change job to {eff.value}{entity}"
-    elif eff.type == EffectType.START_TASK:
-        return f"start task {eff.value}{entity}"
-    elif eff.type == EffectType.RETURN_TASK:
-        return f"return task {eff.value}{entity}"
     else:
         return eff
 
 
 def render_gadget(gadget: Gadget) -> str:
     ret = gadget.name
-    if gadget.rules:
-        ret += f" ({', '.join(render_rule(f) for f in gadget.rules)})"
+    if gadget.overlays:
+        ret += f" ({'; '.join(render_overlay(f) for f in gadget.overlays)})"
     return ret
 
 
-def render_rule(rule: Rule) -> str:
+def render_overlay(overlay: Overlay) -> str:
     names = {
-        RuleType.INIT_SPEED: "init speed",
-        RuleType.INIT_TABLEAU_AGE: "tableau age",
-        RuleType.INIT_TURNS: "init turns",
-        RuleType.MAX_HEALTH: "max health",
-        RuleType.MAX_LUCK: "max luck",
-        RuleType.MAX_TABLEAU_SIZE: "tableau size",
-        RuleType.SKILL_RANK: "rank",
-        RuleType.RELIABLE_SKILL: "reliability",
-        RuleType.MAX_RESOURCES: "resource limit",
+        OverlayType.INIT_SPEED: "init speed",
+        OverlayType.INIT_TABLEAU_AGE: "tableau age",
+        OverlayType.INIT_TURNS: "init turns",
+        OverlayType.MAX_HEALTH: "max health",
+        OverlayType.MAX_LUCK: "max luck",
+        OverlayType.MAX_TABLEAU_SIZE: "tableau size",
+        OverlayType.SKILL_RANK: "rank",
+        OverlayType.RELIABLE_SKILL: "reliability",
+        OverlayType.MAX_RESOURCES: "resource limit",
     }
-    name = names.get(rule.type, rule.type.name)
-    if rule.subtype:
-        name = rule.subtype + " " + name
-    return f"{rule.value:+} {name}"
+    name = names.get(overlay.type, overlay.type.name)
+    if overlay.subtype:
+        name = overlay.subtype + " " + name
+    val = f"{overlay.value:+} {name}"
+    if overlay.filters:
+        val += f" if {', '.join(render_filter(f) for f in overlay.filters)}"
+    return val
+
+
+def render_filter(filter: Filter) -> str:
+    if filter.type == FilterType.SKILL_GTE:
+        return f"{filter.subtype} >= {filter.value}"
+    elif filter.type == FilterType.NEAR_HEX:
+        return f"within {filter.value} hexes of {filter.subtype}"
+    elif filter.type == FilterType.IN_COUNTRY:
+        return f"within {filter.subtype}"
+    elif filter.type == FilterType.NOT_IN_COUNTRY:
+        return f"not within {filter.subtype}"
+    else:
+        return str(filter)
 
 
 def render_template_card(card: TemplateCard) -> str:

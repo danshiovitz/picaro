@@ -4,27 +4,10 @@ from enum import Enum, auto as enum_auto
 from string import ascii_lowercase
 from typing import Any, Dict, Generic, List, Optional, Sequence, Tuple, TypeVar, Union
 
-
-Terrains = [
-    "Forest",
-    "Jungle",
-    "Hills",
-    "Mountains",
-    "Plains",
-    "Desert",
-    "Water",
-    "City",
-    "Swamp",
-    "Coastal",
-    "Arctic",
-]
+from .base import make_uuid
 
 
 T = TypeVar("T")
-
-
-def make_id() -> str:
-    return "".join(random.choice(ascii_lowercase) for _ in range(12))
 
 
 class Outcome(Enum):
@@ -56,28 +39,19 @@ class EffectType(Enum):
     MODIFY_TURNS = enum_auto()
     MODIFY_SPEED = enum_auto()
     MODIFY_ACTIVITY = enum_auto()
+    MODIFY_LUCK = enum_auto()
     ADD_EMBLEM = enum_auto()
     QUEUE_ENCOUNTER = enum_auto()
     MODIFY_LOCATION = enum_auto()
     MODIFY_JOB = enum_auto()
-    # effects mostly for projects
-    TIME_PASSES = enum_auto()
-    EXPLORE = enum_auto()
     # "complex" effects that trigger others
     LEADERSHIP = enum_auto()
     TRANSPORT = enum_auto()
-    # display-only effects (at least for now)
-    START_TASK = enum_auto()
-    RETURN_TASK = enum_auto()
 
 
 class EntityType(Enum):
-    HEX = enum_auto()
     CHARACTER = enum_auto()
-    PROJECT = enum_auto()
-    TASK = enum_auto()
-    CITY = enum_auto()
-    MINE = enum_auto()
+    LANDMARK = enum_auto()
 
 
 @dataclass(frozen=True)
@@ -88,8 +62,7 @@ class Effect(Generic[T]):
     subtype: Optional[str] = None
     comment: Optional[str] = None
     # if the entity isn't provided, it defaults to "the current character"
-    entity_type: Optional[EntityType] = None
-    entity_name: Optional[str] = None
+    entity_uuid: Optional[str] = None
 
     @classmethod
     def type_field(cls) -> str:
@@ -117,17 +90,21 @@ class JobType(Enum):
     KING = enum_auto()
 
 
+class FilterType(Enum):
+    SKILL_GTE = enum_auto()
+    NEAR_HEX = enum_auto()
+    IN_COUNTRY = enum_auto()
+    NOT_IN_COUNTRY = enum_auto()
+
+
 @dataclass(frozen=True)
-class Job:
-    name: str
-    type: JobType
-    rank: int
-    promotions: Sequence[str]
-    deck_name: str
-    encounter_distances: Sequence[int]
+class Filter:
+    type: FilterType
+    subtype: Optional[str]
+    value: Optional[int]
 
 
-class RuleType(Enum):
+class OverlayType(Enum):
     INIT_TABLEAU_AGE = enum_auto()
     INIT_TURNS = enum_auto()
     MAX_HEALTH = enum_auto()
@@ -137,13 +114,17 @@ class RuleType(Enum):
     RELIABLE_SKILL = enum_auto()
     INIT_SPEED = enum_auto()
     MAX_RESOURCES = enum_auto()
+    INIT_REPUTATION = enum_auto()
 
 
 @dataclass(frozen=True)
-class Rule:
-    type: RuleType
+class Overlay:
+    uuid: str
+    type: OverlayType
     value: int
     subtype: Optional[str]
+    is_private: bool
+    filters: Sequence[Filter]
 
 
 class TriggerType(Enum):
@@ -154,17 +135,22 @@ class TriggerType(Enum):
 
 @dataclass(frozen=True)
 class Trigger:
+    uuid: str
     type: TriggerType
     effects: List[Effect]
     subtype: Optional[str]
+    is_private: bool
+    filters: Sequence[Filter]
 
 
 @dataclass(frozen=True)
-class Gadget:
+class Action:
+    uuid: str
     name: str
-    desc: Optional[str]
-    rules: Sequence[Rule] = ()
-    triggers: Sequence[Trigger] = ()
+    cost: Sequence[Effect]
+    benefit: Sequence[Effect]
+    is_private: bool
+    filters: Sequence[Filter]
 
 
 @dataclass(frozen=True)
@@ -240,13 +226,6 @@ class TemplateCard:
             return str
 
 
-@dataclass(frozen=True)
-class TemplateDeck:
-    name: str
-    templates: Sequence[TemplateCard]
-    base_skills: Sequence[str]
-
-
 class FullCardType(Enum):
     CHALLENGE = enum_auto()
     CHOICE = enum_auto()
@@ -263,7 +242,7 @@ class EncounterContextType(Enum):
 
 @dataclass(frozen=True)
 class FullCard:
-    id: str
+    uuid: str
     name: str
     desc: str
     type: FullCardType
@@ -297,28 +276,32 @@ class TableauCard:
     card: FullCard
     age: int
     location: str
-    is_extra: bool = False  # don't count against limit of tableau size
 
 
-class AvailabilityType(Enum):
-    HEX = enum_auto()
-    COUNTRY = enum_auto()
-    NOT_COUNTRY = enum_auto()
-    GLOBAL = enum_auto()
-
-
-@dataclass(frozen=True)
-class Availability:
-    type: AvailabilityType
-    location: str
-    distance: int
+class TravelCardType(Enum):
+    NOTHING = enum_auto()
+    DANGER = enum_auto()
+    SPECIAL = enum_auto()
 
 
 @dataclass(frozen=True)
-class Action:
-    name: str
-    cost: Sequence[Effect] = ()
-    benefit: Sequence[Effect] = ()
+class TravelCard:
+    type: TravelCardType
+    value: Any
+
+    @classmethod
+    def type_field(cls) -> str:
+        return "type"
+
+    @classmethod
+    def any_type(cls, type_val: Union[TravelCardType, str]) -> type:
+        if type(type_val) is str:
+            type_val = TravelCardType[type_val]
+
+        if type_val == TravelCardType.SPECIAL:
+            return TemplateCard
+        else:
+            return int
 
 
 @dataclass(frozen=True)
@@ -328,28 +311,10 @@ class Encounter:
 
 
 @dataclass(frozen=True)
-class EncounterActions:
-    adjusts: Sequence[int]
-    transfers: Sequence[Tuple[int, int]]
-    flee: bool
-    luck: int
-    rolls: Sequence[int]
-    # map of choice index -> times chosen
-    choices: Dict[int, int]
-
-
-@dataclass(frozen=True)
 class ResourceCard:
     name: str
     type: str
     value: int
-
-
-@dataclass(frozen=True)
-class Country:
-    name: str
-    capitol_hex: str
-    resources: Sequence[str]
 
 
 @dataclass(frozen=True)
@@ -385,117 +350,13 @@ class OracleStatus(Enum):
     REJECTED = enum_auto()
 
 
-@dataclass(frozen=True)
-class Record(Generic[T]):
-    id: str
-    entity_type: EntityType
-    entity_name: str
-    type: EffectType
-    subtype: Optional[str]
-    old_value: Any
-    new_value: Any
-    comments: Sequence[str]
-
-    @classmethod
-    def type_field(cls) -> str:
-        return "type"
-
-    @classmethod
-    def any_type(cls, type_val: Union[EffectType, str]) -> type:
-        if type(type_val) is str:
-            type_val = EffectType[type_val]
-
-        if type_val == EffectType.ADD_EMBLEM:
-            return Gadget
-        elif type_val == EffectType.QUEUE_ENCOUNTER:
-            return Optional[TemplateCard]
-        elif type_val in (
-            EffectType.MODIFY_JOB,
-            EffectType.MODIFY_LOCATION,
-            EffectType.EXPLORE,
-            EffectType.START_TASK,
-            EffectType.RETURN_TASK,
-        ):
-            return str
-        else:
-            return int
-
-    @classmethod
-    def for_token(
-        cls,
-        name: str,
-        type: EffectType,
-        subtype: Optional[str],
-        old: T,
-        new: T,
-        comments: List[str],
-    ) -> "Record":
-        return Record[T](
-            make_id(),
-            EntityType.TOKEN,
-            name,
-            type,
-            subtype,
-            old,
-            new,
-            tuple(comments),
-        )
-
-    @classmethod
-    def for_character(
-        cls,
-        name: str,
-        type: EffectType,
-        subtype: Optional[str],
-        old: T,
-        new: T,
-        comments: List[str],
-    ) -> "Record":
-        return Record[T](
-            make_id(), EntityType.CHARACTER, name, type, subtype, old, new, comments
-        )
-
-    @classmethod
-    def for_project(
-        cls,
-        name: str,
-        type: EffectType,
-        subtype: Optional[str],
-        old: T,
-        new: T,
-        comments: List[str],
-    ) -> "Record":
-        return Record[T](
-            make_id(), EntityType.PROJECT, name, type, subtype, old, new, comments
-        )
-
-    @classmethod
-    def for_task(
-        cls,
-        name: str,
-        type: EffectType,
-        subtype: Optional[str],
-        old: T,
-        new: T,
-        comments: List[str],
-    ) -> "Record":
-        return Record[T](
-            make_id(),
-            EntityType.TASK,
-            name,
-            type,
-            subtype,
-            old,
-            new,
-            comments,
-        )
+class RouteType(Enum):
+    NORMAL = enum_auto()
+    GLOBAL = enum_auto()
+    UNAVAILABLE = enum_auto()
 
 
 @dataclass(frozen=True)
-class Game:
-    id: int
-    name: str
-    skills: List[str]
-    resources: List[str]
-    project_types: List[ProjectType]
-    zodiacs: List[str]
+class Route:
+    type: RouteType
+    steps: Sequence[str]

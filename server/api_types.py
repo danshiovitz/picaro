@@ -3,49 +3,65 @@ from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from picaro.common.hexmap.types import OffsetCoordinate
-from picaro.engine.job import Job
-from picaro.engine.snapshot import (
+from picaro.rules.snapshot import (
+    Action,
     Board,
     Character,
     CreateGameData as CreateGameRequest,
+    Country,
     Encounter,
+    EncounterCommands,
     EncounterType,
+    Entity,
+    Gadget,
+    Game,
     Hex,
+    Job,
     Oracle,
     Project,
+    Record,
+    Route,
+    RouteType,
+    TemplateDeck,
     Token,
 )
-from picaro.engine.types import (
-    Action,
+from picaro.store.common_types import (
     Choice,
     Choices,
-    Country,
     Effect,
     EffectType,
-    EncounterActions,
     EncounterCheck,
-    Outcome,
     EntityType,
+    Filter,
+    FilterType,
     FullCardType,
-    Gadget,
     OracleStatus,
+    Outcome,
+    Overlay,
+    OverlayType,
     ProjectType,
-    Record,
-    Rule,
-    RuleType,
     TaskStatus,
     TaskType,
     TableauCard,
     TemplateCard,
     TemplateCardType,
-    TemplateDeck,
 )
 
 
 @dataclass(frozen=True)
 class Player:
-    id: int
+    uuid: str
     name: str
+
+
+@dataclass(frozen=True)
+class SearchGamesResponse:
+    games: List[Game]
+
+
+@dataclass(frozen=True)
+class SearchEntitiesResponse:
+    entities: List[Entity]
 
 
 @dataclass(frozen=True)
@@ -74,6 +90,11 @@ class ReturnTaskResponse:
 
 
 @dataclass(frozen=True)
+class SearchResourcesResponse:
+    resources: List[str]
+
+
+@dataclass(frozen=True)
 class SearchSkillsResponse:
     skills: List[str]
 
@@ -81,6 +102,11 @@ class SearchSkillsResponse:
 @dataclass(frozen=True)
 class SearchJobsResponse:
     jobs: List[Job]
+
+
+@dataclass(frozen=True)
+class SearchActionsResponse:
+    actions: List[Action]
 
 
 @dataclass(frozen=True)
@@ -106,13 +132,13 @@ class CreateOracleRequest:
 
 @dataclass(frozen=True)
 class CreateOracleResponse:
-    id: str
+    uuid: str
     records: Sequence[Record]
 
 
 @dataclass(frozen=True)
 class AnswerOracleRequest:
-    id: str
+    uuid: str
     response: str
     proposal: List[Effect]
 
@@ -124,7 +150,7 @@ class AnswerOracleResponse:
 
 @dataclass(frozen=True)
 class ConfirmOracleRequest:
-    id: str
+    uuid: str
     confirm: bool
 
 
@@ -135,7 +161,7 @@ class ConfirmOracleResponse:
 
 @dataclass(frozen=True)
 class JobRequest:
-    card_id: str
+    card_uuid: str
 
 
 @dataclass(frozen=True)
@@ -144,13 +170,12 @@ class JobResponse:
 
 
 @dataclass(frozen=True)
-class TokenActionRequest:
-    token: str
-    action: str
+class ActionRequest:
+    action_uuid: str
 
 
 @dataclass(frozen=True)
-class TokenActionResponse:
+class ActionResponse:
     records: Sequence[Record]
 
 
@@ -186,7 +211,7 @@ class EndTurnResponse:
 
 @dataclass(frozen=True)
 class ResolveEncounterRequest:
-    actions: EncounterActions
+    actions: EncounterCommands
 
 
 @dataclass(frozen=True)
@@ -196,7 +221,7 @@ class ResolveEncounterResponse:
 
 @dataclass(frozen=True)
 class CreateGameResponse:
-    game_id: int
+    game_id: str
 
 
 class ErrorType(Enum):

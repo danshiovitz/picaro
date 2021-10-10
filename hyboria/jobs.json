@@ -1,74 +1,92 @@
 [
   {
+    "uuid": "",
     "name": "Scavenger",
     "type": "LACKEY",
     "rank": 0,
     "promotions": [],
     "deck_name": "Scavenger",
+    "base_skills": ["Ride", "Endurance", "Stealth"],
     "encounter_distances": [1, 1, 1, 1, 1, 2]
   },
   {
+    "uuid": "",
     "name": "Raider",
     "type": "SOLO",
     "rank": 1,
     "promotions": ["Senior Raider"],
     "deck_name": "Raider",
+    "base_skills": ["Ride", "Endurance", "Stealth"],
     "encounter_distances": [0, 1, 1, 1, 2, 3]
   },
   {
+    "uuid": "",
     "name": "Senior Raider",
     "type": "SOLO",
     "rank": 2,
     "promotions": ["Raider Captain"],
     "deck_name": "Raider",
+    "base_skills": ["Ride", "Endurance", "Stealth"],
     "encounter_distances": [0, 1, 1, 1, 2, 3]
   },
   {
+    "uuid": "",
     "name": "Raider Captain",
     "type": "CAPTAIN",
     "rank": 3,
     "promotions": [],
     "deck_name": "Raider",
+    "base_skills": ["Ride", "Endurance", "Stealth"],
     "encounter_distances": [0, 1, 1, 1, 2, 3]
   },
   {
+    "uuid": "",
     "name": "Prisoner",
     "type": "LACKEY",
     "rank": 0,
     "promotions": [],
     "deck_name": "Prisoner",
+    "base_skills": ["Ride", "Endurance", "Stealth"],
     "encounter_distances": [0, 0, 0, 0, 0, 1]
   },
   {
+    "uuid": "",
     "name": "Guard",
     "type": "SOLO",
     "rank": 1,
     "promotions": ["Senior Guard"],
     "deck_name": "Guard",
+    "base_skills": ["Ride", "Endurance", "Stealth"],
     "encounter_distances": [0, 1, 1, 1, 2, 2]
   },
   {
+    "uuid": "",
     "name": "Senior Guard",
     "type": "SOLO",
     "rank": 2,
     "promotions": ["Guard Captain"],
     "deck_name": "Guard",
+    "base_skills": ["Ride", "Endurance", "Stealth"],
     "encounter_distances": [0, 1, 1, 1, 2, 2]
   },
   {
+    "uuid": "",
     "name": "Guard Captain",
     "type": "CAPTAIN",
     "rank": 3,
     "promotions": [],
     "deck_name": "Guard",
+    "base_skills": ["Ride", "Endurance", "Stealth"],
     "encounter_distances": [0, 1, 1, 1, 2, 2]
   },
   {
+    "uuid": "",
     "name": "Merchant",
     "type": "SOLO",
     "rank": 1,
     "promotions": [],
     "deck_name": "Merchant",
+    "base_skills": ["Ride", "Endurance", "Stealth"],
     "encounter_distances": [1, 1, 2, 2, 3, 3]
   }
 ]

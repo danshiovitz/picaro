@@ -1,7 +1,6 @@
 {
   "name": "Raider",
-  "base_skills": ["Ride", "Endurance", "Stealth"],
-  "templates": [
+  "cards": [
     {
       "copies": 4,
       "name": "Caravan Raid",

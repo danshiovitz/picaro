@@ -1,7 +1,6 @@
 {
   "name": "Mountains",
-  "base_skills": ["Mountain Lore", "Mountain Lore", "Climb"],
-  "templates": [
+  "cards": [
     {
       "copies": 2,
       "name": "Chasm",

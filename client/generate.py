@@ -18,6 +18,10 @@ from picaro.server.api_types import (
     Effect,
     EffectType,
     EntityType,
+    Entity,
+    Filter,
+    FilterType,
+    Gadget,
     Hex,
     Job,
     ProjectType,
@@ -33,20 +37,20 @@ def generate_game_v2(name: str, json_dir: Path) -> CreateGameRequest:
     resources = Resources
     jobs = _load_json(json_dir, "jobs", Job)
     template_decks = _load_json(json_dir, "decks", TemplateDeck)
-    project_types = _load_json(json_dir, "project_types", ProjectType)
+    # project_types = _load_json(json_dir, "project_types", ProjectType)
     zodiacs = _load_json(json_dir, "zodiacs", str)
-    hexes, tokens, countries = generate_map_v2()
+    hexes, countries, entities = generate_map_v2()
     return CreateGameRequest(
         name=name,
         skills=skills,
         resources=resources,
         jobs=jobs,
         template_decks=template_decks,
-        project_types=project_types,
+        # project_types=project_types,
         zodiacs=zodiacs,
         hexes=hexes,
-        tokens=tokens,
         countries=countries,
+        entities=entities,
     )
 
 
@@ -182,7 +186,7 @@ def generate(
     return [make_hex(k) for k in terrain]
 
 
-def generate_map_v2() -> Tuple[List[Hex], List[Token], List[Country]]:
+def generate_map_v2() -> Tuple[List[Hex], List[Country], List[Entity]]:
     minimap = [
         "^n::n::~",
         'n:n."..~',
@@ -244,7 +248,7 @@ def generate_map_v2() -> Tuple[List[Hex], List[Token], List[Country]]:
     mine_set = {m for m in mine_locs}
     mine_rs = {c.name: c.resources[0] for c in countries}
 
-    tokens = []
+    entities = []
 
     for hx in hexes:
         if hx.terrain == "City":
@@ -263,16 +267,34 @@ def generate_map_v2() -> Tuple[List[Hex], List[Token], List[Country]]:
                             ),
                         ),
                     ],
+                    cost=[],
+                    uuid="",
+                    is_private=False,
+                    filters=[
+                        Filter(type=FilterType.NEAR_HEX, subtype=hx.name, value=0),
+                    ],
+                    route=[],
                 ),
             ]
-            token = Token(
-                name=city_names.pop(0),
-                type=EntityType.CITY,
-                location=hx.name,
-                actions=actions,
-                route=[],
+            city_name = city_names.pop(0)
+            entity = Entity(
+                type=EntityType.LANDMARK,
+                subtype="city",
+                name=city_name,
+                gadgets=[
+                    Gadget(
+                        uuid="",
+                        name=city_name,
+                        overlays=[],
+                        triggers=[],
+                        actions=actions,
+                        entity=None,
+                    ),
+                ],
+                locations=[hx.name],
+                uuid="",
             )
-            tokens.append(token)
+            entities.append(entity)
 
         if hx.name in mine_set:
             actions = [
@@ -286,17 +308,35 @@ def generate_map_v2() -> Tuple[List[Hex], List[Token], List[Country]]:
                             value=1,
                         ),
                     ),
+                    is_private=False,
+                    filters=[
+                        Filter(type=FilterType.NEAR_HEX, subtype=hx.name, value=0),
+                    ],
+                    uuid="",
+                    route=[],
                 ),
             ]
-            token = Token(
-                name=f"{mine_rs[hx.country]} Source",
-                type=EntityType.MINE,
-                location=hx.name,
-                actions=actions,
-                route=[],
+            mine_name = f"{mine_rs[hx.country]} Source"
+            entity = Entity(
+                type=EntityType.LANDMARK,
+                subtype="mine",
+                name=mine_name,
+                gadgets=[
+                    Gadget(
+                        uuid="",
+                        name=mine_name,
+                        overlays=[],
+                        triggers=[],
+                        actions=actions,
+                        entity=None,
+                    ),
+                ],
+                locations=[hx.name],
+                uuid="",
             )
-            tokens.append(token)
-    return hexes, tokens, countries
+            entities.append(entity)
+
+    return hexes, countries, entities
 
 
 def generate_from_mini(
@@ -348,6 +388,7 @@ def generate_from_mini(
     random.shuffle(rs)
     countries = [
         Country(
+            uuid="",
             name=c,
             capitol_hex=country_data[c],
             resources=[rs.pop(0), random.choice(Resources)],
@@ -360,7 +401,7 @@ def generate_from_mini(
         hxs = [
             hx
             for hx in hexes
-            if hx.country == ctry.name and hx.name != country_data[ctry.name]
+            if hx.country == ctry.name and terrain[hx.coordinate] != "City"
         ]
         mines.append(random.choice(hxs).name)
 

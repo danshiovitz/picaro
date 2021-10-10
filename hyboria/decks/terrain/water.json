@@ -1,7 +1,6 @@
 {
   "name": "Water",
-  "base_skills": ["Sea Lore", "Sea Lore", "Navigation"],
-  "templates": [
+  "cards": [
     {
       "copies": 2,
       "name": "Storm",

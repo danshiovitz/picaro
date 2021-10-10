@@ -1,7 +1,6 @@
 {
   "name": "Desert",
-  "base_skills": ["Desert Lore", "Desert Lore", "Endurance"],
-  "templates": [
+  "cards": [
     {
       "copies": 2,
       "name": "Oasis",

@@ -1,7 +1,6 @@
 - Add one time password / session cookie stuff
 - regional, country, and arch villains, and their moves
 - artifacts
-- oracles
 - finishing the season
 - rumor phase
 - other things like tags (terrain features, powers, villains) + zodiacs
@@ -18,6 +17,21 @@
 - change camp decks to pick 1 or 2 of 3
 - add "corrections" that are GM-initiated and can be done any time (and get assigned to random person for signoff)
 - rumors turn is now the world turn, I think
+- switch speed so max speed is independent of size, but cost to move is variable depending on size - this way bonuses to max speed are better for solos than for armies, which makes sense (we could say it costs 2/3/6 to move one hex, and initial max speed is 6, for instance - this also handles a thing a little more smoothly where hexes cost 1 more to enter, say)
+- engine should stop using hex names and just use CubeCoordinate objects
+- make client query for hex and countries separately and cache them
+- call entities only once for display-board command
+- tableau cards should maybe have a filter rather than a location field?
+- when we get a reroll from eg reliable skill, the client should receive all the rolls so it can show what we got instead
+- combine standard wrapper and standard store, possibly with a decorator
+- everywhere we have effects list we should have cost and benefit, and use that as the way to determine bargain/regardless - that way we can have a choices that's like "-2 speed, or +2 speed and -2 coins"
+- support "..." in _compute_inputs in client
+- get rid of EncounterContextType
+- FullCard shouldn't have entity_type/_name, but what should they have?
+- implement giving stuff to other players
+- put back oracle stuff as a more generalized proposal mechanism (?) with in-world oracles (?)
+- adjust chance of travel encounter - should be between like 25% and 75% over three turns
+
 - fill in stuff:
   - more feat hooks
   - terrain decks
@@ -218,3 +232,16 @@ Customization:
 
 
 Ok, so there's a flaw in the way things are now, which is right now characters have get_max_speed which does base speed + apply any rules. But characters don't right now know about rules from events and stuff, and arguably the intent is they shouldn't necessarily know about events at all. Maybe we just don't worry about this too much with characters - I think there's already some bits where they know about projects - but it's a little inelegant. And then rule conditions potentially make things very complex - to determine if a rule applies to a character, we need to reference their position on the board, so we have to pull in a board object potentially every time we read any field on the character. Also, consider this: what if someone writes a rule like "Globally, if a character has at least 1 Stealth, they get +1 Stealth". It seems easy for a naive implementation here to trigger an infinite loop, especially if you want rules to help in a different situation "For the owner of this emblem, they get +1 Stealth" + "Globally, if a character has at least 1 Stealth, the damage they take is reduced by 1".
+
+Gadgets should maybe also have timers + a thing that fires when the timer goes off, and a meter + things that fire when they hit zero or max, and then we can implement the tax levy: an event that goes off for the timer that loses the game, a meter with max 10 (say), an action that ticks the meter by 1 and costs 1 coin, and an event that goes off when the meter fills that destroys the gadget.
+
+- token_action -> perform_action, and should only have an action_id
+- new method get_actions, which lists every single available action and their route
+- how do actions get specified in map generation? we need to have landmark type gadgets, I guess? bad guys have an entity for the bad guy and then that entity has a series of gadgets for their schemes, and may also have some associated token; a city needs tokens, so does that mean it needs an entity? or I guess it doesn't actually need a token so maybe a gadget is indeed sufficient for landmarks, though there'll definitely be a thing where bad guys might move towards cities or something, so you need some notion of where the cities *are*, and ideally there can be a filter which is near_token instead of near_hex, meaning "any token associated with the entity this gadget belongs to". which, btw, means gadgets should be usually owned rather than usually unowned, and then a separate private flag to mean stuff only applies to the owner.
+- btw btw, I feel a little better saying a city is an entity than a project is. but then how do we say that a project gains 10 xp? I guess if we assume projects only have a single meter, you can (maybe) type=tick_meter, subtype=project, value=10 and this will work for them as gadgets.
+- I think the premise of this previous item is we don't need special typing for projects/tasks at all, they can be a kind of gadget - eg, the waiting task has a trigger that's "at the end of turn, tick the meter" and the delivery task has an action that's "-1 iron to tick the meter" and both tasks have a "when the meter is full, tick the parent project's meter". this does raise the question of whether we need support for designing these (I guess the client can help you out here with standard templates) or displaying them (here it can be hard for 'standard' projects to be displayed in a way that makes it clear they're standard)
+- I note in passing that gadgets seem like they might want to be able to talk about "the owning entity" "this gadget" "this gadget's parent" which means that effects need to be able to target those. piggy bank gadget: one action that does -1 gold and tick this gadget's meter; another action that's "if this gadget's meter is at least 10, set it ot 0 and +10 gold"
+- Also, I guess the existing notion of Entity, ie, a thing that can receive effects, is now bogus - the only thing that can receive effects are characters, and everything else is just a side-item like the aforementioned tick-a-meter
+
+- put store types in a single file, put types under rules dir, move storage base into common
+- merge engine.py into server and remove engine dir

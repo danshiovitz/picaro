@@ -1,5 +1,6 @@
 import functools
 import json
+import random
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from contextlib import nullcontext
@@ -8,6 +9,7 @@ from dataclasses import dataclass, fields as dataclass_fields
 from enum import Enum
 from pathlib import Path
 from sqlite3 import Connection, Row, connect
+from string import ascii_lowercase
 from types import MappingProxyType
 from typing import (
     Any,
@@ -27,13 +29,14 @@ from typing import (
     cast,
 )
 
+from picaro.common.exceptions import IllegalMoveException
 from picaro.common.serializer import recursive_from_dict, serialize
 
 
 @dataclass
 class Session:
-    player_id: Optional[int]
-    game_id: Optional[int]
+    player_uuid: Optional[str]
+    game_uuid: Optional[str]
     connection: Connection
 
 
@@ -58,16 +61,16 @@ class ConnectionManager:
             # so it'll stick around for the program
             cls.MEMORY_CONNECTION_HANDLE = connect(cls.DB_STR, uri=True)
 
-        with ConnectionManager(player_id=None, game_id=None):
+        with ConnectionManager(player_uuid=None, game_uuid=None):
             for store_cls in cls.ALL_STORES:
                 store_cls.initialize()
 
-    def __init__(self, player_id: Optional[int], game_id: Optional[int]) -> None:
+    def __init__(self, player_uuid: Optional[str], game_uuid: Optional[str]) -> None:
         if self.DB_STR == "UNSET":
             raise Exception("ConnectionManager not initialized")
 
-        self.player_id = player_id
-        self.game_id = game_id
+        self.player_uuid = player_uuid
+        self.game_uuid = game_uuid
 
     def __enter__(self) -> "ConnectionManager":
         if current_session.get(None) is not None:
@@ -78,7 +81,9 @@ class ConnectionManager:
         connection.row_factory = Row
         connection.__enter__()  # type: ignore
         session = Session(
-            player_id=self.player_id, game_id=self.game_id, connection=connection
+            player_uuid=self.player_uuid,
+            game_uuid=self.game_uuid,
+            connection=connection,
         )
         self.ctx_token = current_session.set(session)
         return self
@@ -89,18 +94,18 @@ class ConnectionManager:
         session.connection.__exit__(*exc)  # type: ignore
 
     @classmethod
-    def fix_game_id(cls, game_id: int) -> None:
+    def fix_game_uuid(cls, game_uuid: str) -> None:
         session = current_session.get()
-        session.game_id = game_id
+        session.game_uuid = game_uuid
 
 
 def with_connection() -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            game_id = kwargs.get("game_id", None)
-            player_id = kwargs.get("player_id", None)
-            with ConnectionManager(game_id=game_id, player_id=player_id):
+            game_uuid = kwargs.get("game_uuid", None)
+            player_uuid = kwargs.get("player_uuid", None)
+            with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
                 return func(*args, **kwargs)
 
         return wrapper
@@ -108,7 +113,22 @@ def with_connection() -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     return decorator
 
 
+def make_uuid() -> str:
+    return "".join(random.choice(ascii_lowercase) for _ in range(12))
+
+
+def make_double_uuid(base_id: str) -> str:
+    return base_id + "." + make_uuid()
+
+
+def get_parent_uuid(uuid: str) -> str:
+    if "." not in uuid:
+        raise Exception(f"Not right format to split? {uuid}")
+    return uuid.split(".")[0]
+
+
 T = TypeVar("T")
+S = TypeVar("S")
 
 
 class StorageBase(ABC, Generic[T]):
@@ -171,7 +191,7 @@ class StorageBase(ABC, Generic[T]):
             ]
             cols = par_cols + cols
         elif cls.TABLE_NAME != "game":
-            cols = [("game_id", "int not null", True)] + cols
+            cols = [("game_uuid", "text not null", True)] + cols
         return cols
 
     @classmethod
@@ -188,12 +208,12 @@ class StorageBase(ABC, Generic[T]):
         game_filter: bool = True,
     ) -> Dict[Sequence[Any], List[T]]:
         session = current_session.get()
-        if game_filter and session.game_id is not None:
+        if game_filter and session.game_uuid is not None:
             if cls.TABLE_NAME != "game":
-                where_clauses.append("game_id = :game_id")
+                where_clauses.append("game_uuid = :game_uuid")
             else:
-                where_clauses.append("id = :game_id")
-            params["game_id"] = session.game_id
+                where_clauses.append("uuid = :game_uuid")
+            params["game_uuid"] = session.game_uuid
 
         sql = f"SELECT * FROM {cls.TABLE_NAME}"
         if where_clauses:
@@ -286,11 +306,11 @@ class StorageBase(ABC, Generic[T]):
         for val in values:
             proj = cls._project_val(val)
             if (
-                session.game_id is not None
+                session.game_uuid is not None
                 and cls.PARENT_STORE is None
                 and cls.TABLE_NAME != "game"
             ):
-                proj["game_id"] = session.game_id
+                proj["game_uuid"] = session.game_uuid
             all_projected[cls].append(proj)
             pk_vals = {
                 cls.TABLE_NAME + "_" + c[0]: proj[c[0]]
@@ -332,9 +352,9 @@ class StorageBase(ABC, Generic[T]):
         session = current_session.get()
         if not where_clauses:
             raise Exception("Probably unsafe to delete with no where clauses, refusing")
-        if session.game_id is not None and cls.TABLE_NAME != "game":
-            where_clauses.append("game_id = :game_id")
-            params["game_id"] = session.game_id
+        if session.game_uuid is not None and cls.TABLE_NAME != "game":
+            where_clauses.append("game_uuid = :game_uuid")
+            params["game_uuid"] = session.game_uuid
         sql = f"DELETE FROM {cls.TABLE_NAME}"
         sql += " WHERE (" + ") AND (".join(where_clauses) + ")"
         session.connection.execute(sql, params)
@@ -438,7 +458,6 @@ class ReadOnlyWrapper:
     def __init__(self, data: Any) -> None:
         super().__setattr__("_fields", {f.name: f for f in dataclass_fields(data)})
         super().__setattr__("_data", data)
-        self.z = -1
 
     def __setattr__(self, name: str, value: Any) -> None:
         if name in self._fields:
@@ -472,3 +491,157 @@ class ReadOnlyWrapper:
                 raise
         else:
             raise Exception(f"No such field: {name}")
+
+
+class DBWrapper(Generic[T]):
+    def __init__(self, data: T, can_write: bool = False) -> None:
+        super().__setattr__("_fields", {f.name: f for f in dataclass_fields(data)})
+        super().__setattr__("_data", data)
+        super().__setattr__("_can_write", can_write)
+        super().__setattr__("_write", False)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in self._fields:
+            if self._write:
+                self._data.__setattr__(name, value)
+            else:
+                raise Exception(f"Can't write {name}")
+        else:
+            super().__setattr__(name, value)
+
+    def __getattr__(self, name: str) -> Any:
+        if name in self._fields:
+            val = getattr(self._data, name)
+            if self._write:
+                return val
+            ut = self._fields[name].type
+            cls_base = getattr(ut, "__origin__", ut)
+            if cls_base == Union:
+                if val is None:
+                    return None
+                # pull out the first type which is assumed to be the non-none type
+                ut = ut.__args__[0]
+                cls_base = getattr(ut, "__origin__", ut)
+            if cls_base == Any:
+                indicator = self._data.type_field()
+                cls_base = self._data.any_type(getattr(self._data, indicator))
+            try:
+                if issubclass(cls_base, Dict):
+                    return MappingProxyType(val)
+                elif cls_base not in (str, tuple) and issubclass(cls_base, Iterable):
+                    return tuple(val)
+                else:
+                    return val
+            except Exception:
+                print(f"Bad type reading field {name} ({ut}, {cls_base}, {val})")
+                raise
+        else:
+            raise Exception(f"No such field: {name}")
+
+    def __enter__(self) -> Any:  # should be type(self)
+        if not self._can_write:
+            raise Exception("This is only useful if loaded writeable!")
+        self._write = True
+        return self
+
+    # __exit__ has to be defined in the subclass
+
+
+class StandardWrapper(DBWrapper[T]):
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)  # type: ignore
+        storage_cls = cls._get_val_type()
+        cls.FIELDS = {f.name for f in dataclass_fields(storage_cls)}
+        if "uuid" in cls.FIELDS:
+            cls.HAS_UUID = True
+            storage_cls.PRIMARY_KEYS = {"uuid"}
+        elif "name" in cls.FIELDS:
+            cls.HAS_UUID = False
+            storage_cls.PRIMARY_KEYS = {"name"}
+        else:
+            raise Exception(f"Can't figure out pk for class from {cls.FIELDS}")
+
+    @classmethod
+    def load(cls, key: str) -> Any:  # should be type(self)
+        data = cls._get_val_type().load(key)
+        return cls(data)
+
+    @classmethod
+    def load_all(cls) -> List[Any]:  # should be type(self)
+        data_lst = cls._get_val_type().load_all()
+        return [cls(d) for d in data_lst]
+
+    @classmethod
+    def load_for_write(cls, key: str) -> Any:  # should be type(self)
+        data = cls._get_val_type().load(key)
+        return cls(data, can_write=True)
+
+    def __exit__(self, *exc: Any) -> None:
+        self._get_val_type().update(self._data)
+
+    # Note this returns an object with write=True that nevertheless isn't
+    # persisted automatically, but it is writeable
+    @classmethod
+    def create_detached(cls, **kwargs) -> Any:  # should be type(self)
+        storage_cls = cls._get_val_type()
+        if cls.HAS_UUID and not cls._get_val_type().SECONDARY_TABLE:
+            kwargs["uuid"] = make_uuid()
+        ret = cls(storage_cls(**kwargs), can_write=True)
+        ret._write = True
+        return ret
+
+    @classmethod
+    def insert(cls, vals: List[Any]) -> None:  # should be type(self)
+        cls._get_val_type().insert_all([v._data for v in vals])
+
+    @classmethod
+    def create(cls, **kwargs) -> Optional[str]:
+        val = cls.create_detached(**kwargs)
+        cls.insert([val])
+        if cls.HAS_UUID:
+            return val.uuid
+        return None
+
+    @classmethod
+    def _get_val_type(cls) -> Type[T]:
+        return cls.__orig_bases__[0].__args__[0]
+
+
+# This is a Generic with [T], but the expectation is it's always used like
+# @dataclass
+# class Foo(StandardStorage["Foo"]):
+#   TABLE_NAME = "foo"
+#   ...
+class StandardStorage(ObjectStorageBase[T]):
+    SECONDARY_TABLE = False
+
+    @classmethod
+    def load_all(cls) -> List[T]:
+        return cls._select_helper([], {})
+
+    @classmethod
+    def load(cls, pk_val: str) -> T:
+        pk_field = list(cls.PRIMARY_KEYS)[0]
+        vals = cls._select_helper([f"{pk_field} = :{pk_field}"], {pk_field: pk_val})
+        if not vals:
+            raise IllegalMoveException(f"No such {cls.TABLE_NAME}: {pk_val}")
+        return vals[0]
+
+    @classmethod
+    def create(cls, val: T) -> int:
+        return cls._insert_helper([val])
+
+    @classmethod
+    def insert_all(cls, vals: List[T]) -> int:
+        return cls._insert_helper(vals)
+
+    @classmethod
+    def update(cls, val: T) -> None:
+        cls._update_helper(val)
+
+    @classmethod
+    def _get_val_type(cls) -> Type[T]:
+        # T isn't populated properly, because it has to be a stringified type -
+        # rather than resolve it, we can just return ourselves because that's
+        # what it is
+        return cls

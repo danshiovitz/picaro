@@ -1,7 +1,6 @@
 {
   "name": "City",
-  "base_skills": ["Observation", "Architecture", "Carousing"],
-  "templates": [
+  "cards": [
     {
       "copies": 2,
       "name": "Street Market",

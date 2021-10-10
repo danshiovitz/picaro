@@ -18,8 +18,8 @@ from picaro.engine.types import (
     EncounterContextType,
     Gadget,
     JobType,
-    Rule,
-    RuleType,
+    Overlay,
+    OverlayType,
 )
 
 
@@ -86,16 +86,16 @@ class CharacterTest(TestCase):
         ch._data.skill_xp["Foo"] = 70
         emblem = Gadget(
             name="Foo Boost",
-            rules=[
-                Rule(type=RuleType.SKILL_RANK, subtype="Foo", value=2),
+            overlays=[
+                Overlay(type=OverlayType.SKILL_RANK, subtype="Foo", value=2),
             ],
         )
         ch._data.emblems.append(emblem)
         self.assertEqual(ch.get_skill_rank("Foo"), 5)
         emblem = Gadget(
             name="Generic Boost",
-            rules=[
-                Rule(type=RuleType.SKILL_RANK, subtype=None, value=2),
+            overlays=[
+                Overlay(type=OverlayType.SKILL_RANK, subtype=None, value=2),
             ],
         )
         ch._data.emblems.append(emblem)
@@ -141,15 +141,15 @@ class CharacterTest(TestCase):
         self.assertEqual(ec[0].old_value, 0)
         self.assertEqual(ec[0].new_value, 4)
 
-    def test_speed_rule(self) -> None:
+    def test_speed_overlay(self) -> None:
         ch = self._make_ch()
         self.assertEqual(ch.get_init_speed(), 3)
         self.load_job_mock.assert_called()
 
         emblem = Gadget(
             name="Speed Boost",
-            rules=[
-                Rule(type=RuleType.INIT_SPEED, subtype=None, value=2),
+            overlays=[
+                Overlay(type=OverlayType.INIT_SPEED, subtype=None, value=2),
             ],
         )
         ch._data.emblems.append(emblem)
@@ -157,8 +157,8 @@ class CharacterTest(TestCase):
 
         emblem = Gadget(
             name="Speed Penalty",
-            rules=[
-                Rule(type=RuleType.INIT_SPEED, subtype=None, value=-4),
+            overlays=[
+                Overlay(type=OverlayType.INIT_SPEED, subtype=None, value=-4),
             ],
         )
         ch._data.emblems.append(emblem)
@@ -166,8 +166,8 @@ class CharacterTest(TestCase):
 
         emblem = Gadget(
             name="Speed Penalty",
-            rules=[
-                Rule(type=RuleType.INIT_SPEED, subtype=None, value=-3),
+            overlays=[
+                Overlay(type=OverlayType.INIT_SPEED, subtype=None, value=-3),
             ],
         )
         ch._data.emblems.append(emblem)

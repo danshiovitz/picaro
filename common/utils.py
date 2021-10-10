@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Callable, List, Optional, TypeVar
 
 
 def clamp(val: int, min: Optional[int] = None, max: Optional[int] = None) -> int:
@@ -17,3 +17,14 @@ def with_s(val: int, word: str, word_s: Optional[str] = None) -> str:
         return f"{val:+} {word}s"
     else:
         return f"{val:+} {word_s}"
+
+
+T = TypeVar("T")
+
+
+def pop_func(lst: List[T], func: Callable[[T], bool]) -> T:
+    for i in range(len(lst)):
+        if func(lst[i]):
+            val = lst.pop(i)
+            return val
+    raise IndexError("No matching value for pop_func")

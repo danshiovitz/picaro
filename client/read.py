@@ -5,10 +5,11 @@ from collections import defaultdict
 from string import ascii_lowercase
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, TypeVar
 
+from picaro.common.exceptions import IllegalMoveException
 from picaro.server.api_types import *
 
-from .common import IllegalMoveException
-from .render import render_effect, render_rule
+from .cache import LookupCache
+from .render import render_effect, render_overlay
 
 
 def read_text(prompt: str, textbox: bool = False) -> str:
@@ -46,7 +47,7 @@ def read_text(prompt: str, textbox: bool = False) -> str:
 #   discovery start=AD12
 # > add emblem
 # What's the name of the emblem? Lord of the Hats
-# What rules does the emblem provide?
+# What overlays does the emblem provide?
 # > modify search skill +1
 # > done
 
@@ -57,24 +58,20 @@ class ComplexReader:
     def __init__(
         self,
         default_entity: Optional[Tuple[EntityType, str]],
-        board: Board,
-        skills: List[str],
-        jobs: List[Job],
+        cache: LookupCache,
     ):
         self.default_entity = default_entity
-        self.board = board
-        self.skills = skills
-        self.jobs = jobs
+        self.cache = cache
 
     def read_effects(
         self,
         prompt: str,
         init: List[Effect],
     ) -> List[Effect]:
-        skills = self.skills
-        resources = self.board.resources
-        job_names = [j.name for j in self.jobs]
-        hexes = [h.name for h in self.board.hexes]
+        skills = self.cache.lookup_skills()
+        resources = self.cache.lookup_resources()
+        job_names = [j.name for j in self.cache.lookup_jobs()]
+        hexes = [h.name for h in self.cache.lookup_hexes()]
         fixup = lambda v: (v[0], True, v[1])
         effect_choices = [
             (
@@ -100,7 +97,7 @@ class ComplexReader:
                 lambda ln: self._lparse_effect(
                     EffectType.MODIFY_RESOURCES,
                     ln,
-                    subtypes=board.resources,
+                    subtypes=resources,
                     none_type="draw",
                 ),
             ),
@@ -170,56 +167,60 @@ class ComplexReader:
             ),
         ]
 
-        return self._read_complex(prompt, init, effect_choices, render_effect)
+        return self._read_complex(
+            prompt, init, effect_choices, lambda e: render_effect(e, self.cache)
+        )
 
-    def read_rules(
+    def read_overlays(
         self,
         prompt: str,
-        init: List[Rule],
-    ) -> List[Rule]:
-        skills = self.skills
-        rule_choices = [
+        init: List[Overlay],
+    ) -> List[Overlay]:
+        skills = self.cache.lookup_skills()
+        overlay_choices = [
             (
                 "Modify init tableau age <amount>",
-                lambda ln: self._lparse_rule(RuleType.INIT_TABLEAU_AGE, ln),
+                lambda ln: self._lparse_overlay(OverlayType.INIT_TABLEAU_AGE, ln),
             ),
             (
                 "Modify init turns <amount>",
-                lambda ln: self._lparse_rule(RuleType.INIT_TURNS, ln),
+                lambda ln: self._lparse_overlay(OverlayType.INIT_TURNS, ln),
             ),
             (
                 "Modify max health <amount>",
-                lambda ln: self._lparse_rule(RuleType.MAX_HEALTH, ln),
+                lambda ln: self._lparse_overlay(OverlayType.MAX_HEALTH, ln),
             ),
             (
                 "Modify max luck <amount>",
-                lambda ln: self._lparse_rule(RuleType.MAX_LUCK, ln),
+                lambda ln: self._lparse_overlay(OverlayType.MAX_LUCK, ln),
             ),
             (
                 "Modify max tableau size <amount>",
-                lambda ln: self._lparse_rule(RuleType.MAX_TABLEAU_SIZE, ln),
+                lambda ln: self._lparse_overlay(OverlayType.MAX_TABLEAU_SIZE, ln),
             ),
             (
                 "Modify skill rank <amount> <skill>",
-                lambda ln: self._lparse_rule(RuleType.SKILL_RANK, ln, subtypes=skills),
+                lambda ln: self._lparse_overlay(
+                    OverlayType.SKILL_RANK, ln, subtypes=skills
+                ),
             ),
             (
                 "Modify skill reliability <amount> <skill>",
-                lambda ln: self._lparse_rule(
-                    RuleType.RELIABLE_SKILL, ln, subtypes=skills
+                lambda ln: self._lparse_overlay(
+                    OverlayType.RELIABLE_SKILL, ln, subtypes=skills
                 ),
             ),
             (
                 "Modify init speed <amount>",
-                lambda ln: self._lparse_rule(RuleType.INIT_SPEED, ln),
+                lambda ln: self._lparse_overlay(OverlayType.INIT_SPEED, ln),
             ),
             (
                 "Modify resource limit <amount>",
-                lambda ln: self._lparse_rule(RuleType.MAX_RESOURCES, ln),
+                lambda ln: self._lparse_overlay(OverlayType.MAX_RESOURCES, ln),
             ),
         ]
 
-        return self._read_complex(prompt, init, rule_choices, render_rule)
+        return self._read_complex(prompt, init, overlay_choices, render_overlay)
 
     def _read_complex(
         self,
@@ -366,12 +367,12 @@ class ComplexReader:
         line: str,
     ) -> Tuple[Gadget, str]:
         name, line = self._lparse_str("name", line)
-        rules = self.read_rules("Enter rules for this gadget:", [])
-        return Gadget(name, rules), line
+        overlays = self.read_overlays("Enter overlays for this gadget:", [])
+        return Gadget(name, overlays), line
 
-    def _lparse_rule(
+    def _lparse_overlay(
         self,
-        rule_type: RuleType,
+        overlay_type: OverlayType,
         line: str,
         subtypes: Optional[Sequence[str]] = None,
         none_type: Optional[str] = None,
@@ -382,8 +383,8 @@ class ComplexReader:
         else:
             subtype = None
         return (
-            Rule(
-                type=rule_type,
+            Overlay(
+                type=overlay_type,
                 value=val,
                 subtype=subtype,
             ),
@@ -391,7 +392,9 @@ class ComplexReader:
         )
 
 
-def read_selections(choices: Choices, rolls: Sequence[int]) -> Dict[int, int]:
+def read_selections(
+    choices: Choices, rolls: Sequence[int], cache: LookupCache
+) -> Dict[int, int]:
     selections = defaultdict(int)
     can_choose = True
     if choices.is_random:
@@ -406,7 +409,7 @@ def read_selections(choices: Choices, rolls: Sequence[int]) -> Dict[int, int]:
     while True:
         if choices.benefit or choices.cost:
             line = " ** Overall: " + ", ".join(
-                render_effect(eff) for eff in choices.benefit + choices.cost
+                render_effect(eff, cache) for eff in choices.benefit + choices.cost
             )
             print(line)
         selected = 0
@@ -421,7 +424,8 @@ def read_selections(choices: Choices, rolls: Sequence[int]) -> Dict[int, int]:
                 line += "* " if idx in selections else "- "
 
             line += ", ".join(
-                render_effect(eff) for eff in list(choice.benefit) + list(choice.cost)
+                render_effect(eff, cache)
+                for eff in list(choice.benefit) + list(choice.cost)
             )
             line += f" [{selections[idx]}/{choice.max_choices}]"
             selected += selections[idx]

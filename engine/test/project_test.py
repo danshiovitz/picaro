@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from typing import Dict, List, cast
 from unittest import TestCase, main
 
+from picaro.common.exceptions import IllegalMoveException
 from picaro.common.hexmap.types import OffsetCoordinate
 from picaro.engine.board import CreateBoardData, load_board
-from picaro.engine.exceptions import IllegalMoveException
 from picaro.engine.project import (
     Project,
     Task,

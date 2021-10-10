@@ -1,7 +1,6 @@
 {
   "name": "Plains",
-  "base_skills": ["Plains Lore", "Plains Lore", "Ride"],
-  "templates": [
+  "cards": [
     {
       "copies": 2,
       "name": "Circling Birds",
