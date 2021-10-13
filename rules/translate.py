@@ -2,9 +2,10 @@ from dataclasses import fields as dataclass_fields, is_dataclass
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, TypeVar
 
 from picaro.common.hexmap.types import CubeCoordinate, OffsetCoordinate
-from picaro.store.board import Country, Hex, Token
-from picaro.store.character import Character
-from picaro.store.common_types import (
+
+from .board import BoardRules
+from .character import CharacterRules
+from .types.common import (
     Action,
     EffectType,
     Encounter,
@@ -13,15 +14,7 @@ from picaro.store.common_types import (
     RouteType,
     TableauCard,
 )
-from picaro.store.entity import Entity
-from picaro.store.gadget import Gadget
-from picaro.store.general import Game, TemplateDeck
-from picaro.store.job import Job
-from picaro.store.record import Record
-
-from .board import BoardRules
-from .character import CharacterRules
-from .snapshot import (
+from .types.snapshot import (
     Action as snapshot_Action,
     Board as snapshot_Board,
     Character as snapshot_Character,
@@ -36,6 +29,18 @@ from .snapshot import (
     Record as snapshot_Record,
     TableauCard as snapshot_TableauCard,
     TemplateDeck as snapshot_TemplateDeck,
+)
+from .types.store import (
+    Character,
+    Country,
+    Entity,
+    Gadget,
+    Game,
+    Hex,
+    Job,
+    Record,
+    TemplateDeck,
+    Token,
 )
 
 

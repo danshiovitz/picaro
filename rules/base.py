@@ -3,7 +3,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Dict, List, Set, Tuple
 
-from picaro.store.common_types import Overlay, OverlayType
+from .types.common import Overlay, OverlayType
 
 
 @dataclass

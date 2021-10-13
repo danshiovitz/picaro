@@ -2,23 +2,20 @@ from typing import List, Optional, Sequence, Tuple
 
 from picaro.common.exceptions import BadStateException, IllegalMoveException
 from picaro.common.utils import pop_func
-from picaro.store.board import Hex, Token
-from picaro.store.character import Character, TurnFlags
-from picaro.store.common_types import (
-    EncounterContextType,
-    FullCard,
-    TravelCard,
-    TravelCardType,
-)
-from picaro.store.gadget import Gadget
-from picaro.store.record import Record
 
 from .board import BoardRules
 from .character import CharacterRules
 from .deck import DeckRules
 from .encounter import EncounterRules
 from .game import GameRules
-from .snapshot import EncounterCommands, Record as snapshot_Record
+from .types.common import (
+    EncounterContextType,
+    FullCard,
+    TravelCard,
+    TravelCardType,
+)
+from .types.snapshot import EncounterCommands, Record as snapshot_Record
+from .types.store import Hex, Token, Character, TurnFlags, Gadget, Record
 
 
 class ActivityRules:
@@ -26,7 +23,7 @@ class ActivityRules:
     def do_job(cls, character_name: str, card_uuid: str) -> Sequence[snapshot_Record]:
         records: List[Record] = []
         with Character.load_by_name_for_write(character_name) as ch:
-            if ch.has_encounters():
+            if GameRules.encounter_check(ch):
                 raise BadStateException("An encounter is currently active.")
             if not ch.check_set_flag(TurnFlags.ACTED):
                 raise BadStateException("You have already acted this turn.")
@@ -48,7 +45,7 @@ class ActivityRules:
         records: List[Record] = []
         action = Gadget.load_action_by_uuid(action_uuid)
         with Character.load_by_name_for_write(character_name) as ch:
-            if ch.has_encounters():
+            if GameRules.encounter_check(ch):
                 raise BadStateException("An encounter is currently active.")
             CharacterRules.check_filters(ch, action.filters)
             GameRules.apply_bargain(ch, action.cost, records)
@@ -60,7 +57,7 @@ class ActivityRules:
     def camp(cls, character_name: str) -> Sequence[snapshot_Record]:
         records: List[Record] = []
         with Character.load_by_name_for_write(character_name) as ch:
-            if ch.has_encounters():
+            if GameRules.encounter_check(ch):
                 raise BadStateException("An encounter is currently active.")
             GameRules.intra_turn(ch, records)
             return GameRules.save_translate_records(records)
@@ -69,7 +66,7 @@ class ActivityRules:
     def travel(cls, character_name: str, hex: str) -> Sequence[snapshot_Record]:
         records: List[Record] = []
         with Character.load_by_name_for_write(character_name) as ch:
-            if ch.has_encounters():
+            if GameRules.encounter_check(ch):
                 raise BadStateException("An encounter is currently active.")
             if ch.speed <= 0:
                 raise IllegalMoveException(f"You have no remaining speed.")
@@ -126,7 +123,7 @@ class ActivityRules:
     def end_turn(cls, character_name: str) -> Sequence[snapshot_Record]:
         records: List[Record] = []
         with Character.load_by_name_for_write(character_name) as ch:
-            if ch.has_encounters():
+            if GameRules.encounter_check(ch):
                 raise BadStateException("An encounter is currently active.")
             GameRules.end_turn(ch, records)
             return GameRules.save_translate_records(records)
@@ -137,7 +134,7 @@ class ActivityRules:
     ) -> Sequence[snapshot_Record]:
         records: List[Record] = []
         with Character.load_by_name_for_write(character_name) as ch:
-            if not ch.has_encounters():
+            if not GameRules.encounter_check(ch):
                 raise BadStateException("No encounter is currently active.")
             encounter = ch.encounter
             ch.encounter = None

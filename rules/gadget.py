@@ -1,8 +1,8 @@
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-from picaro.store.character import Character
-from picaro.store.common_types import (
+from .base import get_rules_cache
+from .types.common import (
     Action,
     EntityType,
     Filter,
@@ -11,9 +11,7 @@ from picaro.store.common_types import (
     Trigger,
     TriggerType,
 )
-from picaro.store.gadget import Gadget
-
-from .base import get_rules_cache
+from .types.store import Character, Gadget
 
 
 class GadgetRules:

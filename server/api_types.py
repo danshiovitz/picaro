@@ -3,7 +3,28 @@ from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from picaro.common.hexmap.types import OffsetCoordinate
-from picaro.rules.snapshot import (
+from picaro.rules.types.common import (
+    Choice,
+    Choices,
+    Effect,
+    EffectType,
+    EncounterCheck,
+    EntityType,
+    Filter,
+    FilterType,
+    FullCardType,
+    OracleStatus,
+    Outcome,
+    Overlay,
+    OverlayType,
+    ProjectType,
+    TaskStatus,
+    TaskType,
+    TableauCard,
+    TemplateCard,
+    TemplateCardType,
+)
+from picaro.rules.types.snapshot import (
     Action,
     Board,
     Character,
@@ -24,27 +45,6 @@ from picaro.rules.snapshot import (
     RouteType,
     TemplateDeck,
     Token,
-)
-from picaro.store.common_types import (
-    Choice,
-    Choices,
-    Effect,
-    EffectType,
-    EncounterCheck,
-    EntityType,
-    Filter,
-    FilterType,
-    FullCardType,
-    OracleStatus,
-    Outcome,
-    Overlay,
-    OverlayType,
-    ProjectType,
-    TaskStatus,
-    TaskType,
-    TableauCard,
-    TemplateCard,
-    TemplateCardType,
 )
 
 
@@ -222,6 +222,17 @@ class ResolveEncounterResponse:
 @dataclass(frozen=True)
 class CreateGameResponse:
     game_id: str
+
+
+@dataclass(frozen=True)
+class AddCharacterRequest:
+    job_name: str
+    location: Optional[str]
+
+
+@dataclass(frozen=True)
+class AddCharacterResponse:
+    entity_id: str
 
 
 class ErrorType(Enum):

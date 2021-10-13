@@ -1,11 +1,8 @@
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from picaro.store.board import Token
-from picaro.store.common_types import EntityType
-from picaro.store.entity import Entity
-from picaro.store.gadget import Gadget
-
 from .board import BoardRules
+from .types.common import EntityType
+from .types.store import Entity, Gadget, Token
 
 
 class EntityRules:

@@ -1,8 +1,9 @@
 import random
 from typing import List, Sequence, TypeVar, cast
 
-from picaro.store.base import make_uuid
-from picaro.store.common_types import (
+from picaro.common.storage import make_uuid
+
+from .types.common import (
     Challenge,
     EncounterCheck,
     EncounterContextType,
@@ -12,7 +13,7 @@ from picaro.store.common_types import (
     TemplateCard,
     TemplateCardType,
 )
-from picaro.store.general import Game, TemplateDeck
+from .types.store import Game, TemplateDeck
 
 
 T = TypeVar("T")

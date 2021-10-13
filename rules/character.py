@@ -3,9 +3,10 @@ import random
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from picaro.common.utils import clamp, pop_func
-from picaro.store.board import Hex, Token
-from picaro.store.character import Character
-from picaro.store.common_types import (
+
+from .board import BoardRules
+from .gadget import GadgetRules
+from .types.common import (
     Action,
     Encounter,
     EncounterContextType,
@@ -20,14 +21,15 @@ from picaro.store.common_types import (
     RouteType,
     TableauCard,
 )
-from picaro.store.entity import Entity
-from picaro.store.gadget import Gadget
-from picaro.store.general import Game
-from picaro.store.job import Job
-
-from .board import BoardRules
-from .gadget import GadgetRules
-from .snapshot import Route
+from .types.store import (
+    Character,
+    Entity,
+    Gadget,
+    Game,
+    Hex,
+    Job,
+    Token,
+)
 
 
 class CharacterRules:

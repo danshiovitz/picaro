@@ -3,8 +3,12 @@ from traceback import print_exc
 from typing import Any, Callable, Dict, Type, TypeVar
 
 from picaro.common.exceptions import IllegalMoveException, BadStateException
-from picaro.common.serializer import deserialize, recursive_to_dict, serialize
-from picaro.engine import Engine
+from picaro.common.serializer import deserialize, serialize
+from picaro.common.storage import ConnectionManager
+from picaro.rules.activity import ActivityRules
+from picaro.rules.base import RulesManager
+from picaro.rules.game import GameRules
+from picaro.rules.search import SearchRules
 
 from . import bottle
 from .api_types import *
@@ -41,15 +45,92 @@ T = TypeVar("T")
 
 
 class Server:
-    def __init__(self, engine: Engine) -> None:
-        self._engine = engine
+    def __init__(self, db_path: Optional[str]) -> None:
+        ConnectionManager.initialize(db_path=db_path)
+
+        # buncha hacky initial setup:
+        from pathlib import Path
+
+        from picaro.client.generate import generate_game_v2
+
+        player_uuid = "inkyinkyinky"
+        other_player_uuid = "snickersabcd"
+        with ConnectionManager(game_uuid=None, player_uuid=player_uuid):
+            json_dir = Path(__file__).absolute().parent.parent / "hyboria"
+            data = generate_game_v2("Hyboria", json_dir)
+            game = GameRules.create_game(data)
+
+        with ConnectionManager(game_uuid=game.uuid, player_uuid=player_uuid):
+            with RulesManager("Conan"):
+                ch = GameRules.add_character("Conan", player_uuid, "Raider", "random")
+                ch = GameRules.add_character(
+                    "Taurus", other_player_uuid, "Merchant", "random"
+                )
+
+                from picaro.rules.types.common import (
+                    Overlay,
+                    OverlayType,
+                    Filter,
+                    FilterType,
+                )
+                from picaro.rules.types.store import Character, Gadget
+
+                ch = Character.load_by_name("Conan")
+                Gadget.create(
+                    uuid="123",
+                    name="Cloak of Elvenkind",
+                    entity=ch.uuid,
+                    triggers=[],
+                    overlays=[
+                        Overlay(
+                            uuid="123.456",
+                            type=OverlayType.SKILL_RANK,
+                            subtype="Stealth",
+                            value=1,
+                            is_private=True,
+                            filters=(),
+                        ),
+                        Overlay(
+                            uuid="123.457",
+                            type=OverlayType.SKILL_RANK,
+                            subtype="Stealth",
+                            value=1,
+                            is_private=True,
+                            filters=(
+                                Filter(
+                                    type=FilterType.SKILL_GTE,
+                                    subtype="Stealth",
+                                    value=2,
+                                ),
+                            ),
+                        ),
+                    ],
+                    actions=[],
+                )
+                with Character.load_by_name_for_write("Conan") as ch:
+                    GameRules.apply_regardless(
+                        ch,
+                        [
+                            Effect(type=EffectType.MODIFY_COINS, value=50),
+                            Effect(type=EffectType.MODIFY_RESOURCES, value=10),
+                            Effect(
+                                type=EffectType.MODIFY_XP, subtype="Stealth", value=20
+                            ),
+                            Effect(
+                                type=EffectType.MODIFY_XP,
+                                subtype="Brutal Fighting",
+                                value=25,
+                            ),
+                        ],
+                        [],
+                    )
 
     @wrap_errors()
     def get_board(self, game_uuid: str, character_name: str) -> Board:
         player_uuid = self._extract_player_uuid()
-        return self._engine.get_board(
-            player_uuid=player_uuid, game_uuid=game_uuid, character_name=character_name
-        )
+        with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
+            with RulesManager(character_name):
+                return SearchRules.search_boards()
 
     @wrap_errors()
     def search_entities(
@@ -57,49 +138,29 @@ class Server:
     ) -> SearchEntitiesResponse:
         player_uuid = self._extract_player_uuid()
         details = self._parse_bool(bottle.request.query.details)
-        return SearchEntitiesResponse(
-            entities=self._engine.search_entities(
-                details=details,
-                player_uuid=player_uuid,
-                game_uuid=game_uuid,
-                character_name=character_name,
-            )
-        )
+        with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
+            with RulesManager(character_name):
+                return SearchEntitiesResponse(
+                    entities=SearchRules.search_entities(details=details)
+                )
 
     @wrap_errors()
     def get_character(self, game_uuid: str, character_name: str) -> Character:
         player_uuid = self._extract_player_uuid()
-        return self._engine.get_character(
-            player_uuid=player_uuid, game_uuid=game_uuid, character_name=character_name
-        )
+        with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
+            with RulesManager(character_name):
+                return SearchRules.search_characters(character_name)[0]
 
     @wrap_errors()
     def search_actions(
         self, game_uuid: str, character_name: str
     ) -> SearchActionsResponse:
         player_uuid = self._extract_player_uuid()
-        return SearchActionsResponse(
-            actions=self._engine.search_actions(
-                player_uuid=player_uuid,
-                game_uuid=game_uuid,
-                character_name=character_name,
-            )
-        )
-
-    @wrap_errors()
-    def get_projects(
-        self, game_uuid: str, character_name: str
-    ) -> SearchProjectsResponse:
-        player_uuid = self._extract_player_uuid()
-        include_all = self._parse_bool(bottle.request.query.all)
-        return SearchProjectsResponse(
-            projects=self._engine.get_projects(
-                include_all=include_all,
-                player_uuid=player_uuid,
-                game_uuid=game_uuid,
-                character_name=character_name,
-            )
-        )
+        with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
+            with RulesManager(character_name):
+                return SearchActionsResponse(
+                    actions=SearchRules.search_actions(character_name),
+                )
 
     @wrap_errors()
     def search_resources(
@@ -107,13 +168,11 @@ class Server:
     ) -> SearchResourcesResponse:
         player_uuid = self._extract_player_uuid()
         include_all = self._parse_bool(bottle.request.query.all)
-        return SearchResourcesResponse(
-            resources=self._engine.search_resources(
-                player_uuid=player_uuid,
-                game_uuid=game_uuid,
-                character_name=character_name,
-            )
-        )
+        with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
+            with RulesManager(character_name):
+                return SearchResourcesResponse(
+                    resources=SearchRules.search_resources(),
+                )
 
     @wrap_errors()
     def search_skills(
@@ -121,166 +180,56 @@ class Server:
     ) -> SearchSkillsResponse:
         player_uuid = self._extract_player_uuid()
         include_all = self._parse_bool(bottle.request.query.all)
-        return SearchSkillsResponse(
-            skills=self._engine.search_skills(
-                player_uuid=player_uuid,
-                game_uuid=game_uuid,
-                character_name=character_name,
-            )
-        )
+        with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
+            with RulesManager(character_name):
+                return SearchSkillsResponse(
+                    skills=SearchRules.search_skills(),
+                )
 
     @wrap_errors()
     def search_jobs(self, game_uuid: str, character_name: str) -> SearchJobsResponse:
         player_uuid = self._extract_player_uuid()
         include_all = self._parse_bool(bottle.request.query.all)
-        return SearchJobsResponse(
-            jobs=self._engine.search_jobs(
-                player_uuid=player_uuid,
-                game_uuid=game_uuid,
-                character_name=character_name,
-            )
-        )
-
-    @wrap_errors()
-    def start_task(self, game_uuid: str, character_name: str) -> StartTaskResponse:
-        player_uuid = self._extract_player_uuid()
-        req = self._read_body(StartTaskRequest)
-        records = self._engine.start_task(
-            task_name=req.task_name,
-            player_uuid=player_uuid,
-            game_uuid=game_uuid,
-            character_name=character_name,
-        )
-        return StartTaskResponse(records=records)
-
-    @wrap_errors()
-    def return_task(self, game_uuid: str, character_name: str) -> ReturnTaskResponse:
-        player_uuid = self._extract_player_uuid()
-        req = self._read_body(ReturnTaskRequest)
-        records = self._engine.return_task(
-            task_name=req.task_name,
-            player_uuid=player_uuid,
-            game_uuid=game_uuid,
-            character_name=character_name,
-        )
-        return ReturnTaskResponse(records=records)
-
-    @wrap_errors()
-    def search_oracles(
-        self, game_uuid: str, character_name: str
-    ) -> SearchOraclesResponse:
-        player_uuid = self._extract_player_uuid()
-        free = self._parse_bool(bottle.request.query.free)
-        return SearchOraclesResponse(
-            oracles=self._engine.search_oracles(
-                free=free,
-                player_uuid=player_uuid,
-                game_uuid=game_uuid,
-                character_name=character_name,
-            )
-        )
-
-    @wrap_errors()
-    def get_oracle_cost(
-        self, game_uuid: str, character_name: str
-    ) -> GetOracleCostResponse:
-        player_uuid = self._extract_player_uuid()
-        cost = self._engine.get_oracle_cost(
-            player_uuid=player_uuid,
-            game_uuid=game_uuid,
-            character_name=character_name,
-        )
-        return GetOracleCostResponse(cost=cost)
-
-    @wrap_errors()
-    def create_oracle(
-        self, game_uuid: str, character_name: str
-    ) -> CreateOracleResponse:
-        player_uuid = self._extract_player_uuid()
-        req = self._read_body(CreateOracleRequest)
-        id, records = self._engine.create_oracle(
-            request=req.request,
-            payment_selections=req.payment_selections,
-            player_uuid=player_uuid,
-            game_uuid=game_uuid,
-            character_name=character_name,
-        )
-        return CreateOracleResponse(uuid=uuid, records=records)
-
-    @wrap_errors()
-    def answer_oracle(
-        self, game_uuid: str, character_name: str
-    ) -> AnswerOracleResponse:
-        player_uuid = self._extract_player_uuid()
-        req = self._read_body(AnswerOracleRequest)
-        records = self._engine.answer_oracle(
-            oracle_id=req.uuid,
-            response=req.response,
-            proposal=req.proposal,
-            player_uuid=player_uuid,
-            game_uuid=game_uuid,
-            character_name=character_name,
-        )
-        return AnswerOracleResponse(records=records)
-
-    @wrap_errors()
-    def confirm_oracle(
-        self, game_uuid: str, character_name: str
-    ) -> ConfirmOracleResponse:
-        player_uuid = self._extract_player_uuid()
-        req = self._read_body(ConfirmOracleRequest)
-        records = self._engine.confirm_oracle(
-            oracle_id=req.uuid,
-            confirm=req.confirm,
-            player_uuid=player_uuid,
-            game_uuid=game_uuid,
-            character_name=character_name,
-        )
-        return ConfirmOracleResponse(records=records)
+        with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
+            with RulesManager(character_name):
+                return SearchJobsResponse(
+                    jobs=SearchRules.search_jobs(),
+                )
 
     @wrap_errors()
     def do_job(self, game_uuid: str, character_name: str) -> JobResponse:
         player_uuid = self._extract_player_uuid()
         req = self._read_body(JobRequest)
-        records = self._engine.do_job(
-            req.card_uuid,
-            player_uuid=player_uuid,
-            game_uuid=game_uuid,
-            character_name=character_name,
-        )
+        with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
+            with RulesManager(character_name):
+                records = ActivityRules.do_job(character_name, req.card_uuid)
         return JobResponse(records=records)
 
     @wrap_errors()
     def perform_action(self, game_uuid: str, character_name: str) -> ActionResponse:
         player_uuid = self._extract_player_uuid()
         req = self._read_body(ActionRequest)
-        records = self._engine.perform_action(
-            req.action_uuid,
-            player_uuid=player_uuid,
-            game_uuid=game_uuid,
-            character_name=character_name,
-        )
+        with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
+            with RulesManager(character_name):
+                records = ActivityRules.perform_action(character_name, req.action_uuid)
         return ActionResponse(records=records)
 
     @wrap_errors()
     def travel(self, game_uuid: str, character_name: str) -> Any:
         player_uuid = self._extract_player_uuid()
         req = self._read_body(TravelRequest)
-        records = self._engine.travel(
-            req.step,
-            player_uuid=player_uuid,
-            game_uuid=game_uuid,
-            character_name=character_name,
-        )
+        with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
+            with RulesManager(character_name):
+                records = ActivityRules.travel(character_name, req.step)
         return TravelResponse(records=records)
 
     @wrap_errors()
     def camp(self, game_uuid: str, character_name: str) -> CampResponse:
         player_uuid = self._extract_player_uuid()
         req = self._read_body(CampRequest)
-        records = self._engine.camp(
-            player_uuid=player_uuid, game_uuid=game_uuid, character_name=character_name
-        )
+        with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
+            with RulesManager(character_name):
+                records = ActivityRules.camp(character_name)
         if not req.rest:
             raise BadStateException("Rest is false!")
         else:
@@ -290,43 +239,46 @@ class Server:
     def resolve_encounter(self, game_uuid: str, character_name: str) -> Any:
         player_uuid = self._extract_player_uuid()
         req = self._read_body(ResolveEncounterRequest)
-        records = self._engine.resolve_encounter(
-            req.actions,
-            player_uuid=player_uuid,
-            game_uuid=game_uuid,
-            character_name=character_name,
-        )
+        with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
+            with RulesManager(character_name):
+                records = ActivityRules.resolve_encounter(character_name, req.actions)
         return ResolveEncounterResponse(records=records)
 
     @wrap_errors()
     def end_turn(self, game_uuid: str, character_name: str) -> EndTurnResponse:
         player_uuid = self._extract_player_uuid()
         req = self._read_body(EndTurnRequest)
-        records = self._engine.end_turn(
-            player_uuid=player_uuid, game_uuid=game_uuid, character_name=character_name
-        )
+        with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
+            with RulesManager(character_name):
+                records = ActivityRules.end_turn(character_name)
         return EndTurnResponse(records=records)
 
     @wrap_errors()
     def create_game(self) -> CreateGameResponse:
         player_uuid = self._extract_player_uuid()
         req = self._read_body(CreateGameRequest)
-        game_uuid = self._engine.create_game(
-            data=req,
-            player_uuid=player_uuid,
-        )
-        return CreateGameResponse(game_uuid)
+        with ConnectionManager(game_uuid=None, player_uuid=player_uuid):
+            game = GameRules.create_game(req)
+        return CreateGameResponse(game.uuid)
 
     @wrap_errors()
     def search_games(self) -> SearchGamesResponse:
         player_uuid = self._extract_player_uuid()
         name = bottle.request.query.name
-        return SearchGamesResponse(
-            games=self._engine.search_games(
-                name=name,
-                player_uuid=player_uuid,
+        with ConnectionManager(game_uuid=None, player_uuid=player_uuid):
+            return SearchGamesResponse(games=SearchRules.search_games(name=name))
+
+    @wrap_errors()
+    def add_character(
+        self, game_uuid: str, character_name: str
+    ) -> AddCharacterResponse:
+        player_uuid = self._extract_player_uuid()
+        req = self._read_body(AddCharacterRequest)
+        with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
+            ch = GameRules.add_character(
+                character_name, player_uuid, req.job_name, req.location or "random"
             )
-        )
+        return AddCharacterResponse(ch.uuid)
 
     def _parse_bool(self, val: str) -> bool:
         return val.lower() == "t"
@@ -341,6 +293,11 @@ class Server:
             path="/games/create",
             method="POST",
             callback=self.create_game,
+        )
+        bottle.route(
+            path="/game/<game_uuid>/<character_name>/add",
+            method="POST",
+            callback=self.add_character,
         )
         bottle.route(
             path="/game/<game_uuid>/<character_name>/board", callback=self.get_board
@@ -358,20 +315,6 @@ class Server:
             callback=self.search_actions,
         )
         bottle.route(
-            path="/game/<game_uuid>/<character_name>/projects",
-            callback=self.get_projects,
-        )
-        bottle.route(
-            path="/game/<game_uuid>/<character_name>/projects/start",
-            method="POST",
-            callback=self.start_task,
-        )
-        bottle.route(
-            path="/game/<game_uuid>/<character_name>/projects/return",
-            method="POST",
-            callback=self.return_task,
-        )
-        bottle.route(
             path="/game/<game_uuid>/<character_name>/resources",
             callback=self.search_resources,
         )
@@ -382,31 +325,6 @@ class Server:
         bottle.route(
             path="/game/<game_uuid>/<character_name>/jobs",
             callback=self.search_jobs,
-        )
-        bottle.route(
-            path="/game/<game_uuid>/<character_name>/oracles",
-            method="GET",
-            callback=self.search_oracles,
-        )
-        bottle.route(
-            path="/game/<game_uuid>/<character_name>/oracles/cost",
-            method="GET",
-            callback=self.get_oracle_cost,
-        )
-        bottle.route(
-            path="/game/<game_uuid>/<character_name>/oracles/create",
-            method="POST",
-            callback=self.create_oracle,
-        )
-        bottle.route(
-            path="/game/<game_uuid>/<character_name>/oracles/answer",
-            method="POST",
-            callback=self.answer_oracle,
-        )
-        bottle.route(
-            path="/game/<game_uuid>/<character_name>/oracles/confirm",
-            method="POST",
-            callback=self.confirm_oracle,
         )
         bottle.route(
             path="/game/<game_uuid>/<character_name>/play/job",

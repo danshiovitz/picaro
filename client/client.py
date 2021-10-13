@@ -315,6 +315,7 @@ class Client(LookupCache):
         while display[-1].strip() == "":
             display.pop()
 
+        print()
         for line in display:
             print(line)
         print()
@@ -460,10 +461,7 @@ class Client(LookupCache):
         print("Bye!")
         sys.exit(0)
 
-    def _travel(self, dir_str: str, start_loc: str, speed: int) -> Sequence[Record]:
-        ww = re.split(r"\s+", dirstr, 2)
-        dirs = "" if len(ww) == 1 else ww[1]
-
+    def _travel(self, dirs: str, start_loc: str, speed: int) -> Sequence[Record]:
         if not dirs:
             print(f"No directions supplied!")
             print()

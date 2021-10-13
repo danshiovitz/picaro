@@ -55,9 +55,7 @@ def render_record(ch: Character, record: Record, cache: LookupCache) -> str:
             line = f"* {subj} gained the emblem {render_gadget(record.new_value)}"
     elif record.type == EffectType.QUEUE_ENCOUNTER:
         line = f"* {subj} had the encounter {render_template_card(record.new_value)}"
-    elif (
-        record.type == EffectType.MODIFY_LOCATION or record.type == EffectType.TRANSPORT
-    ):
+    elif record.type == EffectType.MODIFY_LOCATION:
         if subj == "You":
             line = f"* {subj} are "
         else:

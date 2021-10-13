@@ -4,7 +4,7 @@ from enum import Enum, auto as enum_auto
 from string import ascii_lowercase
 from typing import Any, Dict, Generic, List, Optional, Sequence, Tuple, TypeVar, Union
 
-from .base import make_uuid
+from picaro.common.storage import make_uuid
 
 
 T = TypeVar("T")

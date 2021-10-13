@@ -15,7 +15,8 @@ from typing import (
 )
 
 from picaro.common.hexmap.types import OffsetCoordinate
-from picaro.store.common_types import (
+
+from .common import (
     Choices,
     TableauCard,
     Effect,
@@ -132,10 +133,7 @@ class Task:
         return "type"
 
     @classmethod
-    def any_type(cls, type_val: Union[TaskType, str]) -> type:
-        if type(type_val) is str:
-            type_val = TaskType[type_val]
-
+    def any_type(cls, type_val: TaskType) -> type:
         if type_val == TaskType.CHALLENGE:
             return TaskExtraChallenge
         elif type_val == TaskType.RESOURCE:
@@ -214,10 +212,7 @@ class TableauCard:
         return "type"
 
     @classmethod
-    def any_type(cls, type_val: Union[FullCardType, str]) -> type:
-        if type(type_val) is str:
-            type_val = FullCardType[type_val]
-
+    def any_type(cls, type_val: FullCardType) -> type:
         if type_val == FullCardType.CHALLENGE:
             return Sequence[EncounterCheck]
         elif type_val in (FullCardType.CHOICE, FullCardType.SPECIAL):
@@ -241,10 +236,7 @@ class Encounter:
         return "type"
 
     @classmethod
-    def any_type(cls, type_val: Union[EncounterType, str]) -> type:
-        if type(type_val) is str:
-            type_val = EncounterType[type_val]
-
+    def any_type(cls, type_val: EncounterType) -> type:
         if type_val == EncounterType.CHALLENGE:
             return Sequence[EncounterCheck]
         elif type_val == EncounterType.CHOICE:
@@ -292,8 +284,8 @@ class Record:
     entity_uuid: str
     type: EffectType
     subtype: Optional[str]
-    old_value: Any
-    new_value: Any
+    old_value: Optional[Any]
+    new_value: Optional[Any]
     comments: Sequence[str]
 
     @classmethod
@@ -301,10 +293,7 @@ class Record:
         return "type"
 
     @classmethod
-    def any_type(cls, type_val: Union[EffectType, str]) -> type:
-        if type(type_val) is str:
-            type_val = EffectType[type_val]
-
+    def any_type(cls, type_val: EffectType) -> type:
         if type_val == EffectType.ADD_EMBLEM:
             return Gadget
         elif type_val == EffectType.QUEUE_ENCOUNTER:

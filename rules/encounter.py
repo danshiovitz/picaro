@@ -3,8 +3,8 @@ import random
 from collections import defaultdict
 from typing import Dict, List, Optional, Sequence, Tuple, cast
 
-from picaro.store.character import Character
-from picaro.store.common_types import (
+from .character import CharacterRules
+from .types.common import (
     Choice,
     Choices,
     Effect,
@@ -16,10 +16,8 @@ from picaro.store.common_types import (
     FullCardType,
     Outcome,
 )
-from picaro.store.general import Game
-
-from .character import CharacterRules
-from .snapshot import EncounterCommands
+from .types.snapshot import EncounterCommands
+from .types.store import Character, Game
 
 
 class EncounterRules:
@@ -59,7 +57,7 @@ class EncounterRules:
     ) -> FullCard:
         special_type = card.data
         if special_type == "trade":
-            all_resources = load_game().resources
+            all_resources = Game.load().resources
             card_type = FullCardType.CHOICE
             data = Choices(
                 min_choices=0,

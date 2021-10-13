@@ -3,21 +3,7 @@ import random
 from collections import defaultdict
 from typing import List, Optional, Sequence
 
-from picaro.store.base import ConnectionManager, make_uuid
-from picaro.store.board import Hex, Token, Country, HexDeck, ResourceDeck
-from picaro.store.character import Character
-from picaro.store.common_types import (
-    Effect,
-    EffectType,
-    EncounterContextType,
-    EntityType,
-    TableauCard,
-)
-from picaro.store.entity import Entity
-from picaro.store.gadget import Gadget
-from picaro.store.general import Game, TemplateDeck
-from picaro.store.job import Job
-from picaro.store.record import Record
+from picaro.common.storage import ConnectionManager, make_uuid
 
 from .board import BoardRules
 from .character import CharacterRules
@@ -36,8 +22,34 @@ from .lib.fields import (
     QueueEncounterField,
     ModifyFreeXpField,
 )
-from .snapshot import CreateGameData, Record as snapshot_Record
 from .translate import TranslateRules
+from .types.common import (
+    Choice,
+    Choices,
+    Effect,
+    EffectType,
+    EncounterContextType,
+    EntityType,
+    FullCard,
+    FullCardType,
+    TableauCard,
+)
+from .types.snapshot import CreateGameData, Record as snapshot_Record
+from .types.store import (
+    Character,
+    Country,
+    Entity,
+    Gadget,
+    Game,
+    Hex,
+    HexDeck,
+    Job,
+    Record,
+    ResourceDeck,
+    TemplateDeck,
+    Token,
+    TurnFlags,
+)
 
 
 class GameRules:
@@ -62,6 +74,7 @@ class GameRules:
         ResourceDeck.insert(
             ResourceDeck.create_detached(name=c.name, cards=[]) for c in data.countries
         )
+        ResourceDeck.insert([ResourceDeck.create_detached(name="Wild", cards=[])])
         entities: List[snapshot_Entity] = []
         gadgets: List[snapshot_Gadget] = []
         tokens: List[snapshot_Token] = []
@@ -135,12 +148,16 @@ class GameRules:
 
     @classmethod
     def end_turn(cls, ch: Character, records: List[Record]) -> None:
+        cls.intra_turn(ch, records)
+        if cls.encounter_check(ch):
+            return
+
         cls._bad_reputation_check(ch)
-        if ch.has_encounters():
+        if cls.encounter_check(ch):
             return
 
         cls._discard_resources(ch)
-        if ch.has_encounters():
+        if cls.encounter_check(ch):
             return
 
         # age out tableau
@@ -206,7 +223,7 @@ class GameRules:
         card = FullCard(
             uuid=make_uuid(),
             name="Discard Resources",
-            desc=f"You must discard to {ch.get_max_resources()} resources.",
+            desc=f"You must discard to {CharacterRules.get_max_resources(ch)} resources.",
             type=FullCardType.CHOICE,
             signs=[],
             context_type=EncounterContextType.SYSTEM,
@@ -227,8 +244,17 @@ class GameRules:
     @classmethod
     def intra_turn(cls, ch: Character, records: List[Record]) -> None:
         # check if dead
-        if ch.queued and not ch.encounter:
+        cls.encounter_check(ch)
+
+    @classmethod
+    def encounter_check(cls, ch: Character) -> bool:
+        if ch.encounter:
+            return True
+        elif ch.queued:
             ch.encounter = EncounterRules.make_encounter(ch, ch.queued.pop(0))
+            return True
+        else:
+            return False
 
     @classmethod
     def save_translate_records(

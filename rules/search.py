@@ -1,14 +1,9 @@
 from typing import Any, Dict, List, Optional, Sequence
 
-from picaro.store.board import Country, Hex, Token
-from picaro.store.character import Character
-from picaro.store.common_types import Action
-from picaro.store.entity import Entity
-from picaro.store.gadget import Gadget
-from picaro.store.general import Game
-
 from .character import CharacterRules
-from .snapshot import (
+from .translate import TranslateRules
+from .types.common import Action
+from .types.snapshot import (
     Action as snapshot_Action,
     Board as snapshot_Board,
     Character as snapshot_Character,
@@ -18,7 +13,15 @@ from .snapshot import (
     Hex as snapshot_Hex,
     Job as snapshot_Job,
 )
-from .translate import TranslateRules
+from .types.store import (
+    Character,
+    Country,
+    Entity,
+    Gadget,
+    Game,
+    Hex,
+    Token,
+)
 
 
 class SearchRules:

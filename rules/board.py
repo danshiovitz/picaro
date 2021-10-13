@@ -4,11 +4,10 @@ from typing import Any, Dict, List, Optional, Sequence
 from picaro.common.exceptions import IllegalMoveException
 from picaro.common.hexmap.types import CubeCoordinate
 from picaro.common.hexmap.utils import cube_linedraw
-from picaro.store.board import Country, Hex, HexDeck, ResourceDeck, Token
-from picaro.store.common_types import EncounterContextType, FullCard, ResourceCard
-from picaro.store.general import Game
 
 from .deck import DeckRules
+from .types.common import EncounterContextType, FullCard, ResourceCard
+from .types.store import Country, Game, Hex, HexDeck, ResourceDeck, Token
 
 
 class BoardRules:
