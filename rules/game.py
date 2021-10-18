@@ -7,9 +7,8 @@ from picaro.common.storage import ConnectionManager, make_uuid
 
 from .board import BoardRules
 from .character import CharacterRules
-from .deck import DeckRules
 from .encounter import EncounterRules
-from .entity import EntityRules
+from .lib import translate
 from .lib.apply import SimpleIntField, SimpleDictIntField, apply_effects
 from .lib.fields import (
     LeadershipMetaField,
@@ -22,16 +21,19 @@ from .lib.fields import (
     QueueEncounterField,
     ModifyFreeXpField,
 )
-from .translate import TranslateRules
+from .lib.special_cards import (
+    actualize_special_card,
+    queue_bad_reputation_check,
+    queue_discard_resources,
+)
 from .types.common import (
     Choice,
     Choices,
     Effect,
     EffectType,
+    Encounter,
     EncounterContextType,
     EntityType,
-    FullCard,
-    FullCardType,
     TableauCard,
 )
 from .types.snapshot import CreateGameData, Record as snapshot_Record
@@ -64,11 +66,11 @@ class GameRules:
         game = Game.load_by_name(data.name)
         ConnectionManager.fix_game_uuid(game.uuid)
         TemplateDeck.insert(
-            TranslateRules.from_snapshot_template_deck(d) for d in data.template_decks
+            translate.from_snapshot_template_deck(d) for d in data.template_decks
         )
-        Job.insert(TranslateRules.from_snapshot_job(j) for j in data.jobs)
-        Country.insert(TranslateRules.from_snapshot_country(c) for c in data.countries)
-        Hex.insert(TranslateRules.from_snapshot_hex(h) for h in data.hexes)
+        Job.insert(translate.from_snapshot_job(j) for j in data.jobs)
+        Country.insert(translate.from_snapshot_country(c) for c in data.countries)
+        Hex.insert(translate.from_snapshot_hex(h) for h in data.hexes)
         hex_types = {hx.terrain for hx in data.hexes}
         HexDeck.insert(HexDeck.create_detached(name=t, cards=[]) for t in hex_types)
         ResourceDeck.insert(
@@ -79,7 +81,7 @@ class GameRules:
         gadgets: List[snapshot_Gadget] = []
         tokens: List[snapshot_Token] = []
         for snapshot_entity in data.entities:
-            cur_entity, cur_gadgets, cur_tokens = TranslateRules.from_snapshot_entity(
+            cur_entity, cur_gadgets, cur_tokens = translate.from_snapshot_entity(
                 snapshot_entity
             )
             entities.append(cur_entity)
@@ -98,7 +100,7 @@ class GameRules:
         job_name: str,
         location: Optional[str],
     ) -> str:
-        ch_uuid = EntityRules.create(
+        ch_uuid = cls._create_entity(
             name=character_name,
             type=EntityType.CHARACTER,
             subtype=None,
@@ -108,6 +110,21 @@ class GameRules:
         records: List[Record] = []
         with Character.load_by_name_for_write(character_name) as ch:
             cls.start_season(ch, records)
+
+    @classmethod
+    def _create_entity(
+        cls,
+        name: str,
+        type: EntityType,
+        subtype: Optional[str],
+        locations: Sequence[str],
+    ) -> str:
+        uuid = Entity.create(name=name, type=type, subtype=subtype)
+        for location in locations:
+            if location == "random":
+                location = BoardRules.get_random_hex().name
+            Token.create(entity=uuid, location=location)
+        return uuid
 
     @classmethod
     def start_season(cls, ch: Character, records: List[Record]) -> None:
@@ -121,10 +138,9 @@ class GameRules:
         ch.turn_flags.clear()
 
         while len(ch.tableau) < CharacterRules.get_max_tableau_size(ch):
-            # job = Job.load(ch.job_name)
-            job = Job.load("Raider")  # TODO: remove
+            job = Job.load(ch.job_name)
             if not ch.job_deck:
-                ch.job_deck = DeckRules.load_deck(job.deck_name)
+                ch.job_deck = EncounterRules.load_deck(job.deck_name)
 
             dst = random.choice(job.encounter_distances)
             neighbors = BoardRules.find_entity_neighbors(ch.uuid, dst, dst)
@@ -132,7 +148,7 @@ class GameRules:
                 # assume character is off the board, so they can't have encounters
                 break
 
-            card = DeckRules.make_card(
+            card = EncounterRules.reify_card(
                 ch.job_deck.pop(0),
                 job.base_skills,
                 job.rank + 1,
@@ -152,11 +168,11 @@ class GameRules:
         if cls.encounter_check(ch):
             return
 
-        cls._bad_reputation_check(ch)
+        queue_bad_reputation_check(ch)
         if cls.encounter_check(ch):
             return
 
-        cls._discard_resources(ch)
+        queue_discard_resources(ch)
         if cls.encounter_check(ch):
             return
 
@@ -173,68 +189,6 @@ class GameRules:
             cls.start_turn(ch, records)
         else:
             cls.end_season(ch, records)
-
-    @classmethod
-    def _bad_reputation_check(cls, ch: Character) -> None:
-        if ch.reputation > 0:
-            return
-
-        if ch.check_set_flag(TurnFlags.BAD_REP_CHECKED):
-            return
-
-        choice_list = [
-            Choice(
-                benefit=(Effect(type=EffectType.LEADERSHIP, subtype=None, value=-1),)
-            ),
-        ]
-
-        card = FullCard(
-            uuid=make_uuid(),
-            name="Bad Reputation",
-            desc="Automatic job check at zero reputation.",
-            type=FullCardType.CHOICE,
-            signs=[],
-            context_type=EncounterContextType.SYSTEM,
-            data=Choices(
-                min_choices=1,
-                max_choices=1,
-                is_random=False,
-                choice_list=choice_list,
-            ),
-        )
-        ch.queued.append(card)
-
-    @classmethod
-    def _discard_resources(cls, ch: Character) -> None:
-        # discard down to correct number of resources
-        overage = sum(ch.resources.values()) - CharacterRules.get_max_resources(ch)
-        if overage <= 0:
-            return
-
-        choice_list = [
-            Choice(
-                cost=(Effect(type=EffectType.MODIFY_RESOURCES, subtype=rs, value=-1),),
-                max_choices=cnt,
-            )
-            for rs, cnt in ch.resources.items()
-            if cnt > 0
-        ]
-
-        card = FullCard(
-            uuid=make_uuid(),
-            name="Discard Resources",
-            desc=f"You must discard to {CharacterRules.get_max_resources(ch)} resources.",
-            type=FullCardType.CHOICE,
-            signs=[],
-            context_type=EncounterContextType.SYSTEM,
-            data=Choices(
-                min_choices=overage,
-                max_choices=overage,
-                is_random=False,
-                choice_list=choice_list,
-            ),
-        )
-        ch.queued.append(card)
 
     @classmethod
     def end_season(cls, ch: Character, records: List[Record]) -> None:
@@ -262,7 +216,7 @@ class GameRules:
         records: Sequence[Record],
     ) -> Sequence[snapshot_Record]:
         Record.insert(records)
-        return [TranslateRules.to_snapshot_record(Record.load(r.uuid)) for r in records]
+        return [translate.to_snapshot_record(Record.load(r.uuid)) for r in records]
 
     # This one is for when the character has done a thing, and this is the outcome,
     # which applies in all cases. If the character has 3 coins, and this has an effect

@@ -1,8 +1,8 @@
 {
   "name": "Raider",
+  "copies": [4, 2, 2, 1, 1, 1, 1],
   "cards": [
     {
-      "copies": 4,
       "name": "Caravan Raid",
       "desc": "...",
       "type": "CHALLENGE",
@@ -13,7 +13,6 @@
       }
     },
     {
-      "copies": 2,
       "name": "Scouting Mission",
       "desc": "...",
       "type": "CHALLENGE",
@@ -24,7 +23,6 @@
       }
     },
     {
-      "copies": 2,
       "name": "Guard Patrol",
       "desc": "...",
       "type": "CHALLENGE",
@@ -35,7 +33,6 @@
       }
     },
     {
-      "copies": 1,
       "name": "Another Band",
       "desc": "...",
       "type": "CHALLENGE",
@@ -46,7 +43,6 @@
       }
     },
     {
-      "copies": 1,
       "name": "Hunting Expedition",
       "desc": "...",
       "type": "CHALLENGE",
@@ -57,7 +53,6 @@
       }
     },
     {
-      "copies": 1,
       "name": "Test of Skill",
       "desc": "...",
       "type": "CHALLENGE",
@@ -68,7 +63,6 @@
       }
     },
     {
-      "copies": 1,
       "name": "Victory Celebration",
       "desc": "...",
       "type": "CHALLENGE",

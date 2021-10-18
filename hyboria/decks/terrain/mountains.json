@@ -1,8 +1,8 @@
 {
   "name": "Mountains",
+  "copies": [2, 2, 2, 2, 2, 2],
   "cards": [
     {
-      "copies": 2,
       "name": "Chasm",
       "desc": "...",
       "type": "CHALLENGE",
@@ -13,7 +13,6 @@
       }
     },
     {
-      "copies": 2,
       "name": "Avalanche",
       "desc": "...",
       "type": "CHALLENGE",
@@ -24,7 +23,6 @@
       }
     },
     {
-      "copies": 2,
       "name": "Mountain Shrine",
       "desc": "...",
       "type": "CHALLENGE",
@@ -35,7 +33,6 @@
       }
     },
     {
-      "copies": 2,
       "name": "Creatures of the Mountain",
       "desc": "...",
       "type": "CHALLENGE",
@@ -46,7 +43,6 @@
       }
     },
     {
-      "copies": 2,
       "name": "Dark Cave",
       "desc": "...",
       "type": "CHALLENGE",
@@ -57,7 +53,6 @@
       }
     },
     {
-      "copies": 2,
       "name": "Icy Wind",
       "desc": "...",
       "type": "CHALLENGE",

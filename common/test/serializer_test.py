@@ -83,10 +83,6 @@ class SerializeTest(TestCase):
         v = Variant(type="a", val=None)
         self.assertEqual(v, deserialize(serialize(v), Variant))
 
-    # def test_roundtrip_simple(self):
-    #     v = None
-    #     self.assertEqual(v, deserialize(serialize(v), NoneType))
-
 
 if __name__ == "__main__":
     main()

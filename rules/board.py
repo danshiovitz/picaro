@@ -5,9 +5,9 @@ from picaro.common.exceptions import IllegalMoveException
 from picaro.common.hexmap.types import CubeCoordinate
 from picaro.common.hexmap.utils import cube_linedraw
 
-from .deck import DeckRules
-from .types.common import EncounterContextType, FullCard, ResourceCard
-from .types.store import Country, Game, Hex, HexDeck, ResourceDeck, Token
+from .lib.deck import shuffle_discard
+from .types.common import ResourceCard
+from .types.store import Country, Game, Hex, ResourceDeck, Token
 
 
 class BoardRules:
@@ -91,18 +91,6 @@ class BoardRules:
             token.location = end_hex.name
 
     @classmethod
-    def draw_hex_card(cls, hex_name: str) -> FullCard:
-        hx = Hex.load(hex_name)
-        deck_name = hx.terrain
-        deck_name = "Desert"  # TODO: remove
-        with HexDeck.load_for_write(deck_name) as deck:
-            if not deck.cards:
-                deck.cards = DeckRules.load_deck(deck_name)
-            return DeckRules.make_card(
-                deck.cards.pop(0), [], hx.danger, EncounterContextType.TRAVEL
-            )
-
-    @classmethod
     def draw_resource_card(cls, hex_name: str) -> ResourceCard:
         hx = Hex.load(hex_name)
         with ResourceDeck.load_for_write(hx.country) as deck:
@@ -129,4 +117,4 @@ class BoardRules:
                     cards.extend([ResourceCard(name=f"{rs}", type=rs, value=1)] * 3)
                 else:
                     cards.extend([ResourceCard(name=f"{rs}", type=rs, value=1)] * 1)
-        return DeckRules.shuffle(cards)
+        return shuffle_discard(cards)

@@ -1,9 +1,8 @@
 {
   "name": "Travel",
-  "base_skills": [],
+  "copies": [2, 2],
   "cards": [
     {
-      "copies": 2,
       "name": "A Find Along The Way",
       "desc": "...",
       "type": "CHOICE",
@@ -20,7 +19,6 @@
       }
     },
     {
-      "copies": 2,
       "name": "Shortcut",
       "desc": "...",
       "type": "CHOICE",

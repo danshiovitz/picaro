@@ -47,7 +47,10 @@ T = TypeVar("T")
 class Server:
     def __init__(self, db_path: Optional[str]) -> None:
         ConnectionManager.initialize(db_path=db_path)
+        self.hacky_setup()
+        # self.flat_setup()
 
+    def hacky_setup(self) -> None:
         # buncha hacky initial setup:
         from pathlib import Path
 
@@ -79,6 +82,7 @@ class Server:
                 Gadget.create(
                     uuid="123",
                     name="Cloak of Elvenkind",
+                    desc=None,
                     entity=ch.uuid,
                     triggers=[],
                     overlays=[
@@ -119,6 +123,47 @@ class Server:
                             Effect(
                                 type=EffectType.MODIFY_XP,
                                 subtype="Brutal Fighting",
+                                value=25,
+                            ),
+                        ],
+                        [],
+                    )
+
+    def flat_setup(self) -> None:
+        # buncha hacky initial setup:
+        from picaro.rules.test.gen_flat import generate_flatworld
+
+        player_uuid = "inkyinkyinky"
+        with ConnectionManager(game_uuid=None, player_uuid=player_uuid):
+            data = generate_flatworld()
+            game = GameRules.create_game(data)
+
+        with ConnectionManager(game_uuid=game.uuid, player_uuid=player_uuid):
+            with RulesManager("AFGNCAAP"):
+                ch = GameRules.add_character(
+                    "AFGNCAAP", player_uuid, "Red Job 1", "random"
+                )
+
+                from picaro.rules.types.common import (
+                    Overlay,
+                    OverlayType,
+                    Filter,
+                    FilterType,
+                )
+                from picaro.rules.types.store import Character, Gadget
+
+                with Character.load_by_name_for_write("AFGNCAAP") as ch:
+                    GameRules.apply_regardless(
+                        ch,
+                        [
+                            Effect(type=EffectType.MODIFY_COINS, value=50),
+                            Effect(type=EffectType.MODIFY_RESOURCES, value=10),
+                            Effect(
+                                type=EffectType.MODIFY_XP, subtype="Skill 3", value=20
+                            ),
+                            Effect(
+                                type=EffectType.MODIFY_XP,
+                                subtype="Skill 5",
                                 value=25,
                             ),
                         ],
@@ -275,9 +320,10 @@ class Server:
         player_uuid = self._extract_player_uuid()
         req = self._read_body(AddCharacterRequest)
         with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
-            ch = GameRules.add_character(
-                character_name, player_uuid, req.job_name, req.location or "random"
-            )
+            with RulesManager(character_name):
+                ch = GameRules.add_character(
+                    character_name, player_uuid, req.job_name, req.location or "random"
+                )
         return AddCharacterResponse(ch.uuid)
 
     def _parse_bool(self, val: str) -> bool:

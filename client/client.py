@@ -142,8 +142,7 @@ class Client(LookupCache):
                     body2=body2,
                 )
 
-            char_token = [t for t in board.tokens if t.name == self.args.name][0]
-            center_name = self.args.center or char_token.location
+            center_name = self.args.center or ch.location
             center_hx = [hx for hx in board.hexes if hx.name == center_name][0]
             for line in render_large(
                 set(coords), display, center=center_hx.coordinate, radius=2

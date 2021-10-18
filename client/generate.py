@@ -24,11 +24,9 @@ from picaro.server.api_types import (
     Gadget,
     Hex,
     Job,
-    ProjectType,
     TemplateCard,
     TemplateCardType,
     TemplateDeck,
-    Token,
 )
 
 
@@ -40,12 +38,28 @@ def generate_game_v2(name: str, json_dir: Path) -> CreateGameRequest:
     # project_types = _load_json(json_dir, "project_types", ProjectType)
     zodiacs = _load_json(json_dir, "zodiacs", str)
     hexes, countries, entities = generate_map_v2()
+
+    # fix up template decks since we haven't actually written them all:
+    deck_map = {deck.name: deck for deck in template_decks}
+    revised_decks = [deck_map["Raider"], deck_map["Desert"], deck_map["Travel"]]
+    new_decks = {"Raider", "Desert", "Travel"}
+    for job in jobs:
+        if job.deck_name not in new_decks:
+            deck = TemplateDeck(name=job.deck_name, copies=deck_map["Raider"].copies, cards=deck_map["Raider"].cards)
+            revised_decks.append(deck)
+            new_decks.add(deck.name)
+    for terrain in {hx.terrain for hx in hexes}:
+        if terrain not in new_decks:
+            deck = TemplateDeck(name=terrain, copies=deck_map["Desert"].copies, cards=deck_map["Desert"].cards)
+            revised_decks.append(deck)
+            new_decks.add(deck.name)
+
     return CreateGameRequest(
         name=name,
         skills=skills,
         resources=resources,
         jobs=jobs,
-        template_decks=template_decks,
+        template_decks=revised_decks,
         # project_types=project_types,
         zodiacs=zodiacs,
         hexes=hexes,
@@ -174,7 +188,6 @@ def generate(
         terrain[to_hex] = _choose_terrain(TRANSITIONS[terrain[from_hex]])
 
     def make_hex(coord: OffsetCoordinate) -> Hex:
-        row, column = (coord.row, coord.column)
         return Hex(
             name=coord.get_name(),
             coordinate=coord,
@@ -259,7 +272,6 @@ def generate_map_v2() -> Tuple[List[Hex], List[Country], List[Entity]]:
                         Effect(
                             type=EffectType.QUEUE_ENCOUNTER,
                             value=TemplateCard(
-                                copies=1,
                                 name="Trade",
                                 desc="...",
                                 type=TemplateCardType.SPECIAL,
@@ -285,6 +297,7 @@ def generate_map_v2() -> Tuple[List[Hex], List[Country], List[Entity]]:
                     Gadget(
                         uuid="",
                         name=city_name,
+                        desc=None,
                         overlays=[],
                         triggers=[],
                         actions=actions,
@@ -325,6 +338,7 @@ def generate_map_v2() -> Tuple[List[Hex], List[Country], List[Entity]]:
                     Gadget(
                         uuid="",
                         name=mine_name,
+                        desc=None,
                         overlays=[],
                         triggers=[],
                         actions=actions,

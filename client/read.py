@@ -356,8 +356,6 @@ class ComplexReader:
                 subtype=subtype,
                 value=val,
                 is_absolute=is_absolute,
-                entity_type=ent[0] if ent else None,
-                entity_name=ent[1] if ent else None,
             ),
             line,
         )
@@ -397,11 +395,7 @@ def read_selections(
 ) -> Dict[int, int]:
     selections = defaultdict(int)
     can_choose = True
-    if choices.is_random:
-        for v in rolls:
-            selections[v - 1] += 1
-        can_choose = False
-    elif choices.min_choices >= sum(c.max_choices for c in choices.choice_list):
+    if choices.min_choices >= sum(c.max_choices for c in choices.choice_list):
         for idx, c in enumerate(choices.choice_list):
             selections[idx] = c.max_choices
         can_choose = False

@@ -11,7 +11,6 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
-    Union,
 )
 
 from picaro.common.hexmap.types import OffsetCoordinate
@@ -27,16 +26,11 @@ from .common import (
     FullCard,
     FullCardType,
     JobType,
-    OracleStatus,
     Overlay,
     Route,
     RouteType,
-    TaskStatus,
-    TaskType,
     TemplateCard,
     Trigger,
-    ProjectStatus,
-    ProjectType,
 )
 
 
@@ -47,13 +41,6 @@ class Hex:
     terrain: str
     country: str
     danger: int
-
-
-@dataclass(frozen=True)
-class Token:
-    uuid: str
-    entity: str
-    location: str
 
 
 @dataclass(frozen=True)
@@ -85,10 +72,11 @@ class Action:
 class Gadget:
     uuid: str
     name: str
-    entity: str
+    desc: Optional[str]
     overlays: Sequence[Overlay]
     triggers: Sequence[Trigger]
     actions: Sequence[Action]
+    entity: str
 
 
 @dataclass(frozen=True)
@@ -111,85 +99,6 @@ class Job:
     deck_name: str
     base_skills: Sequence[str]
     encounter_distances: Sequence[int]
-
-
-@dataclass()
-class Task:
-    name: str
-    project_name: str
-    task_idx: int
-    desc: Optional[str]
-    type: TaskType
-    cost: List[Effect]
-    difficulty: int
-    participants: List[str]
-    status: TaskStatus
-    xp: int
-    max_xp: int
-    extra: Any
-
-    @classmethod
-    def type_field(cls) -> str:
-        return "type"
-
-    @classmethod
-    def any_type(cls, type_val: TaskType) -> type:
-        if type_val == TaskType.CHALLENGE:
-            return TaskExtraChallenge
-        elif type_val == TaskType.RESOURCE:
-            return TaskExtraResource
-        elif type_val == TaskType.WAITING:
-            return TaskExtraWaiting
-        elif type_val == TaskType.DISCOVERY:
-            return TaskExtraDiscovery
-        else:
-            raise Exception("Unknown type")
-
-
-@dataclass(frozen=True)
-class TaskExtraChallenge:
-    skills: List[str]
-
-
-@dataclass(frozen=True)
-class TaskExtraResource:
-    wanted_resources: Set[str]
-    given_resources: Dict[str, int]
-
-
-@dataclass(frozen=True)
-class TaskExtraWaiting:
-    turns_waited: int
-
-
-@dataclass(frozen=True)
-class TaskExtraDiscovery:
-    ref_hexes: List[Tuple[str, int]]
-    possible_hexes: Set[str]
-    explored_hexes: Set[str]
-
-
-@dataclass(frozen=True)
-class Project:
-    name: str
-    desc: str
-    type: str
-    status: ProjectStatus
-    target_hex: str
-    tasks: List[Task]
-
-
-@dataclass(frozen=True)
-class Oracle:
-    uuid: str
-    status: OracleStatus
-    signs: Sequence[str]
-    petitioner: str
-    payment: Sequence[Effect]
-    request: str
-    granter: Optional[str]
-    response: Optional[str]
-    proposal: Optional[List[Effect]]
 
 
 class EncounterType(Enum):
@@ -269,12 +178,12 @@ class Character:
     encounter: Optional[Encounter]
     queued: Sequence[FullCard]
     emblems: Sequence[Gadget]
-    tasks: Sequence[Task]
 
 
 @dataclass(frozen=True)
 class TemplateDeck:
     name: str
+    copies: Sequence[int]
     cards: Sequence[TemplateCard]
 
 

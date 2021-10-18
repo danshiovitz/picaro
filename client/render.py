@@ -96,7 +96,6 @@ def render_outcome(val: Outcome) -> str:
         Outcome.GAIN_HEALING: "+healing",
         Outcome.GAIN_RESOURCES: "+resources",
         Outcome.GAIN_TURNS: "+turns",
-        Outcome.GAIN_PROJECT_XP: "+project",
         Outcome.GAIN_SPEED: "+speed",
         Outcome.LOSE_COINS: "-coins",
         Outcome.LOSE_REPUTATION: "-reputation",

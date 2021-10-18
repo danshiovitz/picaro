@@ -1,6 +1,6 @@
 from dataclasses import replace as dataclasses_replace
 from enum import Enum, auto as enum_auto
-from typing import Any, Dict, List, Optional, Sequence, Set, Union
+from typing import Any, Dict, List, Optional, Sequence, Set
 
 from picaro.common.hexmap.types import CubeCoordinate
 from picaro.common.storage import (
@@ -28,6 +28,7 @@ from .common import (
     Trigger,
     TriggerType,
 )
+from .snapshot import Gadget as snapshot_Gadget
 
 
 class Game(StandardWrapper):
@@ -58,6 +59,7 @@ class TemplateDeck(StandardWrapper):
         TABLE_NAME = "template_deck"
 
         name: str
+        copies: List[int]
         cards: List[TemplateCard]
 
 
@@ -183,6 +185,7 @@ class Gadget(StandardWrapper):
 
         uuid: str
         name: str
+        desc: Optional[str]
         overlays: List[Overlay]
         triggers: List[Trigger]
         actions: List[Action]
@@ -333,7 +336,7 @@ class Character(StandardWrapper):
             raise Exception(f"Can't set flag on non-writable character")
         prev = flag in self._data.turn_flags
         self._data.turn_flags.add(flag)
-        return not prev
+        return prev
 
 
 class Record(StandardWrapper):
@@ -355,7 +358,7 @@ class Record(StandardWrapper):
         @classmethod
         def any_type(cls, type_val: EffectType) -> type:
             if type_val == EffectType.ADD_EMBLEM:
-                return Gadget.Data
+                return snapshot_Gadget
             elif type_val == EffectType.QUEUE_ENCOUNTER:
                 return Optional[TemplateCard]
             elif type_val in (

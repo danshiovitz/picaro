@@ -3,8 +3,13 @@ import random
 from collections import defaultdict
 from typing import Dict, List, Optional, Sequence, Tuple, cast
 
+from picaro.common.storage import make_uuid
+
 from .character import CharacterRules
+from .lib.deck import shuffle_discard
+from .lib.special_cards import actualize_special_card
 from .types.common import (
+    Challenge,
     Choice,
     Choices,
     Effect,
@@ -15,16 +20,183 @@ from .types.common import (
     FullCard,
     FullCardType,
     Outcome,
+    TemplateCard,
+    TemplateCardType,
 )
 from .types.snapshot import EncounterCommands
-from .types.store import Character, Game
+from .types.store import Character, Game, TemplateDeck
 
-
+# Briefly about the lifecycle of an encounter:
+# It starts off as a TemplateCard, which represents "the sort of stuff that happens",
+# like "sometimes there are sandstorms in the desert" or "sometimes raiders raid caravans"
+# * Challenges have their list of typical skills and rewards
+# * Choices have their list of choices
+# * Specials just have their special type
+# Then it becomes a FullCard, which represents a specific thing, like "there's a sandstorm
+# in hex AE05"
+# * Challenges have a list of specific checks, with the skill, tn, reward, and penalty picked
+# * Choices have their list of choices (you could imagine templated choices that get
+#   narrowed down, but those don't exist for now)
+# * Specials are still left as their special type
+# The FullCard goes into the tableau, or directly into a character's queue
+# Eventually it gets to the front of the queue and becomes an Encounter, which represents
+# "what the character is doing right now"
+# * Challenges get the die roll assigned for each check
+# * Choices get a random roll if they are a random choice
+# * Specials get converted into challenge or choice and then as above. We do this so that,
+#   eg, the trade special can go off what the character has in inventory right now.
 class EncounterRules:
+    @classmethod
+    def load_deck(cls, name: str) -> List[TemplateCard]:
+        template_deck = TemplateDeck.load(name)
+        return shuffle_discard(
+            c
+            for idx, c in enumerate(template_deck.cards)
+            for _ in range(template_deck.copies[idx])
+        )
+
+    @classmethod
+    def reify_card(
+        cls,
+        val: TemplateCard,
+        base_skills: Sequence[str],
+        difficulty: int,
+        context_type: EncounterContextType,
+    ) -> FullCard:
+        game = Game.load()
+        base_skills = list(base_skills)
+
+        if val.type == TemplateCardType.CHOICE:
+            data = val.data
+            card_type = FullCardType.CHOICE
+        elif val.type == TemplateCardType.CHALLENGE:
+            challenge = cast(Challenge, val.data)
+            skill_bag = []
+            # the number of copies of the core skills only matters on the third check,
+            # where we add in all the skills (let's assume there are 36) and want to
+            # have the copy number such that we pick a core skill (let's assume there
+            # are 6) say 50% of the time and an unusual skill 50% of the time
+            sk = (list(challenge.skills) + base_skills + base_skills)[0:6]
+            skill_bag.extend(sk * 6)
+
+            reward_bag = cls._make_reward_bag(challenge, context_type)
+            penalty_bag = cls._make_penalty_bag(challenge, context_type)
+            data = [
+                cls._make_check(difficulty, skill_bag, reward_bag, penalty_bag),
+                cls._make_check(difficulty, skill_bag, reward_bag, penalty_bag),
+                cls._make_check(
+                    difficulty,
+                    skill_bag + list(game.skills),
+                    reward_bag,
+                    penalty_bag,
+                ),
+            ]
+            card_type = FullCardType.CHALLENGE
+        elif val.type == TemplateCardType.SPECIAL:
+            data = val.data
+            card_type = FullCardType.SPECIAL
+        else:
+            raise Exception(f"Unknown card type {val.type.name}")
+
+        signs = random.sample(game.zodiacs, 2) if not val.unsigned else []
+
+        return FullCard(
+            uuid=make_uuid(),
+            name=val.name,
+            desc=val.desc,
+            type=card_type,
+            data=data,
+            signs=signs,
+            context_type=context_type,
+        )
+
+    @classmethod
+    def _make_check(
+        cls,
+        difficulty: int,
+        skill_bag: List[str],
+        reward_bag: List[Outcome],
+        penalty_bag: List[Outcome],
+    ) -> EncounterCheck:
+        tn = cls._difficulty_to_target_number(difficulty)
+        # fuzz the tns a bit
+        fuzzed = [
+            tn,
+            tn,
+            tn,
+            tn,
+            tn + 1,
+            tn + 1,
+            tn - 1,
+            tn - 1,
+            tn + 2,
+            tn - 2,
+            tn + 3,
+            tn - 3,
+        ]
+        # was ending up with some TN 1 or TN 0, which seems pretty lame
+        fuzzed = [tn for tn in fuzzed if tn >= 2]
+        tn = random.choice(fuzzed)
+        return EncounterCheck(
+            skill=random.choice(skill_bag),
+            target_number=tn,
+            reward=random.choice(reward_bag),
+            penalty=random.choice(penalty_bag),
+        )
+
+    # originally had this as a deck, but I think it works better to have more
+    # hot/cold variance
+    @classmethod
+    def _make_reward_bag(
+        cls, challenge: Challenge, context: EncounterContextType
+    ) -> List[Outcome]:
+        reward_bag = []
+        reward_bag.extend([Outcome.GAIN_COINS, Outcome.GAIN_REPUTATION] * 4)
+        reward_bag.extend(challenge.rewards * 4)
+        reward_bag.extend(
+            [
+                Outcome.GAIN_RESOURCES,
+                Outcome.GAIN_HEALING,
+                Outcome.GAIN_SPEED,
+                Outcome.NOTHING,
+            ]
+            * 1
+        )
+        return reward_bag
+
+    @classmethod
+    def _make_penalty_bag(
+        cls, challenge: Challenge, context: EncounterContextType
+    ) -> List[Outcome]:
+        penalty_bag = []
+        if context == EncounterContextType.TRAVEL:
+            penalty_bag.extend([Outcome.LOSE_SPEED] * 8)
+            penalty_bag.extend([Outcome.DAMAGE] * 4)
+        else:
+            penalty_bag.extend([Outcome.DAMAGE] * 12)
+        penalty_bag.extend(challenge.penalties * 6)
+        penalty_bag.extend(
+            [
+                Outcome.NOTHING,
+                Outcome.LOSE_REPUTATION,
+                Outcome.LOSE_RESOURCES,
+                Outcome.LOSE_COINS,
+                Outcome.TRANSPORT,
+                Outcome.LOSE_LEADERSHIP,
+                Outcome.LOSE_SPEED,
+            ]
+            * 1
+        )
+        return penalty_bag
+
+    @classmethod
+    def _difficulty_to_target_number(cls, difficulty: int) -> int:
+        return difficulty * 2 + 1
+
     @classmethod
     def make_encounter(cls, ch: Character, card: FullCard) -> Encounter:
         if card.type == FullCardType.SPECIAL:
-            card = cls._actualize_special_card(ch, card)
+            card = actualize_special_card(ch, card)
 
         rolls = []
         if card.type == FullCardType.CHALLENGE:
@@ -36,11 +208,7 @@ class EncounterRules:
                     roll_val = random.randint(1, 8)
                 rolls.append(roll_val + bonus)
         elif card.type == FullCardType.CHOICE:
-            if card.data.is_random:
-                rolls.extend(
-                    random.randint(1, len(card.data.choice_list))
-                    for _ in range(card.data.max_choices)
-                )
+            pass
         else:
             raise Exception(f"Unknown card type: {card.type.name}")
 
@@ -50,146 +218,17 @@ class EncounterRules:
         )
 
     @classmethod
-    def _actualize_special_card(
-        cls,
-        ch: Character,
-        card: FullCard,
-    ) -> FullCard:
-        special_type = card.data
-        if special_type == "trade":
-            all_resources = Game.load().resources
-            card_type = FullCardType.CHOICE
-            data = Choices(
-                min_choices=0,
-                max_choices=sum(ch.resources.values()),
-                is_random=False,
-                choice_list=[
-                    Choice(
-                        cost=[
-                            Effect(
-                                type=EffectType.MODIFY_RESOURCES, subtype=rs, value=-1
-                            )
-                        ],
-                        benefit=[
-                            Effect(
-                                type=EffectType.MODIFY_COINS,
-                                value=5,
-                            )
-                        ],
-                        max_choices=ch.resources[rs],
-                    )
-                    for rs in all_resources
-                    if ch.resources.get(rs, 0) > 0
-                ],
-                cost=[Effect(type=EffectType.MODIFY_ACTIVITY, value=-1)],
-            )
-        else:
-            raise Exception(f"Unknown special type: {special_type}")
-        return dataclasses.replace(card, type=card_type, data=data)
-
-    @classmethod
-    def perform_commands(
-        cls, ch: Character, encounter: Encounter, commands: EncounterCommands
-    ) -> Tuple[List[Effect], List[Effect]]:
-        if commands.encounter_uuid != encounter.card.uuid:
-            raise BadStateException(
-                f"Command uuid {commands.encounter_uuid} mismatch with expected uuid {encounter.card.uuid}"
-            )
-
-        if encounter.card.type == FullCardType.CHALLENGE:
-            checks = cast(Sequence[EncounterCheck], encounter.card.data)
-            return cls._perform_challenge(
-                ch,
-                checks,
-                encounter.rolls,
-                commands,
-            )
-        elif encounter.card.type == FullCardType.CHOICE:
-            choices = cast(Choices, encounter.card.data)
-            return cls._perform_choices(
-                ch,
-                choices,
-                encounter.rolls,
-                commands.choices,
-            )
-        else:
-            raise Exception(f"Bad card type: {encounter.card.type.name}")
-
-    @classmethod
-    def _perform_challenge(
-        cls,
-        ch: Character,
-        checks: Sequence[EncounterCheck],
-        rolls: Sequence[int],
-        commands: EncounterCommands,
-    ) -> Tuple[List[Effect], List[Effect]]:
-        cost: List[Effect] = []
-        benefit: List[Effect] = []
-
-        rolls = list(rolls[:])
-        luck_spent = 0
-
-        # validate the commands by rerunning them (note this also updates luck)
-        for adj in commands.adjusts or []:
-            luck_spent += 1
-            rolls[adj] += 1
-
-        for from_c, to_c in commands.transfers or []:
-            if rolls[from_c] < 2:
-                raise BadStateException("From not enough for transfer")
-            rolls[from_c] -= 2
-            rolls[to_c] += 1
-
-        if commands.flee:
-            luck_spent += 1
-
-        rolls = tuple(rolls)
-        if (luck_spent, rolls) != (commands.luck_spent, commands.rolls):
-            raise BadStateException("Computed luck/rolls doesn't match?")
-
-        if luck_spent > 0:
-            cost.append(
-                Effect(
-                    EffectType.MODIFY_LUCK, -luck_spent, comment="encounter commands"
-                )
-            )
-        if commands.flee:
-            return cost, benefit
-
-        ocs = defaultdict(int)
-        failures = 0
-
-        for idx, check in enumerate(checks):
-            if rolls[idx] >= check.target_number:
-                ocs[check.reward] += 1
-            else:
-                ocs[check.penalty] += 1
-                failures += 1
-
-        mcs = defaultdict(int)
-
-        sum_til = lambda v: (v * v + v) // 2
-        for outcome, cnt in ocs.items():
-            benefit.extend(cls._convert_outcome(outcome, cnt, ch, checks[0].skill))
-        if failures > 0:
-            benefit.append(
-                Effect(
-                    type=EffectType.MODIFY_XP,
-                    subtype=checks[0].skill,
-                    value=failures,
-                )
-            )
-
-        return cost, benefit
-
-    @classmethod
-    def _convert_outcome(
+    def convert_outcome(
         cls,
         outcome: Outcome,
         cnt: int,
         ch: Character,
-        default_skill: str,
+        card: FullCard,
     ) -> List[Effect]:
+        if card.type != FullCardType.CHALLENGE:
+            raise Exception("convert_outcome called with non-challenge")
+        checks = cast(Sequence[EncounterCheck], card.data)
+        default_skill = card.data[0].skill
         sum_til = lambda v: (v * v + v) // 2
         if outcome == Outcome.GAIN_COINS:
             return [Effect(type=EffectType.MODIFY_COINS, value=sum_til(cnt))]
@@ -223,61 +262,7 @@ class EncounterRules:
             return [Effect(type=EffectType.TRANSPORT, value=cnt * 5)]
         elif outcome == Outcome.LOSE_LEADERSHIP:
             return [Effect(type=EffectType.LEADERSHIP, value=-cnt)]
-        elif outcome == Outcome.GAIN_PROJECT_XP:
-            raise Exception("project not supported yet")
         elif outcome == Outcome.NOTHING:
             return []
         else:
             raise Exception(f"Unknown effect: {outcome}")
-
-    @classmethod
-    def _perform_choices(
-        cls,
-        ch: Character,
-        choices: Choices,
-        rolls: List[int],
-        selections: Dict[int, int],
-    ) -> Tuple[List[Effect], List[Effect]]:
-        cost: List[Effect] = []
-        benefit: List[Effect] = []
-
-        if choices.is_random:
-            rnd = defaultdict(int)
-            for v in rolls:
-                rnd[v - 1] += 1
-            if rnd != selections:
-                raise BadStateException(
-                    f"Choice should match roll for random ({rnd}, {selections})"
-                )
-
-        tot = 0
-        for choice_idx, cnt in selections.items():
-            if choice_idx < 0 or choice_idx >= len(choices.choice_list):
-                raise BadStateException(f"Choice out of range: {choice_idx}")
-            choice = choices.choice_list[choice_idx]
-            tot += cnt
-            if cnt < choice.min_choices:
-                raise IllegalMoveException(
-                    f"Must choose {choice.name or 'this'} at least {with_s(choice.min_choices, 'time')}."
-                )
-            if cnt > choice.max_choices:
-                raise IllegalMoveException(
-                    f"Must choose {choice.name or 'this'} at most {with_s(choice.max_choices, 'time')}."
-                )
-        if tot < choices.min_choices:
-            raise IllegalMoveException(
-                f"Must select at least {with_s(choices.min_choices, 'choice')}."
-            )
-        if tot > choices.max_choices:
-            raise IllegalMoveException(
-                f"Must select at most {with_s(choices.max_choices, 'choice')}."
-            )
-
-        cost.extend(choices.cost)
-        benefit.extend(choices.benefit)
-        for choice_idx, cnt in selections.items():
-            choice = choices.choice_list[choice_idx]
-            for _ in range(cnt):
-                cost.extend(choice.cost)
-                benefit.extend(choice.benefit)
-        return cost, benefit

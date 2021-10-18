@@ -1,8 +1,8 @@
 {
   "name": "City",
+  "copies": [2, 2, 2, 2, 2, 2],
   "cards": [
     {
-      "copies": 2,
       "name": "Street Market",
       "desc": "...",
       "type": "CHALLENGE",
@@ -13,7 +13,6 @@
       }
     },
     {
-      "copies": 2,
       "name": "Wandering Prophet",
       "desc": "...",
       "type": "CHALLENGE",
@@ -24,7 +23,6 @@
       }
     },
     {
-      "copies": 2,
       "name": "Tavern Brawl",
       "desc": "...",
       "type": "CHALLENGE",
@@ -35,7 +33,6 @@
       }
     },
     {
-      "copies": 2,
       "name": "Statuary Garden",
       "desc": "...",
       "type": "CHALLENGE",
@@ -46,7 +43,6 @@
       }
     },
     {
-      "copies": 2,
       "name": "Tipped Wagon",
       "desc": "...",
       "type": "CHALLENGE",
@@ -57,7 +53,6 @@
       }
     },
     {
-      "copies": 2,
       "name": "Maze of Alleys",
       "desc": "...",
       "type": "CHALLENGE",

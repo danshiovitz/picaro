@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from picaro.common.hexmap.types import OffsetCoordinate
 from picaro.rules.types.common import (
+    Challenge,
     Choice,
     Choices,
     Effect,
@@ -13,13 +14,10 @@ from picaro.rules.types.common import (
     Filter,
     FilterType,
     FullCardType,
-    OracleStatus,
+    JobType,
     Outcome,
     Overlay,
     OverlayType,
-    ProjectType,
-    TaskStatus,
-    TaskType,
     TableauCard,
     TemplateCard,
     TemplateCardType,
@@ -38,13 +36,10 @@ from picaro.rules.types.snapshot import (
     Game,
     Hex,
     Job,
-    Oracle,
-    Project,
     Record,
     Route,
     RouteType,
     TemplateDeck,
-    Token,
 )
 
 
@@ -65,31 +60,6 @@ class SearchEntitiesResponse:
 
 
 @dataclass(frozen=True)
-class SearchProjectsResponse:
-    projects: List[Project]
-
-
-@dataclass(frozen=True)
-class StartTaskRequest:
-    task_name: str
-
-
-@dataclass(frozen=True)
-class StartTaskResponse:
-    records: Sequence[Record]
-
-
-@dataclass(frozen=True)
-class ReturnTaskRequest:
-    task_name: str
-
-
-@dataclass(frozen=True)
-class ReturnTaskResponse:
-    records: Sequence[Record]
-
-
-@dataclass(frozen=True)
 class SearchResourcesResponse:
     resources: List[str]
 
@@ -107,56 +77,6 @@ class SearchJobsResponse:
 @dataclass(frozen=True)
 class SearchActionsResponse:
     actions: List[Action]
-
-
-@dataclass(frozen=True)
-class SearchOraclesResponse:
-    oracles: List[Oracle]
-
-
-@dataclass(frozen=True)
-class GetOracleCostRequest:
-    pass
-
-
-@dataclass(frozen=True)
-class GetOracleCostResponse:
-    cost: Choices
-
-
-@dataclass(frozen=True)
-class CreateOracleRequest:
-    request: str
-    payment_selections: Dict[int, int]
-
-
-@dataclass(frozen=True)
-class CreateOracleResponse:
-    uuid: str
-    records: Sequence[Record]
-
-
-@dataclass(frozen=True)
-class AnswerOracleRequest:
-    uuid: str
-    response: str
-    proposal: List[Effect]
-
-
-@dataclass(frozen=True)
-class AnswerOracleResponse:
-    records: Sequence[Record]
-
-
-@dataclass(frozen=True)
-class ConfirmOracleRequest:
-    uuid: str
-    confirm: bool
-
-
-@dataclass(frozen=True)
-class ConfirmOracleResponse:
-    records: Sequence[Record]
 
 
 @dataclass(frozen=True)

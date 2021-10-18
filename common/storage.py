@@ -8,7 +8,7 @@ from enum import Enum
 from pathlib import Path
 from sqlite3 import Connection, Row, connect
 from string import ascii_lowercase
-from types import MappingProxyType
+from types import MappingProxyType, TracebackType
 from typing import (
     Any,
     Callable,
@@ -26,7 +26,7 @@ from typing import (
     Union,
 )
 
-from .exceptions import IllegalMoveException
+from .exceptions import BadStateException
 from .serializer import from_safe_type, to_safe_type
 
 
@@ -205,6 +205,8 @@ class ConnectionManager:
             cls.DB_STR = "file:ephemeral_db?mode=memory&cache=shared"
             # actually go ahead and open a connection to this shared memory
             # so it'll stick around for the program
+            if cls.MEMORY_CONNECTION_HANDLE:
+                cls.MEMORY_CONNECTION_HANDLE.close()
             cls.MEMORY_CONNECTION_HANDLE = connect(cls.DB_STR, uri=True)
 
         with ConnectionManager(player_uuid=None, game_uuid=None):
@@ -234,10 +236,15 @@ class ConnectionManager:
         self.ctx_token = current_session.set(session)
         return self
 
-    def __exit__(self, *exc: Any) -> None:
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: TracebackType,
+    ) -> None:
         session = current_session.get()
         current_session.reset(self.ctx_token)
-        session.connection.__exit__(*exc)  # type: ignore
+        session.connection.__exit__(exc_type, exc_val, exc_tb)  # type: ignore
 
     @classmethod
     def fix_game_uuid(cls, game_uuid: str) -> None:
@@ -381,7 +388,7 @@ class StandardWrapper:
     ) -> Any:  # should be type(self)
         vals = cls._load_helper(where_clauses, params, can_write)
         if not vals:
-            raise IllegalMoveException(f"No such {cls.Data.TABLE_NAME}: {params}")
+            raise BadStateException(f"No such {cls.Data.TABLE_NAME}: {params}")
         return vals[0]
 
     def __enter__(self) -> Any:  # should be type(self)
@@ -390,8 +397,18 @@ class StandardWrapper:
         self._write = True
         return self
 
-    def __exit__(self, *exc: Any) -> None:
-        type(self).Data._update_helper(self._data)
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: TracebackType,
+    ) -> None:
+        # we only commit the changes if no exception was thrown - this is a little
+        # redundant with the fact that we won't commit the transaction as a whole
+        # if an exception is thrown, but it seems like it'll cover a few edge cases,
+        # and it makes testing easier
+        if not exc_val:
+            type(self).Data._update_helper(self._data)
 
     # Note this returns an object with write=True that nevertheless isn't
     # persisted automatically, but it is writeable

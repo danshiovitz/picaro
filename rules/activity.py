@@ -1,21 +1,30 @@
-from typing import List, Optional, Sequence, Tuple
+from collections import defaultdict
+from typing import Dict, List, Optional, Sequence, Tuple, cast
 
 from picaro.common.exceptions import BadStateException, IllegalMoveException
-from picaro.common.utils import pop_func
+from picaro.common.utils import pop_func, with_s
 
 from .board import BoardRules
 from .character import CharacterRules
-from .deck import DeckRules
 from .encounter import EncounterRules
 from .game import GameRules
+from .lib.deck import shuffle_discard
 from .types.common import (
+    Choice,
+    Choices,
+    Effect,
+    EffectType,
+    Encounter,
+    EncounterCheck,
     EncounterContextType,
     FullCard,
+    FullCardType,
+    Outcome,
     TravelCard,
     TravelCardType,
 )
 from .types.snapshot import EncounterCommands, Record as snapshot_Record
-from .types.store import Hex, Token, Character, TurnFlags, Gadget, Record
+from .types.store import Character, Gadget, Hex, HexDeck, Record, Token, TurnFlags
 
 
 class ActivityRules:
@@ -25,10 +34,13 @@ class ActivityRules:
         with Character.load_by_name_for_write(character_name) as ch:
             if GameRules.encounter_check(ch):
                 raise BadStateException("An encounter is currently active.")
-            if not ch.check_set_flag(TurnFlags.ACTED):
+            if ch.check_set_flag(TurnFlags.ACTED):
                 raise BadStateException("You have already acted this turn.")
 
-            card = pop_func(ch.tableau, lambda c: c.card.uuid == card_uuid)
+            try:
+                card = pop_func(ch.tableau, lambda c: c.card.uuid == card_uuid)
+            except IndexError:
+                raise BadStateException(f"No such card in tableau: {card_uuid}")
             location = Token.load_single_by_entity(ch.uuid).location
             if card.location != location:
                 raise IllegalMoveException(
@@ -97,12 +109,12 @@ class ActivityRules:
         elif card.type == TravelCardType.DANGER:
             hx = Hex.load(location)
             if hx.danger >= card.value:
-                return BoardRules.draw_hex_card(location)
+                return cls._draw_hex_card(hx)
             else:
                 return None
         elif card.type == TravelCardType.SPECIAL:
             hx = Hex.load(location)
-            return DeckRules.make_card(
+            return EncounterRules.reify_card(
                 card.value, [], hx.danger, EncounterContextType.TRAVEL
             )
         else:
@@ -110,14 +122,24 @@ class ActivityRules:
 
     @classmethod
     def _make_travel_deck(cls) -> List[TravelCard]:
-        specials = DeckRules.load_deck("Travel")
+        specials = EncounterRules.load_deck("Travel")
         cards = []
         cards.extend([TravelCard(type=TravelCardType.NOTHING, value=0)] * 14)
         for i in range(1, 6):
             cards.extend([TravelCard(type=TravelCardType.DANGER, value=i)] * 3)
         for _ in range(2):
             cards.append(TravelCard(type=TravelCardType.SPECIAL, value=specials.pop(0)))
-        return DeckRules.shuffle(cards)
+        return shuffle_discard(cards)
+
+    @classmethod
+    def _draw_hex_card(cls, hx: Hex) -> FullCard:
+        deck_name = hx.terrain
+        with HexDeck.load_for_write(deck_name) as deck:
+            if not deck.cards:
+                deck.cards = EncounterRules.load_deck(deck_name)
+            return EncounterRules.reify_card(
+                deck.cards.pop(0), [], hx.danger, EncounterContextType.TRAVEL
+            )
 
     @classmethod
     def end_turn(cls, character_name: str) -> Sequence[snapshot_Record]:
@@ -138,8 +160,149 @@ class ActivityRules:
                 raise BadStateException("No encounter is currently active.")
             encounter = ch.encounter
             ch.encounter = None
-            cost, benefit = EncounterRules.perform_commands(ch, encounter, commands)
+            cost, benefit = cls._perform_commands(ch, encounter, commands)
             GameRules.apply_bargain(ch, cost, records)
             GameRules.apply_regardless(ch, benefit, records)
             GameRules.intra_turn(ch, records)
             return GameRules.save_translate_records(records)
+
+    @classmethod
+    def _perform_commands(
+        cls, ch: Character, encounter: Encounter, commands: EncounterCommands
+    ) -> Tuple[List[Effect], List[Effect]]:
+        if commands.encounter_uuid != encounter.card.uuid:
+            raise BadStateException(
+                f"Command uuid {commands.encounter_uuid} mismatch with expected uuid {encounter.card.uuid}"
+            )
+
+        if encounter.card.type == FullCardType.CHALLENGE:
+            return cls._perform_challenge(
+                ch,
+                encounter,
+                commands,
+            )
+        elif encounter.card.type == FullCardType.CHOICE:
+            choices = cast(Choices, encounter.card.data)
+            return cls._perform_choices(
+                ch,
+                encounter,
+                commands.choices,
+            )
+        else:
+            raise Exception(f"Bad card type: {encounter.card.type.name}")
+
+    @classmethod
+    def _perform_challenge(
+        cls,
+        ch: Character,
+        encounter: Encounter,
+        commands: EncounterCommands,
+    ) -> Tuple[List[Effect], List[Effect]]:
+        checks = cast(Sequence[EncounterCheck], encounter.card.data)
+        rolls = list(encounter.rolls[:])
+        luck_spent = 0
+
+        cost: List[Effect] = []
+        benefit: List[Effect] = []
+
+        # validate the commands by rerunning them (note this also updates luck)
+        for adj in commands.adjusts or []:
+            luck_spent += 1
+            rolls[adj] += 1
+
+        for from_c, to_c in commands.transfers or []:
+            if rolls[from_c] < 2:
+                raise BadStateException("From not enough for transfer")
+            rolls[from_c] -= 2
+            rolls[to_c] += 1
+
+        if commands.flee:
+            luck_spent += 1
+
+        rolls = tuple(rolls)
+        if (luck_spent, rolls) != (commands.luck_spent, tuple(commands.rolls)):
+            raise BadStateException(
+                f"Computed luck/rolls doesn't match? Expected ({luck_spent}, {rolls}) "
+                f"but got ({commands.luck_spent}, {commands.rolls})"
+            )
+
+        if luck_spent > 0:
+            cost.append(
+                Effect(
+                    EffectType.MODIFY_LUCK, -luck_spent, comment="encounter commands"
+                )
+            )
+        if commands.flee:
+            return cost, benefit
+
+        ocs = defaultdict(int)
+        failures = 0
+
+        for idx, check in enumerate(checks):
+            if rolls[idx] >= check.target_number:
+                ocs[check.reward] += 1
+            else:
+                ocs[check.penalty] += 1
+                failures += 1
+
+        mcs = defaultdict(int)
+
+        sum_til = lambda v: (v * v + v) // 2
+        for outcome, cnt in ocs.items():
+            benefit.extend(
+                EncounterRules.convert_outcome(outcome, cnt, ch, encounter.card)
+            )
+        if failures > 0:
+            benefit.append(
+                Effect(
+                    type=EffectType.MODIFY_XP,
+                    subtype=checks[0].skill,
+                    value=failures,
+                )
+            )
+
+        return cost, benefit
+
+    @classmethod
+    def _perform_choices(
+        cls,
+        ch: Character,
+        encounter: Encounter,
+        selections: Dict[int, int],
+    ) -> Tuple[List[Effect], List[Effect]]:
+        choices = cast(Choices, encounter.card.data)
+
+        cost: List[Effect] = []
+        benefit: List[Effect] = []
+
+        tot = 0
+        for choice_idx, cnt in selections.items():
+            if choice_idx < 0 or choice_idx >= len(choices.choice_list):
+                raise BadStateException(f"Choice out of range: {choice_idx}")
+            choice = choices.choice_list[choice_idx]
+            tot += cnt
+            if cnt < choice.min_choices:
+                raise IllegalMoveException(
+                    f"Must choose {choice.name or 'this'} at least {with_s(choice.min_choices, 'time')}."
+                )
+            if cnt > choice.max_choices:
+                raise IllegalMoveException(
+                    f"Must choose {choice.name or 'this'} at most {with_s(choice.max_choices, 'time')}."
+                )
+        if tot < choices.min_choices:
+            raise IllegalMoveException(
+                f"Must select at least {with_s(choices.min_choices, 'choice')}."
+            )
+        if tot > choices.max_choices:
+            raise IllegalMoveException(
+                f"Must select at most {with_s(choices.max_choices, 'choice')}."
+            )
+
+        cost.extend(choices.cost)
+        benefit.extend(choices.benefit)
+        for choice_idx, cnt in selections.items():
+            choice = choices.choice_list[choice_idx]
+            for _ in range(cnt):
+                cost.extend(choice.cost)
+                benefit.extend(choice.benefit)
+        return cost, benefit

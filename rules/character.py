@@ -2,10 +2,11 @@ import dataclasses
 import random
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
+from picaro.common.exceptions import IllegalMoveException
 from picaro.common.utils import clamp, pop_func
 
 from .board import BoardRules
-from .gadget import GadgetRules
+from .lib.gadget import compute_overlay_value, load_available_actions
 from .types.common import (
     Action,
     Encounter,
@@ -72,7 +73,7 @@ class CharacterRules:
         actions: List[Action] = []
         routes: Dict[str, Route] = {}
 
-        all_actions = GadgetRules.load_available_actions(ch.uuid)
+        all_actions = load_available_actions(ch.uuid)
         hexes = BoardRules.find_entity_neighbors(ch.uuid, 0, radius)
         dests: Dict[str, str] = {}
 
@@ -88,7 +89,7 @@ class CharacterRules:
             geos = [g for g in geos if g is not None]
             kept = geos[0]
             for geo in geos:
-                kept |= geo
+                kept &= geo
 
             if not kept:
                 actions.append(action)
@@ -163,7 +164,9 @@ class CharacterRules:
         return 3
 
     @classmethod
-    def get_skill_rank(cls, ch: Character, skill_name: str) -> int:
+    def get_skill_rank(
+        cls, ch: Character, skill_name: str, skip_overlays: bool = False
+    ) -> int:
         # 20 xp for rank 1, 30 xp for rank 5, 25 xp for all others
         xp = ch.skill_xp.get(skill_name, 0)
         if xp < 20:
@@ -178,6 +181,9 @@ class CharacterRules:
             base_rank = 4
         else:
             base_rank = 5
+
+        if skip_overlays:
+            return base_rank
         return cls._clamp_overlay(
             base_rank, ch, OverlayType.SKILL_RANK, skill_name, max=6
         )
@@ -214,17 +220,22 @@ class CharacterRules:
     ) -> int:
         return clamp(
             base_value
-            + GadgetRules.compute_overlay_value(
-                ch.uuid, type, subtype, lambda f: cls._check_filter(ch, f)
+            + compute_overlay_value(
+                ch.uuid,
+                type,
+                subtype,
+                lambda f: cls._check_filter(ch, f, skip_overlays=True),
             ),
             min=min,
             max=max,
         )
 
     @classmethod
-    def _check_filter(cls, ch: Character, filter: Filter, do_raise=False) -> bool:
+    def _check_filter(
+        cls, ch: Character, filter: Filter, do_raise=False, skip_overlays=False
+    ) -> bool:
         if filter.type == FilterType.SKILL_GTE:
-            rank = cls.get_skill_rank(ch, filter.subtype)
+            rank = cls.get_skill_rank(ch, filter.subtype, skip_overlays=skip_overlays)
             if rank < filter.value:
                 if not do_raise:
                     return False
@@ -262,13 +273,17 @@ class CharacterRules:
 
     @classmethod
     def _check_filter_nearby(
-        cls, ch: Character, filter: Filter, hexes: Sequence[Hex]
-    ) -> Set[str]:
+        cls,
+        ch: Character,
+        filter: Filter,
+        hexes: Sequence[Hex],
+        skip_overlays=False,
+    ) -> Optional[Set[str]]:
         if filter.type == FilterType.SKILL_GTE:
-            rank = cls.get_skill_rank(ch, filter.subtype)
+            rank = cls.get_skill_rank(ch, filter.subtype, skip_overlays=skip_overlays)
             if rank < filter.value:
-                return {}  # impossible to ever pass this by moving around
-            return {hx.name for hx in hexes}
+                return set()  # impossible to ever pass this by moving around
+            return None
         elif filter.type == FilterType.NEAR_HEX:
             return {
                 hx.name

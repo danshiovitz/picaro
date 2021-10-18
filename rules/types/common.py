@@ -2,12 +2,9 @@ import random
 from dataclasses import dataclass
 from enum import Enum, auto as enum_auto
 from string import ascii_lowercase
-from typing import Any, Dict, Generic, List, Optional, Sequence, Tuple, TypeVar, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, TypeVar
 
 from picaro.common.storage import make_uuid
-
-
-T = TypeVar("T")
 
 
 class Outcome(Enum):
@@ -18,7 +15,6 @@ class Outcome(Enum):
     GAIN_HEALING = enum_auto()
     GAIN_RESOURCES = enum_auto()
     GAIN_TURNS = enum_auto()
-    GAIN_PROJECT_XP = enum_auto()
     GAIN_SPEED = enum_auto()
     LOSE_COINS = enum_auto()
     LOSE_REPUTATION = enum_auto()
@@ -55,7 +51,7 @@ class EntityType(Enum):
 
 
 @dataclass(frozen=True)
-class Effect(Generic[T]):
+class Effect:
     type: EffectType
     value: Optional[Any]
     is_absolute: bool = False
@@ -69,12 +65,12 @@ class Effect(Generic[T]):
         return "type"
 
     @classmethod
-    def any_type(cls, type_val: Union[EffectType, str]) -> type:
-        if type(type_val) is str:
-            type_val = EffectType[type_val]
+    def any_type(cls, type_val: EffectType) -> type:
+        # TODO: figure out how to do this better
+        from .snapshot import Gadget as snapshot_Gadget
 
         if type_val == EffectType.ADD_EMBLEM:
-            return Gadget
+            return snapshot_Gadget
         elif type_val == EffectType.QUEUE_ENCOUNTER:
             return TemplateCard
         elif type_val in (EffectType.MODIFY_LOCATION, EffectType.MODIFY_JOB):
@@ -177,7 +173,6 @@ class Challenge:
     skills: Sequence[str]
     rewards: Sequence[Outcome]
     penalties: Sequence[Outcome]
-    difficulty: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -185,7 +180,6 @@ class Choices:
     # this is the min/max overall selection count
     min_choices: int
     max_choices: int
-    is_random: bool
     choice_list: Sequence[Choice]
     # this cost and benefit apply (once) if you make any selections at all
     cost: Sequence[Effect] = ()
@@ -200,24 +194,18 @@ class TemplateCardType(Enum):
 
 @dataclass(frozen=True)
 class TemplateCard:
-    copies: int
     name: str
     desc: str
     type: TemplateCardType
     data: Any
     unsigned: bool = False
-    entity_type: Optional[EntityType] = None
-    entity_name: Optional[str] = None
 
     @classmethod
     def type_field(cls) -> str:
         return "type"
 
     @classmethod
-    def any_type(cls, type_val: Union[TemplateCardType, str]) -> type:
-        if type(type_val) is str:
-            type_val = TemplateCardType[type_val]
-
+    def any_type(cls, type_val: TemplateCardType) -> type:
         if type_val == TemplateCardType.CHALLENGE:
             return Challenge
         elif type_val == TemplateCardType.CHOICE:
@@ -249,18 +237,13 @@ class FullCard:
     data: Any
     signs: Sequence[str]
     context_type: EncounterContextType
-    entity_type: Optional[EntityType] = None
-    entity_name: Optional[str] = None
 
     @classmethod
     def type_field(cls) -> str:
         return "type"
 
     @classmethod
-    def any_type(cls, type_val: Union[FullCardType, str]) -> type:
-        if type(type_val) is str:
-            type_val = FullCardType[type_val]
-
+    def any_type(cls, type_val: FullCardType) -> type:
         if type_val == FullCardType.CHALLENGE:
             return Sequence[EncounterCheck]
         elif type_val == FullCardType.CHOICE:
@@ -294,10 +277,7 @@ class TravelCard:
         return "type"
 
     @classmethod
-    def any_type(cls, type_val: Union[TravelCardType, str]) -> type:
-        if type(type_val) is str:
-            type_val = TravelCardType[type_val]
-
+    def any_type(cls, type_val: TravelCardType) -> type:
         if type_val == TravelCardType.SPECIAL:
             return TemplateCard
         else:
@@ -315,39 +295,6 @@ class ResourceCard:
     name: str
     type: str
     value: int
-
-
-@dataclass(frozen=True)
-class ProjectType:
-    name: str
-    desc: str
-    skills: List[str]
-    resources: List[str]
-
-
-class TaskType(Enum):
-    CHALLENGE = enum_auto()
-    RESOURCE = enum_auto()
-    WAITING = enum_auto()
-    DISCOVERY = enum_auto()
-
-
-class TaskStatus(Enum):
-    UNASSIGNED = enum_auto()
-    IN_PROGRESS = enum_auto()
-    FINISHED = enum_auto()
-
-
-class ProjectStatus(Enum):
-    IN_PROGRESS = enum_auto()
-    FINISHED = enum_auto()
-
-
-class OracleStatus(Enum):
-    WAITING = enum_auto()
-    ANSWERED = enum_auto()
-    CONFIRMED = enum_auto()
-    REJECTED = enum_auto()
 
 
 class RouteType(Enum):
