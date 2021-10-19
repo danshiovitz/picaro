@@ -94,7 +94,21 @@ class EncounterTest(FlatworldTestBase):
                 choice_list=[Choice(), Choice()],
             ),
         )
-        EncounterRules.reify_card(template, [], 1, EncounterContextType.JOB)
+        card = EncounterRules.reify_card(template, [], 1, EncounterContextType.JOB)
+        self.assertEqual(len(card.data.choice_list), 2)
+
+        template = TemplateCard(
+            name=f"Test Card",
+            desc="...",
+            type=TemplateCardType.CHOICE,
+            data=Choices(
+                min_choices=0,
+                max_choices=-1,
+                choice_list=[Choice(), Choice()],
+            ),
+        )
+        card = EncounterRules.reify_card(template, [], 1, EncounterContextType.JOB)
+        self.assertEqual(len(card.data.choice_list), 1)
 
     def test_reify_card_special(self) -> None:
         template = TemplateCard(

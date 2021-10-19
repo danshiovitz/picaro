@@ -250,8 +250,8 @@ class RenderClientBase(ClientBase):
         return ret
 
     def render_check(self, check: EncounterCheck) -> str:
-        reward_name = self.client.render_outcome(check.reward)
-        penalty_name = self.client.render_outcome(check.penalty)
+        reward_name = self.render_outcome(check.reward)
+        penalty_name = self.render_outcome(check.penalty)
         ret = check.skill
         ret += f" (1d8{self.character.skills[check.skill]:+}) vs {check.target_number}"
         ret += f" ({reward_name} / {penalty_name})"

@@ -31,7 +31,6 @@
 - figure out how effects should be used to add/update gadgets (is it the thing where if you specify the uuid it replaces, otherwise it adds a new one? that seems a little risky). we also need to know how to add a gadget to some other entity besides the player but I guess that falls out from the give implementation.
 - relatedly, rename add_emblem to add_gadget (and maybe upsert_gadget), right?
 - refactor types from common/snapshot/store to just external/internal
-- apply is_random at time of going from template to fullcard
 
 - fill in stuff:
   - more feat hooks

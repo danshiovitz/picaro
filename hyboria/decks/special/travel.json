@@ -8,8 +8,7 @@
       "type": "CHOICE",
       "data": {
         "min_choices": 1,
-        "max_choices": 1,
-        "is_random": true,
+        "max_choices": -1,
         "choice_list": [
             {"benefit": [{"type": "MODIFY_COINS", "value": 1}]},
             {"benefit": [{"type": "MODIFY_COINS", "value": 6}]},
@@ -24,8 +23,7 @@
       "type": "CHOICE",
       "data": {
         "min_choices": 1,
-        "max_choices": 1,
-        "is_random": true,
+        "max_choices": -1,
         "choice_list": [
             {"benefit": [{"type": "MODIFY_SPEED", "value": 1}]},
             {"benefit": [{"type": "MODIFY_SPEED", "value": 2}]}

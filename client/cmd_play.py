@@ -119,9 +119,9 @@ class PlayRunner:
             callback = lambda _, uuid=card.uuid, route=card.route: self._job(
                 uuid, route
             )
-            titles = [f"({card.age}) {card.name} [{self.render_route(card.route)}]:"]
+            titles = [f"({card.age}) {card.name} [{self.client.render_route(card.route)}]:"]
             if card.type == FullCardType.CHALLENGE:
-                titles.append(f"       {self.render_check(card.data[0])}")
+                titles.append(f"       {self.client.render_check(card.data[0])}")
             else:
                 titles.append("")
             full_list.append((titles, callback))
@@ -145,7 +145,7 @@ class PlayRunner:
                     uuid, route
                 )
             )
-            titles = [f"{action.name} [{self.render_route(action.route)}]"]
+            titles = [f"{action.name} [{self.client.render_route(action.route)}]"]
             full_list.append((titles, callback))
 
         idx = 0
@@ -372,7 +372,7 @@ class PlayRunner:
             for idx, check in enumerate(checks):
                 status = "SUCCESS" if rolls[idx] >= check.target_number else "FAILURE"
                 print(
-                    f"Check #{idx+1}: {self.render_check(check)}: {rolls[idx]} - {status}"
+                    f"Check #{idx+1}: {self.client.render_check(check)}: {rolls[idx]} - {status}"
                 )
             print("You can go, transfer, adjust, or flee: ", end="")
             line = input().lower().strip()

@@ -67,30 +67,10 @@ class EncounterRules:
         base_skills = list(base_skills)
 
         if val.type == TemplateCardType.CHOICE:
-            data = val.data
+            data = cls._make_choices(cast(Choices, val.data))
             card_type = FullCardType.CHOICE
         elif val.type == TemplateCardType.CHALLENGE:
-            challenge = cast(Challenge, val.data)
-            skill_bag = []
-            # the number of copies of the core skills only matters on the third check,
-            # where we add in all the skills (let's assume there are 36) and want to
-            # have the copy number such that we pick a core skill (let's assume there
-            # are 6) say 50% of the time and an unusual skill 50% of the time
-            sk = (list(challenge.skills) + base_skills + base_skills)[0:6]
-            skill_bag.extend(sk * 6)
-
-            reward_bag = cls._make_reward_bag(challenge, context_type)
-            penalty_bag = cls._make_penalty_bag(challenge, context_type)
-            data = [
-                cls._make_check(difficulty, skill_bag, reward_bag, penalty_bag),
-                cls._make_check(difficulty, skill_bag, reward_bag, penalty_bag),
-                cls._make_check(
-                    difficulty,
-                    skill_bag + list(game.skills),
-                    reward_bag,
-                    penalty_bag,
-                ),
-            ]
+            data = cls._make_challenge(cast(Challenge, val.data), base_skills, difficulty, context_type)
             card_type = FullCardType.CHALLENGE
         elif val.type == TemplateCardType.SPECIAL:
             data = val.data
@@ -109,6 +89,36 @@ class EncounterRules:
             signs=signs,
             context_type=context_type,
         )
+
+    @classmethod
+    def _make_challenge(
+        cls,
+        challenge: Challenge,
+        base_skills: Sequence[str],
+        difficulty: int,
+        context_type: EncounterContextType,
+    ) -> Sequence[EncounterCheck]:
+        game = Game.load()
+        skill_bag = []
+        # the number of copies of the core skills only matters on the third check,
+        # where we add in all the skills (let's assume there are 36) and want to
+        # have the copy number such that we pick a core skill (let's assume there
+        # are 6) say 50% of the time and an unusual skill 50% of the time
+        sk = (list(challenge.skills) + base_skills + base_skills)[0:6]
+        skill_bag.extend(sk * 6)
+
+        reward_bag = cls._make_reward_bag(challenge, context_type)
+        penalty_bag = cls._make_penalty_bag(challenge, context_type)
+        return [
+            cls._make_check(difficulty, skill_bag, reward_bag, penalty_bag),
+            cls._make_check(difficulty, skill_bag, reward_bag, penalty_bag),
+            cls._make_check(
+                difficulty,
+                skill_bag + list(game.skills),
+                reward_bag,
+                penalty_bag,
+            ),
+        ]
 
     @classmethod
     def _make_check(
@@ -192,6 +202,18 @@ class EncounterRules:
     @classmethod
     def _difficulty_to_target_number(cls, difficulty: int) -> int:
         return difficulty * 2 + 1
+
+    @classmethod
+    def _make_choices(
+        cls,
+        choices: Choices
+    ) -> Choices:
+        if choices.max_choices <= 0:
+            # implies: do a random selection, weighted by the individual max choices
+            idxs = [v for idx, c in enumerate(choices.choice_list) for v in [idx] * c.max_choices]
+            idx = random.choice(idxs)
+            choices = dataclasses.replace(choices, max_choices=1, choice_list=[choices.choice_list[idx]])
+        return choices
 
     @classmethod
     def make_encounter(cls, ch: Character, card: FullCard) -> Encounter:
