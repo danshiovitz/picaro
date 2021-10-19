@@ -15,7 +15,6 @@ from picaro.rules.types.common import (
 )
 from picaro.rules.types.snapshot import (
     Action as snapshot_Action,
-    Board as snapshot_Board,
     Character as snapshot_Character,
     Country as snapshot_Country,
     Encounter as snapshot_Encounter,

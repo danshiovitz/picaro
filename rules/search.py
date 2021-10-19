@@ -5,7 +5,6 @@ from .lib import translate
 from .types.common import Action
 from .types.snapshot import (
     Action as snapshot_Action,
-    Board as snapshot_Board,
     Character as snapshot_Character,
     Country as snapshot_Country,
     Entity as snapshot_Entity,
@@ -25,16 +24,6 @@ from .types.store import (
 
 
 class SearchRules:
-    @classmethod
-    def search_boards(cls) -> snapshot_Board:
-        hexes = Hex.load_all()
-        countries = Country.load_all()
-
-        return snapshot_Board(
-            hexes=tuple(translate.to_snapshot_hex(hx) for hx in hexes),
-            countries=tuple(translate.to_snapshot_country(c) for c in countries),
-        )
-
     @classmethod
     def search_hexes(cls) -> List[Hex]:
         hexes = Hex.load_all()

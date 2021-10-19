@@ -298,8 +298,9 @@ class ActivityRules:
                 f"Must select at most {with_s(choices.max_choices, 'choice')}."
             )
 
-        cost.extend(choices.cost)
-        benefit.extend(choices.benefit)
+        if selections:
+            cost.extend(choices.cost)
+            benefit.extend(choices.benefit)
         for choice_idx, cnt in selections.items():
             choice = choices.choice_list[choice_idx]
             for _ in range(cnt):

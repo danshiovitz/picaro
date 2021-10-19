@@ -19,12 +19,9 @@
 - rumors turn is now the world turn, I think
 - switch speed so max speed is independent of size, but cost to move is variable depending on size - this way bonuses to max speed are better for solos than for armies, which makes sense (we could say it costs 2/3/6 to move one hex, and initial max speed is 6, for instance - this also handles a thing a little more smoothly where hexes cost 1 more to enter, say)
 - engine should stop using hex names and just use CubeCoordinate objects
-- make client query for hex and countries separately and cache them - get rid of get_board
-- call entities only once for display-board command
 - tableau cards should maybe have a filter rather than a location field?
 - when we get a reroll from eg reliable skill, the client should receive all the rolls so it can show what we got instead
 - everywhere we have effects list we should have cost and benefit, and use that as the way to determine bargain/regardless - that way we can have a choices that's like "-2 speed, or +2 speed and -2 coins"
-- support "..." in _compute_inputs in client
 - get rid of EncounterContextType, unsigned flag
 - FullCard shouldn't have entity_type/_name, but what should they have?
 - implement giving stuff to other players
@@ -34,6 +31,7 @@
 - figure out how effects should be used to add/update gadgets (is it the thing where if you specify the uuid it replaces, otherwise it adds a new one? that seems a little risky). we also need to know how to add a gadget to some other entity besides the player but I guess that falls out from the give implementation.
 - relatedly, rename add_emblem to add_gadget (and maybe upsert_gadget), right?
 - refactor types from common/snapshot/store to just external/internal
+- apply is_random at time of going from template to fullcard
 
 - fill in stuff:
   - more feat hooks

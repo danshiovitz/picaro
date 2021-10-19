@@ -45,12 +45,20 @@ def generate_game_v2(name: str, json_dir: Path) -> CreateGameRequest:
     new_decks = {"Raider", "Desert", "Travel"}
     for job in jobs:
         if job.deck_name not in new_decks:
-            deck = TemplateDeck(name=job.deck_name, copies=deck_map["Raider"].copies, cards=deck_map["Raider"].cards)
+            deck = TemplateDeck(
+                name=job.deck_name,
+                copies=deck_map["Raider"].copies,
+                cards=deck_map["Raider"].cards,
+            )
             revised_decks.append(deck)
             new_decks.add(deck.name)
     for terrain in {hx.terrain for hx in hexes}:
         if terrain not in new_decks:
-            deck = TemplateDeck(name=terrain, copies=deck_map["Desert"].copies, cards=deck_map["Desert"].cards)
+            deck = TemplateDeck(
+                name=terrain,
+                copies=deck_map["Desert"].copies,
+                cards=deck_map["Desert"].cards,
+            )
             revised_decks.append(deck)
             new_decks.add(deck.name)
 

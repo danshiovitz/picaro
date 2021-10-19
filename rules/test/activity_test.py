@@ -327,11 +327,18 @@ class ActivityTest(FlatworldTestBase):
         with self.assertRaises(IllegalMoveException):
             self._choice_helper(selections={0: 2}, item_mms=[[0, 10]] * 3)
 
+        # complex choice combo
         self._choice_helper(
             selections={0: 2, 1: 3, 2: 5},
             overall_mm=[0, 10],
             item_mms=[[0, 10]] * 3,
             result_cnts=[2, 3, 5, 1],
+        )
+
+        # choosing nothing - overall cost/benefit don't happen either
+        self._choice_helper(
+            selections={},
+            result_cnts=[0, 0, 0, 0],
         )
 
     def _choice_helper(
@@ -388,10 +395,10 @@ class ActivityTest(FlatworldTestBase):
 
         ActivityRules.resolve_encounter(self.CHARACTER, commands)
         ch = Character.load_by_name(self.CHARACTER)
-        self.assertEqual(ch.coins, 10 + result_cnts[0])
-        self.assertEqual(ch.health, 10 + result_cnts[1])
-        self.assertEqual(ch.reputation, 10 + result_cnts[2])
-        self.assertEqual(ch.speed, 10 + result_cnts[3])
+        self.assertEqual(ch.coins - 10, result_cnts[0])
+        self.assertEqual(ch.health - 10, result_cnts[1])
+        self.assertEqual(ch.reputation - 10, result_cnts[2])
+        self.assertEqual(ch.speed - 10, result_cnts[3])
 
 
 if __name__ == "__main__":

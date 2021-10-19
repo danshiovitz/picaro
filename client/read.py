@@ -8,70 +8,60 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, TypeVar
 from picaro.common.exceptions import IllegalMoveException
 from picaro.server.api_types import *
 
-from .cache import LookupCache
-from .render import render_effect, render_overlay
+from .render import RenderClientBase
 
-
-def read_text(prompt: str, textbox: bool = False) -> str:
-    if not textbox:
-        print(prompt + " ", end="")
-        return input().strip()
-
-    def enter_msg(stdscr):
-        stdscr.addstr(0, 0, f"{prompt} (hit Ctrl-G to send)")
-
-        editwin = curses.newwin(5, 30, 2, 1)
-        curses.textpad.rectangle(stdscr, 1, 0, 1 + 5 + 1, 1 + 30 + 1)
-        stdscr.refresh()
-
-        box = curses.textpad.Textbox(editwin, insert_mode=True)
-
-        # Let the user edit until Ctrl-G is struck.
-        box.edit()
-
-        # Get resulting contents
-        message = box.gather()
-        return message
-
-    msg = curses.wrapper(enter_msg)
-    return msg.strip()
-
-
-# > modify coins +1
-# > delete a
-# > create project
-# What's the name of the project? Find the magic wand
-# What's the type? Monument
-# What's the start hex? AE12
-# What should the next stage be? (discovery, waiting, challenge, resource, random, done)
-#   discovery start=AD12
-# > add emblem
-# What's the name of the emblem? Lord of the Hats
-# What overlays does the emblem provide?
-# > modify search skill +1
-# > done
 
 T = TypeVar("T")
 
 
-class ComplexReader:
-    def __init__(
-        self,
-        default_entity: Optional[Tuple[EntityType, str]],
-        cache: LookupCache,
-    ):
-        self.default_entity = default_entity
-        self.cache = cache
+class ReadClientBase(RenderClientBase):
+    def read_text(self, prompt: str, textbox: bool = False) -> str:
+        if not textbox:
+            print(prompt + " ", end="")
+            return input().strip()
+
+        def enter_msg(stdscr):
+            stdscr.addstr(0, 0, f"{prompt} (hit Ctrl-G to send)")
+
+            editwin = curses.newwin(5, 30, 2, 1)
+            curses.textpad.rectangle(stdscr, 1, 0, 1 + 5 + 1, 1 + 30 + 1)
+            stdscr.refresh()
+
+            box = curses.textpad.Textbox(editwin, insert_mode=True)
+
+            # Let the user edit until Ctrl-G is struck.
+            box.edit()
+
+            # Get resulting contents
+            message = box.gather()
+            return message
+
+        msg = curses.wrapper(enter_msg)
+        return msg.strip()
+
+    # > modify coins +1
+    # > delete a
+    # > create project
+    # What's the name of the project? Find the magic wand
+    # What's the type? Monument
+    # What's the start hex? AE12
+    # What should the next stage be? (discovery, waiting, challenge, resource, random, done)
+    #   discovery start=AD12
+    # > add emblem
+    # What's the name of the emblem? Lord of the Hats
+    # What overlays does the emblem provide?
+    # > modify search skill +1
+    # > done
 
     def read_effects(
         self,
         prompt: str,
         init: List[Effect],
     ) -> List[Effect]:
-        skills = self.cache.lookup_skills()
-        resources = self.cache.lookup_resources()
-        job_names = [j.name for j in self.cache.lookup_jobs()]
-        hexes = [h.name for h in self.cache.lookup_hexes()]
+        skills = self.skills.get_all()
+        resources = self.resources.get_all()
+        job_names = [j.name for j in self.jobs.get_all()]
+        hexes = [h.name for h in self.hexes.get_all()]
         fixup = lambda v: (v[0], True, v[1])
         effect_choices = [
             (
@@ -168,7 +158,7 @@ class ComplexReader:
         ]
 
         return self._read_complex(
-            prompt, init, effect_choices, lambda e: render_effect(e, self.cache)
+            prompt, init, effect_choices, lambda e: self.render_effect(e)
         )
 
     def read_overlays(
@@ -176,7 +166,7 @@ class ComplexReader:
         prompt: str,
         init: List[Overlay],
     ) -> List[Overlay]:
-        skills = self.cache.lookup_skills()
+        skills = self.skills.get_all()
         overlay_choices = [
             (
                 "Modify init tableau age <amount>",
@@ -220,7 +210,7 @@ class ComplexReader:
             ),
         ]
 
-        return self._read_complex(prompt, init, overlay_choices, render_overlay)
+        return self._read_complex(prompt, init, overlay_choices, self.render_overlay)
 
     def _read_complex(
         self,
@@ -349,7 +339,6 @@ class ComplexReader:
             subtype, line = self._lparse_fixedstr("subtype", line, subtypes, none_type)
         else:
             subtype = None
-        ent = self.default_entity
         return (
             Effect(
                 type=effect_type,
@@ -389,99 +378,96 @@ class ComplexReader:
             line,
         )
 
+    def read_selections(self, choices: Choices, rolls: Sequence[int]) -> Dict[int, int]:
+        selections = defaultdict(int)
+        can_choose = True
+        if choices.min_choices >= sum(c.max_choices for c in choices.choice_list):
+            for idx, c in enumerate(choices.choice_list):
+                selections[idx] = c.max_choices
+            can_choose = False
 
-def read_selections(
-    choices: Choices, rolls: Sequence[int], cache: LookupCache
-) -> Dict[int, int]:
-    selections = defaultdict(int)
-    can_choose = True
-    if choices.min_choices >= sum(c.max_choices for c in choices.choice_list):
-        for idx, c in enumerate(choices.choice_list):
-            selections[idx] = c.max_choices
-        can_choose = False
-
-    while True:
-        if choices.benefit or choices.cost:
-            line = " ** Overall: " + ", ".join(
-                render_effect(eff, cache) for eff in choices.benefit + choices.cost
-            )
-            print(line)
-        selected = 0
-        for idx, choice in enumerate(choices.choice_list):
-            line = " "
-            if can_choose:
-                if len(choices.choice_list) < 15:
-                    line += ascii_lowercase[idx] + ". "
+        while True:
+            if choices.benefit or choices.cost:
+                line = " ** Overall: " + ", ".join(
+                    self.render_effect(eff) for eff in choices.benefit + choices.cost
+                )
+                print(line)
+            selected = 0
+            for idx, choice in enumerate(choices.choice_list):
+                line = " "
+                if can_choose:
+                    if len(choices.choice_list) < 15:
+                        line += ascii_lowercase[idx] + ". "
+                    else:
+                        line += str(idx + 1) + ". "
                 else:
-                    line += str(idx + 1) + ". "
-            else:
-                line += "* " if idx in selections else "- "
+                    line += "* " if idx in selections else "- "
 
-            line += ", ".join(
-                render_effect(eff, cache)
-                for eff in list(choice.benefit) + list(choice.cost)
-            )
-            line += f" [{selections[idx]}/{choice.max_choices}]"
-            selected += selections[idx]
-            print(line)
+                line += ", ".join(
+                    self.render_effect(eff)
+                    for eff in list(choice.benefit) + list(choice.cost)
+                )
+                line += f" [{selections[idx]}/{choice.max_choices}]"
+                selected += selections[idx]
+                print(line)
 
-        if not can_choose:
-            break
-
-        inline = "Make your choice"
-
-        if choices.min_choices != 1 or choices.max_choices != 1:
-            print(" z. Finish")
-            if choices.min_choices == choices.max_choices:
-                inline += f" ({choices.min_choices} items"
-            else:
-                inline += f" ({choices.min_choices}-{choices.max_choices} items"
-            if choices.max_choices < 100:
-                inline += f", {choices.max_choices - selected} remaining"
-            inline += ")"
-        inline += ": "
-        print(inline, end="")
-
-        line = input().lower().strip()
-        if not line:
-            continue
-        if line[0] == "z":
-            if sum(selections.values()) >= choices.min_choices:
+            if not can_choose:
                 break
-            else:
-                print("You must make another selection.")
-                continue
-        choice_m = re.match(r"^([0-9]+|[a-z])(?:\s+(-?[0-9]+))?", line)
-        if not choice_m:
-            print("Invalid input?")
-            continue
-        c_idx = ascii_lowercase.find(choice_m.group(1))
-        if c_idx == -1:
-            c_idx = int(choice_m.group(1)) - 1
-        c_val = int(choice_m.group(2)) if choice_m.group(2) else None
-        if c_idx < 0 or c_idx >= len(choices.choice_list):
-            print("Not a valid choice?")
-            continue
-        if c_val is None:
-            # if this is a once-only choice, then entering the choice with no
-            # count toggles, otherwise it always adds 1
-            if choices.choice_list[c_idx].max_choices == 1 and selections[c_idx]:
-                c_val = -1
-            else:
-                c_val = 1
-        cc = choices.choice_list[c_idx]
-        if selections[c_idx] + c_val < cc.min_choices:
-            print(
-                f"That would be lower than the allowed minimum ({cc.min_choices}) for the choice."
-            )
-            continue
-        if selections[c_idx] + c_val > cc.max_choices:
-            print(
-                f"That would be higher than the allowed maximum ({cc.max_choices}) for the choice."
-            )
-            continue
-        selections[c_idx] += c_val
 
-        if sum(selections.values()) >= choices.max_choices:
-            break
-    return selections
+            inline = "Make your choice"
+
+            if choices.min_choices != 1 or choices.max_choices != 1:
+                print(" z. Finish")
+                if choices.min_choices == choices.max_choices:
+                    inline += f" ({choices.min_choices} items"
+                else:
+                    inline += f" ({choices.min_choices}-{choices.max_choices} items"
+                if choices.max_choices < 100:
+                    inline += f", {choices.max_choices - selected} remaining"
+                inline += ")"
+            inline += ": "
+            print(inline, end="")
+
+            line = input().lower().strip()
+            if not line:
+                continue
+            if line[0] == "z":
+                if sum(selections.values()) >= choices.min_choices:
+                    break
+                else:
+                    print("You must make another selection.")
+                    continue
+            choice_m = re.match(r"^([0-9]+|[a-z])(?:\s+(-?[0-9]+))?", line)
+            if not choice_m:
+                print("Invalid input?")
+                continue
+            c_idx = ascii_lowercase.find(choice_m.group(1))
+            if c_idx == -1:
+                c_idx = int(choice_m.group(1)) - 1
+            c_val = int(choice_m.group(2)) if choice_m.group(2) else None
+            if c_idx < 0 or c_idx >= len(choices.choice_list):
+                print("Not a valid choice?")
+                continue
+            if c_val is None:
+                # if this is a once-only choice, then entering the choice with no
+                # count toggles, otherwise it always adds 1
+                if choices.choice_list[c_idx].max_choices == 1 and selections[c_idx]:
+                    c_val = -1
+                else:
+                    c_val = 1
+            cc = choices.choice_list[c_idx]
+            if selections[c_idx] + c_val < cc.min_choices:
+                print(
+                    f"That would be lower than the allowed minimum ({cc.min_choices}) for the choice."
+                )
+                continue
+            if selections[c_idx] + c_val > cc.max_choices:
+                print(
+                    f"That would be higher than the allowed maximum ({cc.max_choices}) for the choice."
+                )
+                continue
+            selections[c_idx] += c_val
+
+            if sum(selections.values()) >= choices.max_choices:
+                break
+        return selections

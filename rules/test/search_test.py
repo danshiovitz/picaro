@@ -26,11 +26,6 @@ class SearchTest(FlatworldTestBase):
         actual = SearchRules.search_zodiacs()
         self.assertEqual(len(actual), 12)
 
-    def test_search_boards(self) -> None:
-        actual = SearchRules.search_boards()
-        self.assertEqual(len(actual.hexes), 121)
-        self.assertEqual(len(actual.countries), 2)
-
     def test_search_hexes(self) -> None:
         actual = SearchRules.search_hexes()
         self.assertEqual(len(actual), 121)

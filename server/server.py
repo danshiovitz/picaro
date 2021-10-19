@@ -171,13 +171,6 @@ class Server:
                     )
 
     @wrap_errors()
-    def get_board(self, game_uuid: str, character_name: str) -> Board:
-        player_uuid = self._extract_player_uuid()
-        with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
-            with RulesManager(character_name):
-                return SearchRules.search_boards()
-
-    @wrap_errors()
     def search_entities(
         self, game_uuid: str, character_name: str
     ) -> SearchEntitiesResponse:
@@ -188,6 +181,14 @@ class Server:
                 return SearchEntitiesResponse(
                     entities=SearchRules.search_entities(details=details)
                 )
+
+    @wrap_errors()
+    def search_hexes(self, game_uuid: str, character_name: str) -> SearchHexesResponse:
+        player_uuid = self._extract_player_uuid()
+        details = self._parse_bool(bottle.request.query.details)
+        with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
+            with RulesManager(character_name):
+                return SearchHexesResponse(hexes=SearchRules.search_hexes())
 
     @wrap_errors()
     def get_character(self, game_uuid: str, character_name: str) -> Character:
@@ -286,7 +287,7 @@ class Server:
         req = self._read_body(ResolveEncounterRequest)
         with ConnectionManager(game_uuid=game_uuid, player_uuid=player_uuid):
             with RulesManager(character_name):
-                records = ActivityRules.resolve_encounter(character_name, req.actions)
+                records = ActivityRules.resolve_encounter(character_name, req.commands)
         return ResolveEncounterResponse(records=records)
 
     @wrap_errors()
@@ -346,11 +347,12 @@ class Server:
             callback=self.add_character,
         )
         bottle.route(
-            path="/game/<game_uuid>/<character_name>/board", callback=self.get_board
-        )
-        bottle.route(
             path="/game/<game_uuid>/<character_name>/entities",
             callback=self.search_entities,
+        )
+        bottle.route(
+            path="/game/<game_uuid>/<character_name>/hexes",
+            callback=self.search_hexes,
         )
         bottle.route(
             path="/game/<game_uuid>/<character_name>/character",

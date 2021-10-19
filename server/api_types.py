@@ -24,7 +24,6 @@ from picaro.rules.types.common import (
 )
 from picaro.rules.types.snapshot import (
     Action,
-    Board,
     Character,
     CreateGameData as CreateGameRequest,
     Country,
@@ -57,6 +56,11 @@ class SearchGamesResponse:
 @dataclass(frozen=True)
 class SearchEntitiesResponse:
     entities: List[Entity]
+
+
+@dataclass(frozen=True)
+class SearchHexesResponse:
+    hexes: List[Hex]
 
 
 @dataclass(frozen=True)
@@ -131,7 +135,7 @@ class EndTurnResponse:
 
 @dataclass(frozen=True)
 class ResolveEncounterRequest:
-    actions: EncounterCommands
+    commands: EncounterCommands
 
 
 @dataclass(frozen=True)
