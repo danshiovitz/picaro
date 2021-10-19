@@ -287,7 +287,7 @@ class TravelCard:
 @dataclass(frozen=True)
 class Encounter:
     card: FullCard
-    rolls: Sequence[int]
+    rolls: Sequence[Sequence[int]]
 
 
 @dataclass(frozen=True)

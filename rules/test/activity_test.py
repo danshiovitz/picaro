@@ -275,7 +275,7 @@ class ActivityTest(FlatworldTestBase):
                 signs=["Zodiac 1", "Zodiac 2"],
                 context_type=EncounterContextType.JOB,
             )
-            ch.encounter = Encounter(card=card, rolls=[4, 5, 7])
+            ch.encounter = Encounter(card=card, rolls=[[4], [5], [7]])
             ch.coins = 10
             ch.reputation = 10
             ch.speed = 10

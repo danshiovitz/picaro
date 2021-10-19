@@ -142,11 +142,13 @@ class EncounterTest(FlatworldTestBase):
         self._make_skill_boost(ch)
 
         rolls = defaultdict(int)
+        orig_rolls = defaultdict(int)
         for _ in range(800):
             enc = EncounterRules.make_encounter(ch, card)
             self.assertEqual(len(enc.rolls), 3)
-            for idx, val in enumerate(enc.rolls):
-                rolls[(idx, val)] += 1
+            for idx, vals in enumerate(enc.rolls):
+                rolls[(idx, vals[-1])] += 1
+                orig_rolls[(idx, vals[0])] += 1
 
         # skill 1 has no bonus, so we expect 1-8
         vals = {r[1]: v for r, v in rolls.items() if r[0] == 0}
@@ -173,6 +175,13 @@ class EncounterTest(FlatworldTestBase):
                 self.assertLessEqual(cnt, 40)
             else:
                 self.assertGreaterEqual(cnt, 90)
+
+        # but original rolls should be normally across 3-10
+        vals = {r[1]: v for r, v in orig_rolls.items() if r[0] == 1}
+        self.assertEqual(len(vals), 8)
+        for r, cnt in vals.items():
+            self.assertIn(r, {3, 4, 5, 6, 7, 8, 9, 10})
+            self.assertGreaterEqual(cnt, 75)
 
     def _make_skill_boost(self, ch: Character) -> None:
         guuid = Gadget.create(

@@ -359,7 +359,7 @@ class PlayRunner:
         ch: Character,
         enc_uuid: str,
         checks: Sequence[EncounterCheck],
-        rolls: Sequence[int],
+        rolls: Sequence[Sequence[int]],
     ) -> EncounterCommands:
         rolls = list(rolls[:])
         luck_spent = 0
@@ -370,9 +370,11 @@ class PlayRunner:
         while True:
             print()
             for idx, check in enumerate(checks):
-                status = "SUCCESS" if rolls[idx] >= check.target_number else "FAILURE"
+                status = "SUCCESS" if rolls[idx][-1] >= check.target_number else "FAILURE"
+                roll_str = ",".join(str(r) for r in rolls[idx])
                 print(
-                    f"Check #{idx+1}: {self.client.render_check(check)}: {rolls[idx]} - {status}"
+                    f"Check #{idx+1}: {self.client.render_check(check)}: "
+                    f"{roll_str} - {status}"
                 )
             print("You can go, transfer, adjust, or flee: ", end="")
             line = input().lower().strip()
@@ -398,12 +400,12 @@ class PlayRunner:
                 if not (0 <= to_c < len(rolls)):
                     print(f"Bad to check: {to_c + 1}")
                     continue
-                if rolls[from_c] < 2:
-                    print(f"From roll has insufficient value ({rolls[from_c]})")
+                if rolls[from_c][-1] < 2:
+                    print(f"From roll has insufficient value ({rolls[from_c][-1]})")
                     continue
                 transfers.append((from_c, to_c))
-                rolls[from_c] -= 2
-                rolls[to_c] += 1
+                rolls[from_c][-1] -= 2
+                rolls[to_c][-1] += 1
             elif line[0] == "a":
                 m = re.match(r"^a\w*\s+([0-9]+)$", line)
                 if not m:
@@ -417,7 +419,7 @@ class PlayRunner:
                     print(f"Luck has insufficient value")
                     continue
                 adjusts.append(adj_c)
-                rolls[adj_c] += 1
+                rolls[adj_c][-1] += 1
                 luck_spent += 1
             elif line[0] == "g":
                 break
@@ -431,21 +433,21 @@ class PlayRunner:
             transfers=transfers,
             adjusts=adjusts,
             luck_spent=luck_spent,
-            rolls=rolls,
+            rolls=[r[-1] for r in rolls],
             choices={},
         )
 
     def _input_encounter_choices(
-        self, ch: Character, enc_uuid: str, choices: Choices, rolls: Sequence[int]
+        self, ch: Character, enc_uuid: str, choices: Choices, rolls: Sequence[Sequence[int]]
     ) -> EncounterCommands:
-        selections = self.client.read_selections(choices, rolls)
+        selections = self.client.read_selections(choices)
         return EncounterCommands(
             encounter_uuid=enc_uuid,
             flee=False,
             transfers=[],
             adjusts=[],
             luck_spent=0,
-            rolls=rolls,
+            rolls=[r[-1] for r in rolls],
             choices={k: v for k, v in selections.items() if v > 0},
         )
 

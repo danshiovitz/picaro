@@ -224,11 +224,11 @@ class EncounterRules:
         if card.type == FullCardType.CHALLENGE:
             for chk in card.data:
                 bonus = CharacterRules.get_skill_rank(ch, chk.skill)
-                roll_val = random.randint(1, 8)
+                roll_vals = [random.randint(1, 8)]
                 reliable_min = CharacterRules.get_reliable_skill(ch, chk.skill)
-                if roll_val <= reliable_min:
-                    roll_val = random.randint(1, 8)
-                rolls.append(roll_val + bonus)
+                if roll_vals[0] <= reliable_min:
+                    roll_vals.append(random.randint(1, 8))
+                rolls.append([rv + bonus for rv in roll_vals])
         elif card.type == FullCardType.CHOICE:
             pass
         else:

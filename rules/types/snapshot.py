@@ -138,7 +138,7 @@ class Encounter:
     type: EncounterType
     data: Any
     signs: Sequence[str]
-    rolls: Sequence[int]
+    rolls: Sequence[Sequence[int]]
 
     @classmethod
     def type_field(cls) -> str:

@@ -378,7 +378,7 @@ class ReadClientBase(RenderClientBase):
             line,
         )
 
-    def read_selections(self, choices: Choices, rolls: Sequence[int]) -> Dict[int, int]:
+    def read_selections(self, choices: Choices) -> Dict[int, int]:
         selections = defaultdict(int)
         can_choose = True
         if choices.min_choices >= sum(c.max_choices for c in choices.choice_list):

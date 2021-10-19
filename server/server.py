@@ -108,6 +108,14 @@ class Server:
                                 ),
                             ),
                         ),
+                        Overlay(
+                            uuid="123.458",
+                            type=OverlayType.RELIABLE_SKILL,
+                            subtype="Stealth",
+                            value=3,
+                            is_private=True,
+                            filters=(),
+                        ),
                     ],
                     actions=[],
                 )

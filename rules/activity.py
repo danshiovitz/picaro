@@ -199,7 +199,7 @@ class ActivityRules:
         commands: EncounterCommands,
     ) -> Tuple[List[Effect], List[Effect]]:
         checks = cast(Sequence[EncounterCheck], encounter.card.data)
-        rolls = list(encounter.rolls[:])
+        rolls = [er[-1] for er in encounter.rolls]
         luck_spent = 0
 
         cost: List[Effect] = []
@@ -219,11 +219,17 @@ class ActivityRules:
         if commands.flee:
             luck_spent += 1
 
-        rolls = tuple(rolls)
-        if (luck_spent, rolls) != (commands.luck_spent, tuple(commands.rolls)):
+        if luck_spent != commands.luck_spent:
             raise BadStateException(
-                f"Computed luck/rolls doesn't match? Expected ({luck_spent}, {rolls}) "
-                f"but got ({commands.luck_spent}, {commands.rolls})"
+                "Computed luck doesn't match? Expected "
+                f"{luck_spent}, got {commands.luck_spent}"
+            )
+
+        rolls = tuple(rolls)
+        if rolls != tuple(commands.rolls):
+            raise BadStateException(
+                "Computed rolls doesn't match? Expected "
+                f"{rolls}, got {commands.rolls}"
             )
 
         if luck_spent > 0:
