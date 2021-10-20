@@ -26,20 +26,17 @@ from .lib.special_cards import (
     queue_bad_reputation_check,
     queue_discard_resources,
 )
-from .types.common import (
+from .types.external import CreateGameData, Record as external_Record
+from .types.internal import (
+    Character,
     Choice,
     Choices,
+    Country,
     Effect,
     EffectType,
     Encounter,
     EncounterContextType,
     EntityType,
-    TableauCard,
-)
-from .types.snapshot import CreateGameData, Record as snapshot_Record
-from .types.store import (
-    Character,
-    Country,
     Entity,
     Gadget,
     Game,
@@ -48,6 +45,7 @@ from .types.store import (
     Job,
     Record,
     ResourceDeck,
+    TableauCard,
     TemplateDeck,
     Token,
     TurnFlags,
@@ -66,23 +64,23 @@ class GameRules:
         game = Game.load_by_name(data.name)
         ConnectionManager.fix_game_uuid(game.uuid)
         TemplateDeck.insert(
-            translate.from_snapshot_template_deck(d) for d in data.template_decks
+            translate.from_external_template_deck(d) for d in data.template_decks
         )
-        Job.insert(translate.from_snapshot_job(j) for j in data.jobs)
-        Country.insert(translate.from_snapshot_country(c) for c in data.countries)
-        Hex.insert(translate.from_snapshot_hex(h) for h in data.hexes)
+        Job.insert(translate.from_external_job(j) for j in data.jobs)
+        Country.insert(translate.from_external_country(c) for c in data.countries)
+        Hex.insert(translate.from_external_hex(h) for h in data.hexes)
         hex_types = {hx.terrain for hx in data.hexes}
         HexDeck.insert(HexDeck.create_detached(name=t, cards=[]) for t in hex_types)
         ResourceDeck.insert(
             ResourceDeck.create_detached(name=c.name, cards=[]) for c in data.countries
         )
         ResourceDeck.insert([ResourceDeck.create_detached(name="Wild", cards=[])])
-        entities: List[snapshot_Entity] = []
-        gadgets: List[snapshot_Gadget] = []
-        tokens: List[snapshot_Token] = []
-        for snapshot_entity in data.entities:
-            cur_entity, cur_gadgets, cur_tokens = translate.from_snapshot_entity(
-                snapshot_entity
+        entities: List[external_Entity] = []
+        gadgets: List[external_Gadget] = []
+        tokens: List[external_Token] = []
+        for external_entity in data.entities:
+            cur_entity, cur_gadgets, cur_tokens = translate.from_external_entity(
+                external_entity
             )
             entities.append(cur_entity)
             gadgets.extend(cur_gadgets)
@@ -214,9 +212,9 @@ class GameRules:
     def save_translate_records(
         cls,
         records: Sequence[Record],
-    ) -> Sequence[snapshot_Record]:
+    ) -> Sequence[external_Record]:
         Record.insert(records)
-        return [translate.to_snapshot_record(Record.load(r.uuid)) for r in records]
+        return [translate.to_external_record(Record.load(r.uuid)) for r in records]
 
     # In these args, effects is for when the character has done a thing, and this
     # is the outcome, which applies in all cases. If the character has 3 coins,

@@ -8,7 +8,8 @@ from picaro.common.storage import make_uuid
 from .character import CharacterRules
 from .lib.deck import shuffle_discard
 from .lib.special_cards import actualize_special_card
-from .types.common import (
+from .types.internal import (
+    Character,
     Challenge,
     Choice,
     Choices,
@@ -19,12 +20,14 @@ from .types.common import (
     EncounterContextType,
     FullCard,
     FullCardType,
+    Game,
     Outcome,
     TemplateCard,
     TemplateCardType,
+    TemplateDeck,
 )
-from .types.snapshot import EncounterCommands
-from .types.store import Character, Game, TemplateDeck
+from .types.external import EncounterCommands
+
 
 # Briefly about the lifecycle of an encounter:
 # It starts off as a TemplateCard, which represents "the sort of stuff that happens",

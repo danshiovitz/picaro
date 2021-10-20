@@ -9,7 +9,9 @@ from .character import CharacterRules
 from .encounter import EncounterRules
 from .game import GameRules
 from .lib.deck import shuffle_discard
-from .types.common import (
+from .types.external import EncounterCommands, Record as external_Record
+from .types.internal import (
+    Character,
     Choice,
     Choices,
     Effect,
@@ -19,17 +21,20 @@ from .types.common import (
     EncounterContextType,
     FullCard,
     FullCardType,
+    Gadget,
+    Hex,
+    HexDeck,
     Outcome,
+    Record, Token,
     TravelCard,
     TravelCardType,
+    TurnFlags,
 )
-from .types.snapshot import EncounterCommands, Record as snapshot_Record
-from .types.store import Character, Gadget, Hex, HexDeck, Record, Token, TurnFlags
 
 
 class ActivityRules:
     @classmethod
-    def do_job(cls, character_name: str, card_uuid: str) -> Sequence[snapshot_Record]:
+    def do_job(cls, character_name: str, card_uuid: str) -> Sequence[external_Record]:
         records: List[Record] = []
         with Character.load_by_name_for_write(character_name) as ch:
             if GameRules.encounter_check(ch):
@@ -53,7 +58,7 @@ class ActivityRules:
     @classmethod
     def perform_action(
         cls, character_name: str, action_uuid: str
-    ) -> Sequence[snapshot_Record]:
+    ) -> Sequence[external_Record]:
         records: List[Record] = []
         action = Gadget.load_action_by_uuid(action_uuid)
         with Character.load_by_name_for_write(character_name) as ch:
@@ -65,7 +70,7 @@ class ActivityRules:
             return GameRules.save_translate_records(records)
 
     @classmethod
-    def camp(cls, character_name: str) -> Sequence[snapshot_Record]:
+    def camp(cls, character_name: str) -> Sequence[external_Record]:
         records: List[Record] = []
         with Character.load_by_name_for_write(character_name) as ch:
             if GameRules.encounter_check(ch):
@@ -74,7 +79,7 @@ class ActivityRules:
             return GameRules.save_translate_records(records)
 
     @classmethod
-    def travel(cls, character_name: str, hex: str) -> Sequence[snapshot_Record]:
+    def travel(cls, character_name: str, hex: str) -> Sequence[external_Record]:
         records: List[Record] = []
         with Character.load_by_name_for_write(character_name) as ch:
             if GameRules.encounter_check(ch):
@@ -141,7 +146,7 @@ class ActivityRules:
             )
 
     @classmethod
-    def end_turn(cls, character_name: str) -> Sequence[snapshot_Record]:
+    def end_turn(cls, character_name: str) -> Sequence[external_Record]:
         records: List[Record] = []
         with Character.load_by_name_for_write(character_name) as ch:
             if GameRules.encounter_check(ch):
@@ -152,7 +157,7 @@ class ActivityRules:
     @classmethod
     def resolve_encounter(
         cls, character_name: str, commands: EncounterCommands
-    ) -> Sequence[snapshot_Record]:
+    ) -> Sequence[external_Record]:
         records: List[Record] = []
         with Character.load_by_name_for_write(character_name) as ch:
             if not GameRules.encounter_check(ch):

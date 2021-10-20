@@ -10,7 +10,7 @@ from unittest import main
 from picaro.common.exceptions import IllegalMoveException
 from picaro.rules.board import BoardRules
 from picaro.rules.test.test_base import FlatworldTestBase
-from picaro.rules.types.store import Character, Entity, Token
+from picaro.rules.types.internal import Character, Entity, Token
 
 
 class BoardTest(FlatworldTestBase):

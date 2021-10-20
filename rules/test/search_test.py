@@ -9,8 +9,7 @@ from unittest import main
 from picaro.common.exceptions import BadStateException
 from picaro.rules.search import SearchRules
 from picaro.rules.test.test_base import FlatworldTestBase
-from picaro.rules.types.common import Action
-from picaro.rules.types.store import Character, Gadget
+from picaro.rules.types.internal import Action, Character, Gadget
 
 
 class SearchTest(FlatworldTestBase):

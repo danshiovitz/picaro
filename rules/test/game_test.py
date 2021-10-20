@@ -12,15 +12,17 @@ from picaro.common.exceptions import IllegalMoveException
 from picaro.rules.board import BoardRules
 from picaro.rules.game import GameRules
 from picaro.rules.test.test_base import FlatworldTestBase
-from picaro.rules.types.common import (
+from picaro.rules.types.internal import (
+    Character,
     Effect,
     EffectType,
     FullCard,
     FullCardType,
+    Gadget,
     TemplateCard,
     TemplateCardType,
+    TurnFlags,
 )
-from picaro.rules.types.store import Character, Gadget, TurnFlags
 
 
 class GameTest(FlatworldTestBase):

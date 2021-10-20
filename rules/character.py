@@ -7,28 +7,26 @@ from picaro.common.utils import clamp, pop_func
 
 from .board import BoardRules
 from .lib.gadget import compute_overlay_value, load_available_actions
-from .types.common import (
+from .types.internal import (
     Action,
+    Character,
     Encounter,
     EncounterContextType,
+    Entity,
     EntityType,
     Filter,
     FilterType,
     FullCard,
     FullCardType,
+    Gadget,
+    Game,
+    Hex,
+    Job,
     JobType,
     OverlayType,
     Route,
     RouteType,
     TableauCard,
-)
-from .types.store import (
-    Character,
-    Entity,
-    Gadget,
-    Game,
-    Hex,
-    Job,
     Token,
 )
 

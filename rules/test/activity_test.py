@@ -12,7 +12,9 @@ from picaro.common.exceptions import BadStateException, IllegalMoveException
 from picaro.rules.activity import ActivityRules
 from picaro.rules.board import BoardRules
 from picaro.rules.test.test_base import FlatworldTestBase
-from picaro.rules.types.common import (
+from picaro.rules.types.external import EncounterCommands
+from picaro.rules.types.internal import (
+    Character,
     Choice,
     Choices,
     Effect,
@@ -23,12 +25,12 @@ from picaro.rules.types.common import (
     FilterType,
     FullCard,
     FullCardType,
+    Gadget,
     Outcome,
     TemplateCard,
     TemplateCardType,
+    TurnFlags,
 )
-from picaro.rules.types.snapshot import EncounterCommands
-from picaro.rules.types.store import Character, Gadget, TurnFlags
 
 
 class ActivityTest(FlatworldTestBase):

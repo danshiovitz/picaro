@@ -3,7 +3,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Dict, List, Set, Tuple
 
-from .types.common import Overlay, OverlayType
+from .types.internal import Overlay, OverlayType
 
 
 @dataclass

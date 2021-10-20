@@ -70,13 +70,14 @@ class Server:
                     "Taurus", other_player_uuid, "Merchant", "random"
                 )
 
-                from picaro.rules.types.common import (
+                from picaro.rules.types.internal import (
+                    Character,
+                    Gadget,
                     Overlay,
                     OverlayType,
                     Filter,
                     FilterType,
                 )
-                from picaro.rules.types.store import Character, Gadget
 
                 ch = Character.load_by_name("Conan")
                 Gadget.create(
@@ -153,13 +154,14 @@ class Server:
                     "AFGNCAAP", player_uuid, "Red Job 1", "random"
                 )
 
-                from picaro.rules.types.common import (
+                from picaro.rules.types.internal import (
+                    Character,
+                    Gadget,
                     Overlay,
                     OverlayType,
                     Filter,
                     FilterType,
                 )
-                from picaro.rules.types.store import Character, Gadget
 
                 with Character.load_by_name_for_write("AFGNCAAP") as ch:
                     GameRules.apply_effects(

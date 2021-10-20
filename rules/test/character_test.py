@@ -11,16 +11,17 @@ from picaro.rules.base import get_rules_cache
 from picaro.rules.board import BoardRules
 from picaro.rules.character import CharacterRules
 from picaro.rules.test.test_base import FlatworldTestBase
-from picaro.rules.types.common import (
+from picaro.rules.types.internal import (
     Action,
+    Character,
     Filter,
     FilterType,
+    Gadget,
     Overlay,
     OverlayType,
     Route,
     RouteType,
 )
-from picaro.rules.types.store import Character, Gadget
 
 
 class CharacterTest(FlatworldTestBase):

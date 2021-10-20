@@ -12,8 +12,9 @@ from picaro.rules.base import get_rules_cache
 from picaro.rules.character import CharacterRules
 from picaro.rules.encounter import EncounterRules
 from picaro.rules.test.test_base import FlatworldTestBase
-from picaro.rules.types.common import (
+from picaro.rules.types.internal import (
     Challenge,
+    Character,
     Choices,
     Choice,
     Effect,
@@ -22,13 +23,13 @@ from picaro.rules.types.common import (
     EncounterContextType,
     FullCard,
     FullCardType,
+    Gadget,
     Outcome,
     Overlay,
     OverlayType,
     TemplateCard,
     TemplateCardType,
 )
-from picaro.rules.types.store import Character, Gadget
 
 
 class EncounterTest(FlatworldTestBase):

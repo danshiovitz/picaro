@@ -1,4 +1,4 @@
-from dataclasses import replace as dataclasses_replace
+from dataclasses import dataclass, replace as dataclasses_replace
 from enum import Enum, auto as enum_auto
 from typing import Any, Dict, List, Optional, Sequence, Set
 
@@ -10,25 +10,84 @@ from picaro.common.storage import (
     get_parent_uuid,
 )
 
-from .common import (
-    Action,
+from .external import (
+    Challenge,
+    Choice,
+    Choices,
     Effect,
     EffectType,
-    Encounter,
+    EncounterCheck,
+    EncounterContextType,
     EntityType,
     Filter,
+    FilterType,
     FullCard,
+    FullCardType,
+    Gadget as external_Gadget,
     JobType,
+    Outcome,
     Overlay,
     OverlayType,
-    ResourceCard,
-    TableauCard,
+    Route,
+    RouteType,
     TemplateCard,
-    TravelCard,
+    TemplateCardType,
     Trigger,
     TriggerType,
 )
-from .snapshot import Gadget as snapshot_Gadget
+
+
+@dataclass(frozen=True)
+class Action:
+    uuid: str
+    name: str
+    costs: Sequence[Effect]
+    effects: Sequence[Effect]
+    is_private: bool
+    filters: Sequence[Filter]
+
+
+@dataclass(frozen=True)
+class Encounter:
+    card: FullCard
+    rolls: Sequence[Sequence[int]]
+
+
+@dataclass(frozen=True)
+class TableauCard:
+    card: FullCard
+    age: int
+    location: str
+
+
+class TravelCardType(Enum):
+    NOTHING = enum_auto()
+    DANGER = enum_auto()
+    SPECIAL = enum_auto()
+
+
+@dataclass(frozen=True)
+class TravelCard:
+    type: TravelCardType
+    value: Any
+
+    @classmethod
+    def type_field(cls) -> str:
+        return "type"
+
+    @classmethod
+    def any_type(cls, type_val: TravelCardType) -> type:
+        if type_val == TravelCardType.SPECIAL:
+            return TemplateCard
+        else:
+            return int
+
+
+@dataclass(frozen=True)
+class ResourceCard:
+    name: str
+    type: str
+    value: int
 
 
 class Game(StandardWrapper):
