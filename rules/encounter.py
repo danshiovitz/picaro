@@ -70,7 +70,9 @@ class EncounterRules:
             data = cls._make_choices(cast(Choices, val.data))
             card_type = FullCardType.CHOICE
         elif val.type == TemplateCardType.CHALLENGE:
-            data = cls._make_challenge(cast(Challenge, val.data), base_skills, difficulty, context_type)
+            data = cls._make_challenge(
+                cast(Challenge, val.data), base_skills, difficulty, context_type
+            )
             card_type = FullCardType.CHALLENGE
         elif val.type == TemplateCardType.SPECIAL:
             data = val.data
@@ -78,7 +80,7 @@ class EncounterRules:
         else:
             raise Exception(f"Unknown card type {val.type.name}")
 
-        signs = random.sample(game.zodiacs, 2) if not val.unsigned else []
+        signs = random.sample(game.zodiacs, 2)
 
         return FullCard(
             uuid=make_uuid(),
@@ -87,7 +89,6 @@ class EncounterRules:
             type=card_type,
             data=data,
             signs=signs,
-            context_type=context_type,
         )
 
     @classmethod
@@ -204,15 +205,18 @@ class EncounterRules:
         return difficulty * 2 + 1
 
     @classmethod
-    def _make_choices(
-        cls,
-        choices: Choices
-    ) -> Choices:
+    def _make_choices(cls, choices: Choices) -> Choices:
         if choices.max_choices <= 0:
             # implies: do a random selection, weighted by the individual max choices
-            idxs = [v for idx, c in enumerate(choices.choice_list) for v in [idx] * c.max_choices]
+            idxs = [
+                v
+                for idx, c in enumerate(choices.choice_list)
+                for v in [idx] * c.max_choices
+            ]
             idx = random.choice(idxs)
-            choices = dataclasses.replace(choices, max_choices=1, choice_list=[choices.choice_list[idx]])
+            choices = dataclasses.replace(
+                choices, max_choices=1, choice_list=[choices.choice_list[idx]]
+            )
         return choices
 
     @classmethod

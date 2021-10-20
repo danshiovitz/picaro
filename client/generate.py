@@ -276,7 +276,7 @@ def generate_map_v2() -> Tuple[List[Hex], List[Country], List[Entity]]:
             actions = [
                 Action(
                     name="Trade",
-                    benefit=[
+                    effects=[
                         Effect(
                             type=EffectType.QUEUE_ENCOUNTER,
                             value=TemplateCard(
@@ -287,7 +287,7 @@ def generate_map_v2() -> Tuple[List[Hex], List[Country], List[Entity]]:
                             ),
                         ),
                     ],
-                    cost=[],
+                    costs=[],
                     uuid="",
                     is_private=False,
                     filters=[
@@ -321,8 +321,8 @@ def generate_map_v2() -> Tuple[List[Hex], List[Country], List[Entity]]:
             actions = [
                 Action(
                     name=f"Gather {mine_rs[hx.country]}",
-                    cost=(Effect(type=EffectType.MODIFY_ACTIVITY, value=-1),),
-                    benefit=(
+                    costs=(Effect(type=EffectType.MODIFY_ACTIVITY, value=-1),),
+                    effects=(
                         Effect(
                             type=EffectType.MODIFY_RESOURCES,
                             subtype=mine_rs[hx.country],

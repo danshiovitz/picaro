@@ -218,29 +218,23 @@ class GameRules:
         Record.insert(records)
         return [translate.to_snapshot_record(Record.load(r.uuid)) for r in records]
 
-    # This one is for when the character has done a thing, and this is the outcome,
-    # which applies in all cases. If the character has 3 coins, and this has an effect
-    # of -10 coins, the character ends up with 0 coins and life goes on.
+    # In these args, effects is for when the character has done a thing, and this
+    # is the outcome, which applies in all cases. If the character has 3 coins,
+    # and this has an effect of -10 coins, the character ends up with 0 coins
+    # and life goes on. Whereas costs is for when the character is doing a thing
+    # in exchange for another thing (like trading a Steel resource for 5 xp).
+    # If the character has 3 coins, and this has an effect of -10 coins, it'll
+    # raise an exception and the whole thing will fail.
     @classmethod
-    def apply_regardless(
+    def apply_effects(
         cls,
         ch: Character,
+        costs: List[Effect],
         effects: List[Effect],
         records: List[Record],
     ) -> None:
+        cls._apply_shared(ch, costs, records, enforce_costs=True)
         cls._apply_shared(ch, effects, records, enforce_costs=False)
-
-    # This one is for when the character is doing a thing in exchange for another thing
-    # (like trading a Steel resource for 5 xp). If the character has 3 coins, and this has
-    # an effect of -10 coins, it'll raise an exception and the whole thing will fail.
-    @classmethod
-    def apply_bargain(
-        cls,
-        ch: Character,
-        effects: List[Effect],
-        records: List[Record],
-    ) -> None:
-        cls._apply_shared(ch, effects, records, enforce_costs=True)
 
     @classmethod
     def _apply_shared(

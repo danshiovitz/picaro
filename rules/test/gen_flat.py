@@ -150,8 +150,8 @@ def generate_decks() -> List[TemplateDeck]:
     for special in specials:
         choice_list = [
             Choice(
-                cost=[],
-                benefit=[
+                costs=[],
+                effects=[
                     Effect(
                         type=EffectType.MODIFY_COINS,
                         value=5,
@@ -159,8 +159,8 @@ def generate_decks() -> List[TemplateDeck]:
                 ],
             ),
             Choice(
-                cost=[],
-                benefit=[
+                costs=[],
+                effects=[
                     Effect(
                         type=EffectType.MODIFY_HEALTH,
                         value=5,

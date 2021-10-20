@@ -284,8 +284,8 @@ class CharacterTest(FlatworldTestBase):
         return Action(
             uuid="",
             name=name,
-            cost=[],
-            benefit=[],
+            costs=[],
+            effects=[],
             is_private=True,
             filters=filters,
         )

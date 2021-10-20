@@ -10,10 +10,10 @@
         "min_choices": 1,
         "max_choices": -1,
         "choice_list": [
-            {"benefit": [{"type": "MODIFY_COINS", "value": 1}]},
-            {"benefit": [{"type": "MODIFY_COINS", "value": 6}]},
-            {"benefit": [{"type": "MODIFY_RESOURCES", "value": 1}]},
-            {"benefit": [{"type": "MODIFY_HEALTH", "value": 3}]}
+            {"effects": [{"type": "MODIFY_COINS", "value": 1}]},
+            {"effects": [{"type": "MODIFY_COINS", "value": 6}]},
+            {"effects": [{"type": "MODIFY_RESOURCES", "value": 1}]},
+            {"effects": [{"type": "MODIFY_HEALTH", "value": 3}]}
         ]
       }
     },
@@ -25,8 +25,8 @@
         "min_choices": 1,
         "max_choices": -1,
         "choice_list": [
-            {"benefit": [{"type": "MODIFY_SPEED", "value": 1}]},
-            {"benefit": [{"type": "MODIFY_SPEED", "value": 2}]}
+            {"effects": [{"type": "MODIFY_SPEED", "value": 1}]},
+            {"effects": [{"type": "MODIFY_SPEED", "value": 2}]}
         ]
       }
     }

@@ -119,7 +119,9 @@ class PlayRunner:
             callback = lambda _, uuid=card.uuid, route=card.route: self._job(
                 uuid, route
             )
-            titles = [f"({card.age}) {card.name} [{self.client.render_route(card.route)}]:"]
+            titles = [
+                f"({card.age}) {card.name} [{self.client.render_route(card.route)}]:"
+            ]
             if card.type == FullCardType.CHALLENGE:
                 titles.append(f"       {self.client.render_check(card.data[0])}")
             else:
@@ -370,7 +372,9 @@ class PlayRunner:
         while True:
             print()
             for idx, check in enumerate(checks):
-                status = "SUCCESS" if rolls[idx][-1] >= check.target_number else "FAILURE"
+                status = (
+                    "SUCCESS" if rolls[idx][-1] >= check.target_number else "FAILURE"
+                )
                 roll_str = ",".join(str(r) for r in rolls[idx])
                 print(
                     f"Check #{idx+1}: {self.client.render_check(check)}: "
@@ -438,7 +442,11 @@ class PlayRunner:
         )
 
     def _input_encounter_choices(
-        self, ch: Character, enc_uuid: str, choices: Choices, rolls: Sequence[Sequence[int]]
+        self,
+        ch: Character,
+        enc_uuid: str,
+        choices: Choices,
+        rolls: Sequence[Sequence[int]],
     ) -> EncounterCommands:
         selections = self.client.read_selections(choices)
         return EncounterCommands(

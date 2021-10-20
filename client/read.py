@@ -387,9 +387,9 @@ class ReadClientBase(RenderClientBase):
             can_choose = False
 
         while True:
-            if choices.benefit or choices.cost:
+            if choices.effects or choices.costs:
                 line = " ** Overall: " + ", ".join(
-                    self.render_effect(eff) for eff in choices.benefit + choices.cost
+                    self.render_effect(eff) for eff in choices.effects + choices.costs
                 )
                 print(line)
             selected = 0
@@ -405,7 +405,7 @@ class ReadClientBase(RenderClientBase):
 
                 line += ", ".join(
                     self.render_effect(eff)
-                    for eff in list(choice.benefit) + list(choice.cost)
+                    for eff in list(choice.effects) + list(choice.costs)
                 )
                 line += f" [{selections[idx]}/{choice.max_choices}]"
                 selected += selections[idx]

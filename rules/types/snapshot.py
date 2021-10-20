@@ -61,8 +61,8 @@ class Board:
 class Action:
     uuid: str
     name: str
-    cost: Sequence[Effect]
-    benefit: Sequence[Effect]
+    costs: Sequence[Effect]
+    effects: Sequence[Effect]
     is_private: bool
     filters: Sequence[Filter]
     route: Route

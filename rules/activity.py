@@ -60,8 +60,7 @@ class ActivityRules:
             if GameRules.encounter_check(ch):
                 raise BadStateException("An encounter is currently active.")
             CharacterRules.check_filters(ch, action.filters)
-            GameRules.apply_bargain(ch, action.cost, records)
-            GameRules.apply_regardless(ch, action.benefit, records)
+            GameRules.apply_effects(ch, action.costs, action.effects, records)
             GameRules.intra_turn(ch, records)
             return GameRules.save_translate_records(records)
 
@@ -160,9 +159,8 @@ class ActivityRules:
                 raise BadStateException("No encounter is currently active.")
             encounter = ch.encounter
             ch.encounter = None
-            cost, benefit = cls._perform_commands(ch, encounter, commands)
-            GameRules.apply_bargain(ch, cost, records)
-            GameRules.apply_regardless(ch, benefit, records)
+            costs, effects = cls._perform_commands(ch, encounter, commands)
+            GameRules.apply_effects(ch, costs, effects, records)
             GameRules.intra_turn(ch, records)
             return GameRules.save_translate_records(records)
 
@@ -202,8 +200,8 @@ class ActivityRules:
         rolls = [er[-1] for er in encounter.rolls]
         luck_spent = 0
 
-        cost: List[Effect] = []
-        benefit: List[Effect] = []
+        costs: List[Effect] = []
+        effects: List[Effect] = []
 
         # validate the commands by rerunning them (note this also updates luck)
         for adj in commands.adjusts or []:
@@ -233,13 +231,13 @@ class ActivityRules:
             )
 
         if luck_spent > 0:
-            cost.append(
+            costs.append(
                 Effect(
                     EffectType.MODIFY_LUCK, -luck_spent, comment="encounter commands"
                 )
             )
         if commands.flee:
-            return cost, benefit
+            return costs, effects
 
         ocs = defaultdict(int)
         failures = 0
@@ -255,11 +253,11 @@ class ActivityRules:
 
         sum_til = lambda v: (v * v + v) // 2
         for outcome, cnt in ocs.items():
-            benefit.extend(
+            effects.extend(
                 EncounterRules.convert_outcome(outcome, cnt, ch, encounter.card)
             )
         if failures > 0:
-            benefit.append(
+            effects.append(
                 Effect(
                     type=EffectType.MODIFY_XP,
                     subtype=checks[0].skill,
@@ -267,7 +265,7 @@ class ActivityRules:
                 )
             )
 
-        return cost, benefit
+        return costs, effects
 
     @classmethod
     def _perform_choices(
@@ -278,8 +276,8 @@ class ActivityRules:
     ) -> Tuple[List[Effect], List[Effect]]:
         choices = cast(Choices, encounter.card.data)
 
-        cost: List[Effect] = []
-        benefit: List[Effect] = []
+        costs: List[Effect] = []
+        effects: List[Effect] = []
 
         tot = 0
         for choice_idx, cnt in selections.items():
@@ -305,11 +303,11 @@ class ActivityRules:
             )
 
         if selections:
-            cost.extend(choices.cost)
-            benefit.extend(choices.benefit)
+            costs.extend(choices.costs)
+            effects.extend(choices.effects)
         for choice_idx, cnt in selections.items():
             choice = choices.choice_list[choice_idx]
             for _ in range(cnt):
-                cost.extend(choice.cost)
-                benefit.extend(choice.benefit)
-        return cost, benefit
+                costs.extend(choice.costs)
+                effects.extend(choice.effects)
+        return costs, effects

@@ -135,7 +135,6 @@ class EncounterTest(FlatworldTestBase):
                 for s in ["Skill 1", "Skill 2", "Skill 3"]
             ],
             signs=["Zodiac 1", "Zodiac 2"],
-            context_type=EncounterContextType.JOB,
         )
 
         ch = Character.load_by_name(self.CHARACTER)
@@ -238,7 +237,6 @@ class EncounterTest(FlatworldTestBase):
                 choice_list=[Choice(), Choice()],
             ),
             signs=["Zodiac 1", "Zodiac 2"],
-            context_type=EncounterContextType.JOB,
         )
         ch = Character.load_by_name(self.CHARACTER)
         EncounterRules.make_encounter(ch, card)
@@ -251,7 +249,6 @@ class EncounterTest(FlatworldTestBase):
             type=FullCardType.SPECIAL,
             data="trade",
             signs=["Zodiac 1", "Zodiac 2"],
-            context_type=EncounterContextType.JOB,
         )
         ch = Character.load_by_name(self.CHARACTER)
         EncounterRules.make_encounter(ch, card)
@@ -273,7 +270,6 @@ class EncounterTest(FlatworldTestBase):
                 for s in ["Skill 1", "Skill 2", "Skill 3"]
             ],
             signs=["Zodiac 1", "Zodiac 2"],
-            context_type=EncounterContextType.JOB,
         )
         for outcome in Outcome:
             effects = EncounterRules.convert_outcome(outcome, 2, ch, card)

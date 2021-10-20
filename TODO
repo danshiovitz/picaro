@@ -239,6 +239,5 @@ Gadgets should maybe also have timers + a thing that fires when the timer goes o
 - I note in passing that gadgets seem like they might want to be able to talk about "the owning entity" "this gadget" "this gadget's parent" which means that effects need to be able to target those. piggy bank gadget: one action that does -1 gold and tick this gadget's meter; another action that's "if this gadget's meter is at least 10, set it ot 0 and +10 gold"
 - Also, I guess the existing notion of Entity, ie, a thing that can receive effects, is now bogus - the only thing that can receive effects are characters, and everything else is just a side-item like the aforementioned tick-a-meter
 
-- everywhere we have effects list we should have cost and benefit, and use that as the way to determine bargain/regardless - that way we can have a choices that's like "-2 speed, or +2 speed and -2 coins"
 - get rid of EncounterContextType, unsigned flag
 - refactor types from common/snapshot/store to just external/internal

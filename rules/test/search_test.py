@@ -82,8 +82,8 @@ class SearchTest(FlatworldTestBase):
                 Action(
                     uuid="",
                     name="Thingo",
-                    cost=[],
-                    benefit=[],
+                    costs=[],
+                    effects=[],
                     is_private=False,
                     filters=[],
                 )

@@ -143,8 +143,8 @@ class Trigger:
 class Action:
     uuid: str
     name: str
-    cost: Sequence[Effect]
-    benefit: Sequence[Effect]
+    costs: Sequence[Effect]
+    effects: Sequence[Effect]
     is_private: bool
     filters: Sequence[Filter]
 
@@ -163,9 +163,9 @@ class Choice:
     # this is the min/max times this particular choice can be selected
     min_choices: int = 0
     max_choices: int = 1
-    # this cost and benefit apply once per time the choice is selected
-    cost: Sequence[Effect] = ()
-    benefit: Sequence[Effect] = ()
+    # this costs and effects apply once per time the choice is selected
+    costs: Sequence[Effect] = ()
+    effects: Sequence[Effect] = ()
 
 
 @dataclass(frozen=True)
@@ -181,9 +181,9 @@ class Choices:
     min_choices: int
     max_choices: int
     choice_list: Sequence[Choice]
-    # this cost and benefit apply (once) if you make any selections at all
-    cost: Sequence[Effect] = ()
-    benefit: Sequence[Effect] = ()
+    # this costs and effects apply (once) if you make any selections at all
+    costs: Sequence[Effect] = ()
+    effects: Sequence[Effect] = ()
 
 
 class TemplateCardType(Enum):
@@ -198,7 +198,6 @@ class TemplateCard:
     desc: str
     type: TemplateCardType
     data: Any
-    unsigned: bool = False
 
     @classmethod
     def type_field(cls) -> str:
@@ -225,7 +224,6 @@ class EncounterContextType(Enum):
     TRAVEL = enum_auto()
     CAMP = enum_auto()
     ACTION = enum_auto()
-    SYSTEM = enum_auto()
 
 
 @dataclass(frozen=True)
@@ -236,7 +234,6 @@ class FullCard:
     type: FullCardType
     data: Any
     signs: Sequence[str]
-    context_type: EncounterContextType
 
     @classmethod
     def type_field(cls) -> str:

@@ -19,7 +19,6 @@ from picaro.rules.types.common import (
     EffectType,
     Encounter,
     EncounterCheck,
-    EncounterContextType,
     Filter,
     FilterType,
     FullCard,
@@ -115,8 +114,8 @@ class ActivityTest(FlatworldTestBase):
         with Gadget.load_for_write(guuid) as gadget:
             gadget.add_action(
                 name="Thingo",
-                cost=[],
-                benefit=[Effect(type=EffectType.MODIFY_COINS, subtype=None, value=6)],
+                costs=[],
+                effects=[Effect(type=EffectType.MODIFY_COINS, subtype=None, value=6)],
                 is_private=False,
                 filters=[Filter(type=FilterType.NEAR_HEX, subtype="AF08", value=1)],
             )
@@ -273,7 +272,6 @@ class ActivityTest(FlatworldTestBase):
                     ),
                 ],
                 signs=["Zodiac 1", "Zodiac 2"],
-                context_type=EncounterContextType.JOB,
             )
             ch.encounter = Encounter(card=card, rolls=[[4], [5], [7]])
             ch.coins = 10
@@ -335,7 +333,7 @@ class ActivityTest(FlatworldTestBase):
             result_cnts=[2, 3, 5, 1],
         )
 
-        # choosing nothing - overall cost/benefit don't happen either
+        # choosing nothing - overall costs/effects don't happen either
         self._choice_helper(
             selections={},
             result_cnts=[0, 0, 0, 0],
@@ -364,18 +362,17 @@ class ActivityTest(FlatworldTestBase):
                 data=Choices(
                     min_choices=overall_mm[0],
                     max_choices=overall_mm[1],
-                    benefit=[Effect(type=types.pop(0), subtype=None, value=1)],
+                    effects=[Effect(type=types.pop(0), subtype=None, value=1)],
                     choice_list=[
                         Choice(
                             min_choices=mm[0],
                             max_choices=mm[1],
-                            benefit=[Effect(type=types.pop(0), subtype=None, value=1)],
+                            effects=[Effect(type=types.pop(0), subtype=None, value=1)],
                         )
                         for mm in item_mms
                     ],
                 ),
                 signs=["Zodiac 1", "Zodiac 2"],
-                context_type=EncounterContextType.JOB,
             )
             ch.encounter = Encounter(card=card, rolls=[])
             ch.speed = 10

@@ -261,8 +261,8 @@ class Gadget(StandardWrapper):
     def add_action(
         self,
         name: str,
-        cost: Sequence[Effect],
-        benefit: Sequence[Effect],
+        costs: Sequence[Effect],
+        effects: Sequence[Effect],
         is_private: bool,
         filters: Sequence[Filter],
     ) -> None:
@@ -272,8 +272,8 @@ class Gadget(StandardWrapper):
             Action(
                 uuid=make_double_uuid(self.uuid),
                 name=name,
-                cost=cost,
-                benefit=benefit,
+                costs=costs,
+                effects=effects,
                 is_private=is_private,
                 filters=filters,
             )

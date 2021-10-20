@@ -120,8 +120,9 @@ class Server:
                     actions=[],
                 )
                 with Character.load_by_name_for_write("Conan") as ch:
-                    GameRules.apply_regardless(
+                    GameRules.apply_effects(
                         ch,
+                        [],
                         [
                             Effect(type=EffectType.MODIFY_COINS, value=50),
                             Effect(type=EffectType.MODIFY_RESOURCES, value=10),
@@ -161,8 +162,9 @@ class Server:
                 from picaro.rules.types.store import Character, Gadget
 
                 with Character.load_by_name_for_write("AFGNCAAP") as ch:
-                    GameRules.apply_regardless(
+                    GameRules.apply_effects(
                         ch,
+                        [],
                         [
                             Effect(type=EffectType.MODIFY_COINS, value=50),
                             Effect(type=EffectType.MODIFY_RESOURCES, value=10),
