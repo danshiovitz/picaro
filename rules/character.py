@@ -51,7 +51,7 @@ class CharacterRules:
             encounter=None,
             queued=[],
             job_deck=[],
-            travel_deck=[],
+            travel_special_deck=[],
             camp_deck=[],
         )
 

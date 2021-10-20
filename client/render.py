@@ -322,8 +322,10 @@ class RenderClientBase(ClientBase):
 
             color, symbol = self.TERRAINS[hx.terrain]
             body1 = hx.name + " "
-            body2 = (hx.country + "     ")[0:5]
-            body2 = body2[0:5]
+            if show_country:
+                body2 = (hx.country + "     ")[0:5]
+            else:
+                body2 = (("*" * hx.danger) + "     ")[0:5]
 
             if hx.name in entities:
                 body2 = (

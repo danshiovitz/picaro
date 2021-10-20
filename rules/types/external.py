@@ -64,11 +64,8 @@ class Effect:
 
     @classmethod
     def any_type(cls, type_val: EffectType) -> type:
-        # TODO: figure out how to do this better
-        from .snapshot import Gadget as snapshot_Gadget
-
         if type_val == EffectType.ADD_EMBLEM:
-            return snapshot_Gadget
+            return Gadget
         elif type_val == EffectType.QUEUE_ENCOUNTER:
             return TemplateCard
         elif type_val in (EffectType.MODIFY_LOCATION, EffectType.MODIFY_JOB):

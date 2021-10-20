@@ -23,8 +23,6 @@
 - FullCard shouldn't have entity_type/_name, but what should they have?
 - implement giving stuff to other players
 - put back oracle stuff as a more generalized proposal mechanism (?) with in-world oracles (?)
-- adjust chance of travel encounter - should be between like 25% and 75% over three turns
-- adjust the chance of everything during leadership challenge - for someone with rep of 5-, should be 30-40% chance of success, 0% (I think) chance of crit success, and if you fail, like 30-40% chance of being busted down all the way; with rep of 10 you should usually keep your position but definitely not for sure, like 25% chance of fail maybe, and only like 5% chance to be busted down all the way, and like 5-10% chance of a promo; with rep of 15+ it should be only like 10% chance of fail, and something like a 30-40% chance of promo
 - figure out how effects should be used to add/update gadgets (is it the thing where if you specify the uuid it replaces, otherwise it adds a new one? that seems a little risky). we also need to know how to add a gadget to some other entity besides the player but I guess that falls out from the give implementation.
 - relatedly, rename add_emblem to add_gadget (and maybe upsert_gadget), right?
 
@@ -239,4 +237,4 @@ Gadgets should maybe also have timers + a thing that fires when the timer goes o
 - I note in passing that gadgets seem like they might want to be able to talk about "the owning entity" "this gadget" "this gadget's parent" which means that effects need to be able to target those. piggy bank gadget: one action that does -1 gold and tick this gadget's meter; another action that's "if this gadget's meter is at least 10, set it ot 0 and +10 gold"
 - Also, I guess the existing notion of Entity, ie, a thing that can receive effects, is now bogus - the only thing that can receive effects are characters, and everything else is just a side-item like the aforementioned tick-a-meter
 
-- refactor types from common/snapshot/store to just external/internal and fix add emblem + record
+- adjust the chance of everything during leadership challenge - for someone with rep of 5-, should be 30-40% chance of success, 0% (I think) chance of crit success, and if you fail, like 30-40% chance of being busted down all the way; with rep of 10 you should usually keep your position but definitely not for sure, like 25% chance of fail maybe, and only like 5% chance to be busted down all the way, and like 5-10% chance of a promo; with rep of 15+ it should be only like 10% chance of fail, and something like a 30-40% chance of promo

@@ -69,18 +69,7 @@ class TravelCardType(Enum):
 @dataclass(frozen=True)
 class TravelCard:
     type: TravelCardType
-    value: Any
-
-    @classmethod
-    def type_field(cls) -> str:
-        return "type"
-
-    @classmethod
-    def any_type(cls, type_val: TravelCardType) -> type:
-        if type_val == TravelCardType.SPECIAL:
-            return TemplateCard
-        else:
-            return int
+    value: int
 
 
 @dataclass(frozen=True)
@@ -372,7 +361,7 @@ class Character(StandardWrapper):
         encounter: Optional[Encounter]
         queued: List[FullCard]
         job_deck: List[TemplateCard]
-        travel_deck: List[TravelCard]
+        travel_special_deck: List[TemplateCard]
         camp_deck: List[TemplateCard]
 
     @classmethod
@@ -417,7 +406,7 @@ class Record(StandardWrapper):
         @classmethod
         def any_type(cls, type_val: EffectType) -> type:
             if type_val == EffectType.ADD_EMBLEM:
-                return snapshot_Gadget
+                return external_Gadget
             elif type_val == EffectType.QUEUE_ENCOUNTER:
                 return Optional[TemplateCard]
             elif type_val in (

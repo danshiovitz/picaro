@@ -28,7 +28,7 @@ class BoardCommand:
             center_coord = client.hexes.get_by_name(center_name).coordinate
 
             for line in client.render_large_map(
-                entities, center=center_coord, radius=2
+                entities, center=center_coord, radius=2, show_country=client.args.country
             ):
                 print(line)
         else:

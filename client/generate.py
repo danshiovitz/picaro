@@ -402,7 +402,7 @@ def generate_from_mini(
             coordinate=coord,
             terrain=terrain[coord],
             country=country_map[coord],
-            danger=2,
+            danger=1,
         )
 
     hexes = [make_hex(k) for k in terrain]

@@ -1,3 +1,5 @@
+import random
+
 from collections import defaultdict
 from typing import Dict, List, Optional, Sequence, Tuple, cast
 
@@ -104,10 +106,10 @@ class ActivityRules:
 
     @classmethod
     def _draw_travel_card(cls, ch: Character, location: str) -> Optional[FullCard]:
-        if not ch.travel_deck:
-            ch.travel_deck = cls._make_travel_deck()
-
-        card = ch.travel_deck.pop(0)
+        # had this as a deck for a while, but the way you keep drawing when
+        # nothing happens tends to distort the probabilities and makes it
+        # hard to reason, so switching to a bag
+        card = random.choice(cls.TRAVEL_BAG)
         if card.type == TravelCardType.NOTHING:
             return None
         elif card.type == TravelCardType.DANGER:
@@ -117,23 +119,24 @@ class ActivityRules:
             else:
                 return None
         elif card.type == TravelCardType.SPECIAL:
+            if not ch.travel_special_deck:
+                ch.travel_special_deck = EncounterRules.load_deck("Travel")
+            special_card = ch.travel_special_deck.pop(0)
             hx = Hex.load(location)
             return EncounterRules.reify_card(
-                card.value, [], hx.danger, EncounterContextType.TRAVEL
+                special_card, [], hx.danger, EncounterContextType.TRAVEL
             )
         else:
             raise Exception(f"Unknown card type: {card.type}")
 
-    @classmethod
-    def _make_travel_deck(cls) -> List[TravelCard]:
-        specials = EncounterRules.load_deck("Travel")
-        cards = []
-        cards.extend([TravelCard(type=TravelCardType.NOTHING, value=0)] * 14)
-        for i in range(1, 6):
-            cards.extend([TravelCard(type=TravelCardType.DANGER, value=i)] * 3)
-        for _ in range(2):
-            cards.append(TravelCard(type=TravelCardType.SPECIAL, value=specials.pop(0)))
-        return shuffle_discard(cards)
+    TRAVEL_BAG = []
+    TRAVEL_BAG.extend([TravelCard(type=TravelCardType.DANGER, value=1)] * 8)
+    for i in range(2, 6):
+        TRAVEL_BAG.extend([TravelCard(type=TravelCardType.DANGER, value=i)] * 5)
+    for _ in range(2):
+        TRAVEL_BAG.append(TravelCard(type=TravelCardType.SPECIAL, value=0))
+    while len(TRAVEL_BAG) < 100:
+        TRAVEL_BAG.append(TravelCard(type=TravelCardType.NOTHING, value=0))
 
     @classmethod
     def _draw_hex_card(cls, hx: Hex) -> FullCard:
