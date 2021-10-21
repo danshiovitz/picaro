@@ -129,6 +129,7 @@ class EncounterTest(FlatworldTestBase):
             data=[
                 EncounterCheck(
                     skill=s,
+                    modifier=None,
                     target_number=5,
                     reward=Outcome.GAIN_COINS,
                     penalty=Outcome.LOSE_COINS,
@@ -254,6 +255,23 @@ class EncounterTest(FlatworldTestBase):
         ch = Character.load_by_name(self.CHARACTER)
         EncounterRules.make_encounter(ch, card)
 
+    def test_make_encounter_special_leadership(self) -> None:
+        card = FullCard(
+            uuid="",
+            name=f"Test Card",
+            desc="...",
+            type=FullCardType.SPECIAL,
+            data="leadership",
+            signs=["Zodiac 1", "Zodiac 2"],
+            annotations={"leadership_difficulty": "-1"},
+        )
+        with Character.load_by_name_for_write(self.CHARACTER) as ch:
+            ch.reputation = 10
+        enc = EncounterRules.make_encounter(ch, card)
+        self.assertEqual(len(enc.card.data), 3)
+        self.assertEqual(enc.card.data[0].target_number, 5)
+        self.assertEqual(enc.card.data[0].modifier, 0)
+
     def test_convert_outcome(self) -> None:
         ch = Character.load_by_name(self.CHARACTER)
         card = FullCard(
@@ -264,6 +282,7 @@ class EncounterTest(FlatworldTestBase):
             data=[
                 EncounterCheck(
                     skill=s,
+                    modifier=None,
                     target_number=5,
                     reward=Outcome.GAIN_COINS,
                     penalty=Outcome.LOSE_COINS,
@@ -273,6 +292,8 @@ class EncounterTest(FlatworldTestBase):
             signs=["Zodiac 1", "Zodiac 2"],
         )
         for outcome in Outcome:
+            if outcome == Outcome.VICTORY:
+                continue
             effects = EncounterRules.convert_outcome(outcome, 2, ch, card)
             if outcome == Outcome.NOTHING:
                 self.assertEqual(len(effects), 0, msg=str(outcome))

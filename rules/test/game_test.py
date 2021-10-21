@@ -242,18 +242,11 @@ class GameTest(FlatworldTestBase):
     def test_apply_effects_leadership(self) -> None:
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
             effects = [Effect(type=EffectType.LEADERSHIP, subtype=None, value=-1)]
-            results = defaultdict(int)
-            for _ in range(100):
-                ch.reputation = 10
-                ch.job_name = "Red Job 1"
-                records = []
-                GameRules.apply_effects(ch, [], effects, records)
-                self.assertGreaterEqual(
-                    len(records), 2, msg=str([r._data for r in records])
-                )
-                result = records[0].comments[0].split(" - ")[1]
-                results[result] += 1
-        self.assertEqual(len(results), 4, msg=str(results))
+            records = []
+            GameRules.apply_effects(ch, [], effects, records)
+            self.assertEqual(len(ch.queued), 1)
+            self.assertEqual(ch.queued[0].name, "Leadership Challenge")
+            self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
     def test_apply_effects_transport(self) -> None:
         with Character.load_by_name_for_write(self.CHARACTER) as ch:

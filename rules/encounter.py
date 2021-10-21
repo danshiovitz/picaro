@@ -8,6 +8,7 @@ from picaro.common.storage import make_uuid
 from .character import CharacterRules
 from .lib.deck import shuffle_discard
 from .lib.special_cards import actualize_special_card
+from .types.external import EncounterCommands
 from .types.internal import (
     Character,
     Challenge,
@@ -26,7 +27,6 @@ from .types.internal import (
     TemplateCardType,
     TemplateDeck,
 )
-from .types.external import EncounterCommands
 
 
 # Briefly about the lifecycle of an encounter:
@@ -92,6 +92,7 @@ class EncounterRules:
             type=card_type,
             data=data,
             signs=signs,
+            annotations=val.annotations,
         )
 
     @classmethod
@@ -151,8 +152,10 @@ class EncounterRules:
         # was ending up with some TN 1 or TN 0, which seems pretty lame
         fuzzed = [tn for tn in fuzzed if tn >= 2]
         tn = random.choice(fuzzed)
+        skill = random.choice(skill_bag)
         return EncounterCheck(
-            skill=random.choice(skill_bag),
+            skill=skill,
+            modifier=None,
             target_number=tn,
             reward=random.choice(reward_bag),
             penalty=random.choice(penalty_bag),

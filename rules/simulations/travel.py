@@ -71,7 +71,5 @@ def run() -> None:
     print(line)
 
 
-
-
 if __name__ == "__main__":
     run()

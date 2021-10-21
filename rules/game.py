@@ -179,7 +179,7 @@ class GameRules:
         neighbors = {
             ngh.name for ngh in BoardRules.find_entity_neighbors(ch.uuid, 0, 5)
         }
-        ch.tableau = [t for t in ch.tableau if t.age > 1 and t.location in neighbors]
+        ch.tableau = [t for t in ch.tableau if t.age > 0 and t.location in neighbors]
 
         ch.remaining_turns -= 1
 

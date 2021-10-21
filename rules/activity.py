@@ -1,5 +1,4 @@
 import random
-
 from collections import defaultdict
 from typing import Dict, List, Optional, Sequence, Tuple, cast
 
@@ -11,6 +10,7 @@ from .character import CharacterRules
 from .encounter import EncounterRules
 from .game import GameRules
 from .lib.deck import shuffle_discard
+from .lib.special_cards import make_promo_card
 from .types.external import EncounterCommands, Record as external_Record
 from .types.internal import (
     Character,
@@ -24,10 +24,12 @@ from .types.internal import (
     FullCard,
     FullCardType,
     Gadget,
+    Game,
     Hex,
     HexDeck,
     Outcome,
-    Record, Token,
+    Record,
+    Token,
     TravelCard,
     TravelCardType,
     TurnFlags,
@@ -257,14 +259,16 @@ class ActivityRules:
                 ocs[check.penalty] += 1
                 failures += 1
 
-        mcs = defaultdict(int)
+        victory_points = ocs.pop(Outcome.VICTORY, 0)
 
-        sum_til = lambda v: (v * v + v) // 2
         for outcome, cnt in ocs.items():
             effects.extend(
                 EncounterRules.convert_outcome(outcome, cnt, ch, encounter.card)
             )
-        if failures > 0:
+
+        # Gain failure xp, but not for Leadership or other fake skills
+        all_skills = set(Game.load().skills)
+        if failures > 0 and checks[0].skill in all_skills:
             effects.append(
                 Effect(
                     type=EffectType.MODIFY_XP,
@@ -273,6 +277,77 @@ class ActivityRules:
                 )
             )
 
+        if "victory" in encounter.card.annotations:
+            costs, effects = cls._handle_victory(
+                ch,
+                encounter.card.annotations["victory"],
+                victory_points,
+                costs,
+                effects,
+            )
+        return costs, effects
+
+    @classmethod
+    def _handle_victory(
+        cls,
+        ch: Character,
+        victory_type: str,
+        victory_points: int,
+        costs: List[Effect],
+        effects: List[Effect],
+    ) -> Tuple[List[Effect], List[Effect]]:
+        if victory_type == "leadership":
+            return cls._handle_leadership_victory(ch, victory_points, costs, effects)
+        else:
+            raise Exception(f"Unknown victory type: {victory_type}")
+
+    @classmethod
+    def _handle_leadership_victory(
+        cls,
+        ch: Character,
+        victory_points: int,
+        costs: List[Effect],
+        effects: List[Effect],
+    ) -> Tuple[List[Effect], List[Effect]]:
+        if victory_points <= 1:
+            if victory_points == 1:
+                new_job = CharacterRules.find_demote_job(ch)
+            else:
+                new_job = CharacterRules.find_bad_job(ch)
+            if new_job:
+                effects.append(
+                    Effect(
+                        EffectType.MODIFY_JOB, new_job, comment="leadership challenge"
+                    )
+                )
+            else:
+                # TODO: log some error, we should always be able to find a bad job
+                effects.append(
+                    Effect(
+                        EffectType.MODIFY_REPUTATION,
+                        -20,
+                        comment="leadership challenge",
+                    )
+                )
+        elif victory_points == 2:
+            effects.append(
+                Effect(EffectType.MODIFY_REPUTATION, -2, comment="leadership challenge")
+            )
+        else:
+            new_job = CharacterRules.find_promote_job(ch)
+            if new_job:
+                effects.append(
+                    Effect(
+                        EffectType.MODIFY_JOB, new_job, comment="leadership challenge"
+                    )
+                )
+                ch.queued.append(make_promo_card(ch, ch.job_name))
+            else:
+                effects.append(
+                    Effect(
+                        EffectType.MODIFY_REPUTATION, 3, comment="leadership challenge"
+                    )
+                )
         return costs, effects
 
     @classmethod

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum, auto as enum_auto
+from types import MappingProxyType
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from picaro.common.hexmap.types import OffsetCoordinate
@@ -14,6 +15,7 @@ class Outcome(Enum):
     GAIN_RESOURCES = enum_auto()
     GAIN_TURNS = enum_auto()
     GAIN_SPEED = enum_auto()
+    VICTORY = enum_auto()
     LOSE_COINS = enum_auto()
     LOSE_REPUTATION = enum_auto()
     DAMAGE = enum_auto()
@@ -137,6 +139,7 @@ class Trigger:
 @dataclass(frozen=True)
 class EncounterCheck:
     skill: str
+    modifier: Optional[int]
     target_number: int
     reward: Outcome
     penalty: Outcome
@@ -183,6 +186,7 @@ class TemplateCard:
     desc: str
     type: TemplateCardType
     data: Any
+    annotations: Dict[str, str] = MappingProxyType({})
 
     @classmethod
     def type_field(cls) -> str:
@@ -219,6 +223,7 @@ class FullCard:
     type: FullCardType
     data: Any
     signs: Sequence[str]
+    annotations: Dict[str, str] = MappingProxyType({})
 
     @classmethod
     def type_field(cls) -> str:

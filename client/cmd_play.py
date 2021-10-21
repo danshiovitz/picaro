@@ -1,3 +1,4 @@
+import re
 import sys
 from collections import defaultdict
 from string import ascii_lowercase
@@ -363,7 +364,7 @@ class PlayRunner:
         checks: Sequence[EncounterCheck],
         rolls: Sequence[Sequence[int]],
     ) -> EncounterCommands:
-        rolls = list(rolls[:])
+        final_rolls = [r[-1] for r in rolls]
         luck_spent = 0
         transfers = []
         adjusts = []
@@ -373,9 +374,13 @@ class PlayRunner:
             print()
             for idx, check in enumerate(checks):
                 status = (
-                    "SUCCESS" if rolls[idx][-1] >= check.target_number else "FAILURE"
+                    "SUCCESS" if final_rolls[idx] >= check.target_number else "FAILURE"
                 )
-                roll_str = ",".join(str(r) for r in rolls[idx])
+                roll_str = str(final_rolls[idx])
+                if len(rolls[idx]) > 1:
+                    roll_str = (
+                        ",".join(str(r) for r in rolls[idx][:-1]) + "/" + roll_str
+                    )
                 print(
                     f"Check #{idx+1}: {self.client.render_check(check)}: "
                     f"{roll_str} - {status}"
@@ -398,32 +403,32 @@ class PlayRunner:
                     continue
                 from_c = int(m.group(1)) - 1
                 to_c = int(m.group(2)) - 1
-                if not (0 <= from_c < len(rolls)):
+                if not (0 <= from_c < len(final_rolls)):
                     print(f"Bad from check: {from_c + 1}")
                     continue
-                if not (0 <= to_c < len(rolls)):
+                if not (0 <= to_c < len(final_rolls)):
                     print(f"Bad to check: {to_c + 1}")
                     continue
-                if rolls[from_c][-1] < 2:
-                    print(f"From roll has insufficient value ({rolls[from_c][-1]})")
+                if final_rolls[from_c] < 2:
+                    print(f"From roll has insufficient value ({final_rolls[from_c]})")
                     continue
                 transfers.append((from_c, to_c))
-                rolls[from_c][-1] -= 2
-                rolls[to_c][-1] += 1
+                final_rolls[from_c] -= 2
+                final_rolls[to_c] += 1
             elif line[0] == "a":
                 m = re.match(r"^a\w*\s+([0-9]+)$", line)
                 if not m:
                     print("Expected: adjust <check num>")
                     continue
                 adj_c = int(m.group(1)) - 1
-                if not (0 <= adj_c < len(rolls)):
+                if not (0 <= adj_c < len(final_rolls)):
                     print(f"Bad adjust check: {adj_c + 1}")
                     continue
                 if ch.luck - luck_spent <= 0:
                     print(f"Luck has insufficient value")
                     continue
                 adjusts.append(adj_c)
-                rolls[adj_c][-1] += 1
+                final_rolls[adj_c] += 1
                 luck_spent += 1
             elif line[0] == "g":
                 break
@@ -437,7 +442,7 @@ class PlayRunner:
             transfers=transfers,
             adjusts=adjusts,
             luck_spent=luck_spent,
-            rolls=[r[-1] for r in rolls],
+            rolls=final_rolls,
             choices={},
         )
 

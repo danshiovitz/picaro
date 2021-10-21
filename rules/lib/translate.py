@@ -4,6 +4,21 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, T
 from picaro.common.hexmap.types import CubeCoordinate, OffsetCoordinate
 from picaro.rules.board import BoardRules
 from picaro.rules.character import CharacterRules
+from picaro.rules.types.external import (
+    Action as external_Action,
+    Character as external_Character,
+    Country as external_Country,
+    Encounter as external_Encounter,
+    EncounterType as external_EncounterType,
+    Entity as external_Entity,
+    Gadget as external_Gadget,
+    Game as external_Game,
+    Hex as external_Hex,
+    Job as external_Job,
+    Record as external_Record,
+    TableauCard as external_TableauCard,
+    TemplateDeck as external_TemplateDeck,
+)
 from picaro.rules.types.internal import (
     Action,
     Character,
@@ -22,21 +37,6 @@ from picaro.rules.types.internal import (
     TableauCard,
     TemplateDeck,
     Token,
-)
-from picaro.rules.types.external import (
-    Action as external_Action,
-    Character as external_Character,
-    Country as external_Country,
-    Encounter as external_Encounter,
-    EncounterType as external_EncounterType,
-    Entity as external_Entity,
-    Gadget as external_Gadget,
-    Game as external_Game,
-    Hex as external_Hex,
-    Job as external_Job,
-    Record as external_Record,
-    TableauCard as external_TableauCard,
-    TemplateDeck as external_TemplateDeck,
 )
 
 

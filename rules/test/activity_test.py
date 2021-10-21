@@ -256,18 +256,21 @@ class ActivityTest(FlatworldTestBase):
                 data=[
                     EncounterCheck(
                         skill="Skill 1",
+                        modifier=None,
                         target_number=6,
                         reward=Outcome.GAIN_COINS,
                         penalty=Outcome.LOSE_COINS,
                     ),
                     EncounterCheck(
                         skill="Skill 2",
+                        modifier=None,
                         target_number=6,
                         reward=Outcome.GAIN_REPUTATION,
                         penalty=Outcome.LOSE_REPUTATION,
                     ),
                     EncounterCheck(
                         skill="Skill 3",
+                        modifier=None,
                         target_number=6,
                         reward=Outcome.GAIN_SPEED,
                         penalty=Outcome.LOSE_SPEED,

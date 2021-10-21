@@ -100,12 +100,7 @@ class RenderClientBase(ClientBase):
                 line = f"* {subj} have "
             else:
                 line = f"* {subj} has "
-            if record.new_value <= 0:
-                line += f"lost in a leadership challenge"
-            elif record.new_value > 1:
-                line += f"triumphed in a leadership challenge"
-            else:
-                line += f"survived a leadership challenge"
+            line += f"entered into a leadership challenge"
         else:
             line += f"UNKNOWN EVENT TYPE: {record}"
 
@@ -124,6 +119,7 @@ class RenderClientBase(ClientBase):
             Outcome.GAIN_RESOURCES: "+resources",
             Outcome.GAIN_TURNS: "+turns",
             Outcome.GAIN_SPEED: "+speed",
+            Outcome.VICTORY: "+victory",
             Outcome.LOSE_COINS: "-coins",
             Outcome.LOSE_REPUTATION: "-reputation",
             Outcome.DAMAGE: "-damage",
@@ -252,8 +248,12 @@ class RenderClientBase(ClientBase):
     def render_check(self, check: EncounterCheck) -> str:
         reward_name = self.render_outcome(check.reward)
         penalty_name = self.render_outcome(check.penalty)
-        ret = check.skill
-        ret += f" (1d8{self.character.skills[check.skill]:+}) vs {check.target_number}"
+        modifier = (
+            check.modifier
+            if check.modifier is not None
+            else self.character.skills[check.skill]
+        )
+        ret = f"{check.skill} (1d8{modifier:+}) vs {check.target_number}"
         ret += f" ({reward_name} / {penalty_name})"
         return ret
 
