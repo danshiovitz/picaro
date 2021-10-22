@@ -252,8 +252,58 @@ class EncounterTest(FlatworldTestBase):
             data="trade",
             signs=["Zodiac 1", "Zodiac 2"],
         )
+        with Character.load_by_name_for_write(self.CHARACTER) as ch:
+            ch.resources = {"Resource A1": 3, "Resource B1": 2, "Resource C": 1}
         ch = Character.load_by_name(self.CHARACTER)
-        EncounterRules.make_encounter(ch, card)
+        self._make_trade_price(ch)
+        enc = EncounterRules.make_encounter(ch, card)
+        self.assertEqual(len(enc.card.data.choice_list), 3)
+        cmbs = {}
+        for choice in enc.card.data.choice_list:
+            self.assertEqual(len(choice.costs), 1)
+            self.assertEqual(choice.costs[0].type, EffectType.MODIFY_RESOURCES)
+            self.assertEqual(len(choice.effects), 1)
+            self.assertEqual(choice.effects[0].type, EffectType.MODIFY_COINS)
+            cmbs[choice.costs[0].subtype] = (
+                choice.max_choices,
+                choice.effects[0].value,
+            )
+        self.assertEqual(
+            cmbs, {"Resource A1": (3, 5), "Resource B1": (2, 7), "Resource C": (1, 2)}
+        )
+
+    def _make_trade_price(self, ch: Character) -> None:
+        guuid = Gadget.create(
+            uuid="",
+            name="Trade Certificate",
+            desc=None,
+            entity=ch.uuid,
+            triggers=[],
+            overlays=[],
+            actions=[],
+        )
+        with Gadget.load_for_write(guuid) as gadget:
+            gadget.add_overlay_object(
+                Overlay(
+                    uuid="",
+                    type=OverlayType.TRADE_PRICE,
+                    subtype="Resource B1",
+                    value=2,
+                    is_private=True,
+                    filters=[],
+                )
+            )
+            gadget.add_overlay_object(
+                Overlay(
+                    uuid="",
+                    type=OverlayType.TRADE_PRICE,
+                    subtype="Resource C",
+                    value=-3,
+                    is_private=True,
+                    filters=[],
+                )
+            )
+        get_rules_cache().overlays.clear()
 
     def test_make_encounter_special_leadership(self) -> None:
         card = FullCard(

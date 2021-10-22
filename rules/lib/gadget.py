@@ -5,6 +5,8 @@ from picaro.rules.base import get_rules_cache
 from picaro.rules.types.internal import (
     Action,
     Character,
+    Effect,
+    EffectType,
     EntityType,
     Filter,
     Gadget,
@@ -55,6 +57,31 @@ def load_available_overlays(
                 continue
             overlays[(overlay.type, overlay.subtype)].append(overlay)
     return overlays
+
+
+def compute_trigger_effects(
+    entity_uuid: str,
+    type: TriggerType,
+    subtype: Optional[str],
+    filter_func: Callable[[Filter], bool],
+) -> List[Effect]:
+    rules_cache = get_rules_cache()
+    if entity_uuid not in rules_cache.triggers:
+        rules_cache.triggers[entity_uuid] = load_available_triggers(entity_uuid)
+    triggers = rules_cache.triggers[entity_uuid]
+
+    trigger_list = []
+    if subtype is not None:
+        trigger_list.extend(triggers.get((type, None), []))
+    trigger_list.extend(triggers.get((type, subtype), []))
+
+    effects: List[Effect] = []
+
+    for trigger in trigger_list:
+        if not all(filter_func(f) for f in trigger.filters):
+            continue
+        effects.extend(trigger.effects)
+    return effects
 
 
 def load_available_triggers(

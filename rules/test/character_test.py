@@ -14,6 +14,8 @@ from picaro.rules.test.test_base import FlatworldTestBase
 from picaro.rules.types.internal import (
     Action,
     Character,
+    Effect,
+    EffectType,
     Filter,
     FilterType,
     Gadget,
@@ -21,6 +23,8 @@ from picaro.rules.types.internal import (
     OverlayType,
     Route,
     RouteType,
+    Trigger,
+    TriggerType,
 )
 
 
@@ -234,6 +238,70 @@ class CharacterTest(FlatworldTestBase):
                 msg=str(name_map[action.name][0]),
             )
 
+    def test_triggers(self) -> None:
+        ch = Character.load_by_name(self.CHARACTER)
+        guuid = self._add_emblem(ch.uuid, triggers=[])
+        effects = CharacterRules.run_triggers(ch, TriggerType.MOVE_HEX, "AA08")
+        self.assertEqual(len(effects), 0)
+
+        with Gadget.load_for_write(guuid) as gadget:
+            gadget.add_trigger_object(self._trigger_helper(EffectType.MODIFY_COINS))
+            gadget.add_trigger_object(
+                self._trigger_helper(EffectType.MODIFY_SPEED, subtype="AA08")
+            )
+            gadget.add_trigger_object(
+                self._trigger_helper(EffectType.MODIFY_REPUTATION, subtype="AB10")
+            )
+            gadget.add_trigger_object(
+                self._trigger_helper(
+                    EffectType.MODIFY_LUCK,
+                    subtype="AC05",
+                    filters=[Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=1)],
+                )
+            )
+            gadget.add_trigger_object(
+                self._trigger_helper(
+                    EffectType.MODIFY_HEALTH,
+                    subtype=None,
+                    filters=[Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=1)],
+                )
+            )
+            get_rules_cache().triggers.pop(ch.uuid, None)
+
+        effects = CharacterRules.run_triggers(ch, TriggerType.MOVE_HEX, None)
+        self.assertEqual({e.type for e in effects}, {EffectType.MODIFY_COINS})
+        effects = CharacterRules.run_triggers(ch, TriggerType.MOVE_HEX, "AA08")
+        self.assertEqual(
+            {e.type for e in effects},
+            {EffectType.MODIFY_COINS, EffectType.MODIFY_SPEED},
+        )
+        effects = CharacterRules.run_triggers(ch, TriggerType.MOVE_HEX, "AB10")
+        self.assertEqual(
+            {e.type for e in effects},
+            {EffectType.MODIFY_COINS, EffectType.MODIFY_REPUTATION},
+        )
+        effects = CharacterRules.run_triggers(ch, TriggerType.MOVE_HEX, "AC05")
+        self.assertEqual({e.type for e in effects}, {EffectType.MODIFY_COINS})
+
+        with Character.load_by_name_for_write(self.CHARACTER) as ch:
+            ch.skill_xp["Skill 3"] = 25
+        self.assertEqual(1, CharacterRules.get_skill_rank(ch, "Skill 3"))
+
+        effects = CharacterRules.run_triggers(ch, TriggerType.MOVE_HEX, "AB10")
+        self.assertEqual(
+            {e.type for e in effects},
+            {
+                EffectType.MODIFY_COINS,
+                EffectType.MODIFY_REPUTATION,
+                EffectType.MODIFY_HEALTH,
+            },
+        )
+        effects = CharacterRules.run_triggers(ch, TriggerType.MOVE_HEX, "AC05")
+        self.assertEqual(
+            {e.type for e in effects},
+            {EffectType.MODIFY_COINS, EffectType.MODIFY_LUCK, EffectType.MODIFY_HEALTH},
+        )
+
     def test_find_promote_job(self) -> None:
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
             self.assertEqual(CharacterRules.find_promote_job(ch), "Red Job 2")
@@ -253,7 +321,11 @@ class CharacterTest(FlatworldTestBase):
             self.assertEqual(CharacterRules.find_bad_job(ch), "Green Job")
 
     def _add_emblem(
-        self, entity_uuid: str, overlays: List[Overlay] = [], actions: List[Action] = []
+        self,
+        entity_uuid: str,
+        overlays: List[Overlay] = [],
+        triggers: List[Trigger] = [],
+        actions: List[Action] = [],
     ) -> str:
         guuid = Gadget.create(
             uuid="",
@@ -267,6 +339,8 @@ class CharacterTest(FlatworldTestBase):
         with Gadget.load_for_write(guuid) as gadget:
             for overlay in overlays:
                 gadget.add_overlay_object(overlay)
+            for trigger in triggers:
+                gadget.add_trigger_object(trigger)
             for action in actions:
                 gadget.add_action_object(action)
         return guuid
@@ -277,6 +351,21 @@ class CharacterTest(FlatworldTestBase):
             type=OverlayType.SKILL_RANK,
             subtype="Skill 3",
             value=value,
+            is_private=True,
+            filters=filters,
+        )
+
+    def _trigger_helper(
+        self,
+        effect_type: EffectType,
+        subtype: Optional[str] = None,
+        filters: List[Filter] = [],
+    ) -> Trigger:
+        return Trigger(
+            uuid="",
+            type=TriggerType.MOVE_HEX,
+            subtype=subtype,
+            effects=[Effect(type=effect_type, subtype=None, value=1)],
             is_private=True,
             filters=filters,
         )

@@ -48,6 +48,8 @@ from .types.internal import (
     TableauCard,
     TemplateDeck,
     Token,
+    Trigger,
+    TriggerType,
     TurnFlags,
 )
 
@@ -160,11 +162,20 @@ class GameRules:
                 )
             )
 
+        if cls.run_triggers(ch, TriggerType.START_TURN, None, records):
+            cls.intra_turn(ch, records)
+
     @classmethod
     def end_turn(cls, ch: Character, records: List[Record]) -> None:
         cls.intra_turn(ch, records)
         if cls.encounter_check(ch):
             return
+
+        if not ch.check_set_flag(TurnFlags.RAN_END_TURN_TRIGGERS):
+            if cls.run_triggers(ch, TriggerType.END_TURN, None, records):
+                cls.intra_turn(ch, records)
+                if cls.encounter_check(ch):
+                    return
 
         queue_bad_reputation_check(ch)
         if cls.encounter_check(ch):
@@ -207,6 +218,17 @@ class GameRules:
             return True
         else:
             return False
+
+    @classmethod
+    def run_triggers(
+        cls,
+        ch: Character,
+        type: TriggerType,
+        subtype: Optional[str],
+        records: List[Record],
+    ) -> bool:
+        effects = CharacterRules.run_triggers(ch, type, subtype)
+        cls.apply_effects(ch, [], effects, records)
 
     @classmethod
     def save_translate_records(

@@ -32,6 +32,7 @@ from .types.internal import (
     Token,
     TravelCard,
     TravelCardType,
+    TriggerType,
     TurnFlags,
 )
 
@@ -95,7 +96,7 @@ class ActivityRules:
             # in records (this might be wrong, especially if we eventually want records
             # to be a true undo log, but it makes the client easier for now)
             ch.speed -= 1
-            # CharacterRules.run_triggers(ch, TriggerType.TRAVEL_TO_HEX, records)
+            GameRules.run_triggers(ch, TriggerType.MOVE_HEX, hex, records)
 
             if TurnFlags.HAD_TRAVEL_ENCOUNTER not in ch.turn_flags:
                 card = cls._draw_travel_card(ch, hex)

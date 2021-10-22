@@ -108,6 +108,7 @@ class OverlayType(Enum):
     INIT_SPEED = enum_auto()
     MAX_RESOURCES = enum_auto()
     INIT_REPUTATION = enum_auto()
+    TRADE_PRICE = enum_auto()
 
 
 @dataclass(frozen=True)
@@ -122,15 +123,15 @@ class Overlay:
 
 class TriggerType(Enum):
     MOVE_HEX = enum_auto()
-    TURN_BEGIN = enum_auto()
-    TURN_END = enum_auto()
+    START_TURN = enum_auto()
+    END_TURN = enum_auto()
 
 
 @dataclass(frozen=True)
 class Trigger:
     uuid: str
     type: TriggerType
-    effects: List[Effect]
+    effects: Sequence[Effect]
     subtype: Optional[str]
     is_private: bool
     filters: Sequence[Filter]

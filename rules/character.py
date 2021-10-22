@@ -6,10 +6,15 @@ from picaro.common.exceptions import IllegalMoveException
 from picaro.common.utils import clamp, pop_func
 
 from .board import BoardRules
-from .lib.gadget import compute_overlay_value, load_available_actions
+from .lib.gadget import (
+    compute_overlay_value,
+    compute_trigger_effects,
+    load_available_actions,
+)
 from .types.internal import (
     Action,
     Character,
+    Effect,
     Encounter,
     EncounterContextType,
     Entity,
@@ -28,6 +33,8 @@ from .types.internal import (
     RouteType,
     TableauCard,
     Token,
+    Trigger,
+    TriggerType,
 )
 
 
@@ -113,6 +120,17 @@ class CharacterRules:
                 if best is not None:
                     routes[action.uuid] = Route(type=RouteType.NORMAL, steps=best)
         return actions, routes
+
+    @classmethod
+    def run_triggers(
+        cls, ch: Character, type: TriggerType, subtype: Optional[str]
+    ) -> List[Effect]:
+        return compute_trigger_effects(
+            ch.uuid,
+            type,
+            subtype,
+            lambda f: cls._check_filter(ch, f, skip_overlays=True),
+        )
 
     @classmethod
     def get_init_turns(cls, ch: Character) -> int:
@@ -205,6 +223,12 @@ class CharacterRules:
         else:
             raise Exception(f"Unknown job type: {job.type}")
         return cls._clamp_overlay(base_speed, ch, OverlayType.INIT_SPEED)
+
+    @classmethod
+    def get_trade_price(cls, ch: Character, resource_name: str) -> int:
+        return cls._clamp_overlay(
+            5, ch, OverlayType.TRADE_PRICE, resource_name, min=1, max=10
+        )
 
     @classmethod
     def _clamp_overlay(

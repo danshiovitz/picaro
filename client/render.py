@@ -210,6 +210,7 @@ class RenderClientBase(ClientBase):
             OverlayType.SKILL_RANK: "rank",
             OverlayType.RELIABLE_SKILL: "reliability",
             OverlayType.MAX_RESOURCES: "resource limit",
+            OverlayType.TRADE_PRICE: "trade price",
         }
         name = names.get(overlay.type, overlay.type.name)
         if overlay.subtype:

@@ -1,9 +1,9 @@
 from collections import defaultdict
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Set, Tuple
 
-from .types.internal import Overlay, OverlayType
+from .types.internal import Overlay, OverlayType, Trigger, TriggerType
 
 
 @dataclass
@@ -12,8 +12,14 @@ class RulesContext:
     # active entity or anything
     character_name: str
     # cache of all the overlays visible to each entity, sorted by type
-    overlays: Dict[str, Dict[Tuple[OverlayType, str], List[Overlay]]]
-    in_use_overlays: Set[str]
+    overlays: Dict[str, Dict[Tuple[OverlayType, str], List[Overlay]]] = field(
+        default_factory=dict
+    )
+    in_use_overlays: Set[str] = field(default_factory=set)
+    # cache of triggers
+    triggers: Dict[str, Dict[Tuple[TriggerType, str], List[Trigger]]] = field(
+        default_factory=dict
+    )
 
 
 rules_cache: ContextVar[RulesContext] = ContextVar("rules_cache")
@@ -28,9 +34,7 @@ class RulesManager:
             raise Exception(
                 "Trying to create a nested rules cache, this is probably bad"
             )
-        new_ctx = RulesContext(
-            character_name=self.character_name, overlays={}, in_use_overlays=set()
-        )
+        new_ctx = RulesContext(character_name=self.character_name)
         self.ctx_token = rules_cache.set(new_ctx)
         return self
 

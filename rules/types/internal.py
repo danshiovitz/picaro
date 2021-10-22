@@ -338,6 +338,7 @@ class TurnFlags(Enum):
     ACTED = enum_auto()
     HAD_TRAVEL_ENCOUNTER = enum_auto()
     BAD_REP_CHECKED = enum_auto()
+    RAN_END_TURN_TRIGGERS = enum_auto()
 
 
 class Character(StandardWrapper):

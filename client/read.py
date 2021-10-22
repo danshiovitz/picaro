@@ -167,6 +167,7 @@ class ReadClientBase(RenderClientBase):
         init: List[Overlay],
     ) -> List[Overlay]:
         skills = self.skills.get_all()
+        resources = self.resources.get_all()
         overlay_choices = [
             (
                 "Modify init tableau age <amount>",
@@ -207,6 +208,12 @@ class ReadClientBase(RenderClientBase):
             (
                 "Modify resource limit <amount>",
                 lambda ln: self._lparse_overlay(OverlayType.MAX_RESOURCES, ln),
+            ),
+            (
+                "Modify trade price <amount> <resource>",
+                lambda ln: self._lparse_overlay(
+                    OverlayType.TRADE_PRICE, ln, subtypes=resources
+                ),
             ),
         ]
 

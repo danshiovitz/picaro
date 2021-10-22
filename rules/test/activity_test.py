@@ -10,6 +10,7 @@ from unittest import main
 
 from picaro.common.exceptions import BadStateException, IllegalMoveException
 from picaro.rules.activity import ActivityRules
+from picaro.rules.base import get_rules_cache
 from picaro.rules.board import BoardRules
 from picaro.rules.test.test_base import FlatworldTestBase
 from picaro.rules.types.external import EncounterCommands
@@ -29,6 +30,8 @@ from picaro.rules.types.internal import (
     Outcome,
     TemplateCard,
     TemplateCardType,
+    Trigger,
+    TriggerType,
     TurnFlags,
 )
 
@@ -168,6 +171,12 @@ class ActivityTest(FlatworldTestBase):
         _records = ActivityRules.travel(self.CHARACTER, "AC09")
         self.assertEqual(BoardRules.get_single_token_hex(ch.uuid).name, "AC09")
 
+        self._add_trigger(ch, "AC10")
+        records = ActivityRules.travel(self.CHARACTER, "AC10")
+        self.assertEqual(len(records), 1)
+        ch = Character.load_by_name(self.CHARACTER)
+        self.assertEqual(ch.coins, 5)
+
         # we expect some but not all the time to get a travel encounter
         enc_cnt = 0
         for idx in range(40):
@@ -175,7 +184,7 @@ class ActivityTest(FlatworldTestBase):
                 ch.speed = 3
                 ch.turn_flags.clear()
                 ch.encounter = None
-            ActivityRules.travel(self.CHARACTER, "AC09" if idx % 2 == 1 else "AC10")
+            ActivityRules.travel(self.CHARACTER, "AC09" if idx % 2 == 0 else "AC10")
             ch = Character.load_by_name(self.CHARACTER)
             if ch.encounter:
                 enc_cnt += 1
@@ -186,6 +195,26 @@ class ActivityTest(FlatworldTestBase):
 
         # TODO: maybe run some stats on relative kinds of travel encounters,
         # maybe taking hex danger into account
+
+    def _add_trigger(self, ch: Character, hex: str) -> None:
+        guuid = Gadget.create(
+            uuid="",
+            name="Thing-o-matic",
+            desc=None,
+            entity=ch.uuid,
+            triggers=[],
+            overlays=[],
+            actions=[],
+        )
+        with Gadget.load_for_write(guuid) as gadget:
+            gadget.add_trigger(
+                type=TriggerType.MOVE_HEX,
+                subtype=hex,
+                effects=[Effect(type=EffectType.MODIFY_COINS, subtype=None, value=5)],
+                is_private=False,
+                filters=[],
+            )
+        get_rules_cache().triggers.pop(ch.uuid, None)
 
     def test_end_turn(self) -> None:
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
