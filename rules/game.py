@@ -17,7 +17,7 @@ from .lib.fields import (
     TransportField,
     ModifyLocationField,
     ModifyActivityField,
-    AddEmblemField,
+    AddTitleField,
     QueueEncounterField,
     ModifyFreeXpField,
 )
@@ -38,11 +38,11 @@ from .types.internal import (
     EncounterContextType,
     EntityType,
     Entity,
-    Gadget,
     Game,
     Hex,
     HexDeck,
     Job,
+    Overlay,
     Record,
     ResourceDeck,
     TableauCard,
@@ -71,25 +71,25 @@ class GameRules:
         Job.insert(translate.from_external_job(j) for j in data.jobs)
         Country.insert(translate.from_external_country(c) for c in data.countries)
         Hex.insert(translate.from_external_hex(h) for h in data.hexes)
-        hex_types = {hx.terrain for hx in data.hexes}
-        HexDeck.insert(HexDeck.create_detached(name=t, cards=[]) for t in hex_types)
-        ResourceDeck.insert(
-            ResourceDeck.create_detached(name=c.name, cards=[]) for c in data.countries
-        )
-        ResourceDeck.insert([ResourceDeck.create_detached(name="Wild", cards=[])])
-        entities: List[external_Entity] = []
-        gadgets: List[external_Gadget] = []
-        tokens: List[external_Token] = []
+        entities: List[Entity] = []
+        tokens: List[Token] = []
+        overlays: List[Overlay] = []
+        triggers: List[Trigger] = []
         for external_entity in data.entities:
-            cur_entity, cur_gadgets, cur_tokens = translate.from_external_entity(
-                external_entity
-            )
+            (
+                cur_entity,
+                cur_tokens,
+                cur_overlays,
+                cur_triggers,
+            ) = translate.from_external_entity(external_entity)
             entities.append(cur_entity)
-            gadgets.extend(cur_gadgets)
             tokens.extend(cur_tokens)
+            overlays.extend(cur_overlays)
+            triggers.extend(cur_triggers)
         Entity.insert(entities)
-        Gadget.insert(gadgets)
         Token.insert(tokens)
+        Overlay.insert(overlays)
+        Trigger.insert(triggers)
         return game
 
     @classmethod
@@ -110,6 +110,7 @@ class GameRules:
         records: List[Record] = []
         with Character.load_by_name_for_write(character_name) as ch:
             cls.start_season(ch, records)
+        return ch_uuid
 
     @classmethod
     def _create_entity(
@@ -298,7 +299,7 @@ class GameRules:
         lambda _vs: [ModifyLocationField()],
         lambda _vs: [ModifyActivityField()],
         lambda _vs: [SimpleIntField("coins", "coins", EffectType.MODIFY_COINS)],
-        lambda _vs: [AddEmblemField()],
+        lambda _vs: [AddTitleField()],
         lambda _vs: [QueueEncounterField()],
         lambda _vs: [SimpleIntField("luck", "luck", EffectType.MODIFY_LUCK)],
         lambda _vs: [

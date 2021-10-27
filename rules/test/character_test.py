@@ -12,13 +12,11 @@ from picaro.rules.board import BoardRules
 from picaro.rules.character import CharacterRules
 from picaro.rules.test.test_base import FlatworldTestBase
 from picaro.rules.types.internal import (
-    Action,
     Character,
     Effect,
     EffectType,
     Filter,
     FilterType,
-    Gadget,
     Overlay,
     OverlayType,
     Route,
@@ -66,28 +64,20 @@ class CharacterTest(FlatworldTestBase):
 
     def test_overlays(self) -> None:
         ch = Character.load_by_name(self.CHARACTER)
-        guuid = self._add_emblem(ch.uuid, overlays=[])
         self.assertEqual(0, CharacterRules.get_skill_rank(ch, "Skill 3"))
 
-        with Gadget.load_for_write(guuid) as gadget:
-            gadget.add_overlay_object(self._overlay_helper())
-            get_rules_cache().overlays.pop(ch.uuid, None)
-
+        self._overlay_helper()
         self.assertEqual(1, CharacterRules.get_skill_rank(ch, "Skill 3"))
 
-        with Gadget.load_for_write(guuid) as gadget:
-            gadget.add_overlay_object(
-                self._overlay_helper(
-                    filters=[
-                        Filter(
-                            type=FilterType.IN_COUNTRY,
-                            subtype="Bravo",
-                            value=None,
-                        ),
-                    ]
-                )
-            )
-            get_rules_cache().overlays.pop(ch.uuid, None)
+        self._overlay_helper(
+            filters=[
+                Filter(
+                    type=FilterType.IN_COUNTRY,
+                    subtype="Bravo",
+                    value=None,
+                ),
+            ]
+        )
         # Make sure they're in Alpha:
         BoardRules.move_token_for_entity(ch.uuid, "AF01", adjacent=False)
         self.assertEqual(1, CharacterRules.get_skill_rank(ch, "Skill 3"))
@@ -147,22 +137,13 @@ class CharacterTest(FlatworldTestBase):
         num_overlays = 10
 
         ch = Character.load_by_name(self.CHARACTER)
-        guuid = self._add_emblem(ch.uuid, overlays=[])
-        with Gadget.load_for_write(guuid) as gadget:
-            for i in range(num_overlays):
-                gadget.add_overlay_object(
-                    self._overlay_helper(
-                        value=1,
-                        filters=[
-                            Filter(
-                                type=FilterType.SKILL_GTE, subtype="Skill 3", value=i
-                            )
-                        ]
-                        if i > 0
-                        else [],
-                    )
-                )
-            get_rules_cache().overlays.pop(ch.uuid, None)
+        for i in range(num_overlays):
+            self._overlay_helper(
+                value=1,
+                filters=[Filter(type=FilterType.SKILL_GTE, subtype="Skill 3", value=i)]
+                if i > 0
+                else [],
+            )
 
         # most don't apply because they're filtered on base rank
         self.assertEqual(1, CharacterRules.get_skill_rank(ch, "Skill 3"))
@@ -225,9 +206,7 @@ class CharacterTest(FlatworldTestBase):
         ]
         name_map = {f"Zap{i}": f for i, f in enumerate(filters_list)}
         for name, filters in name_map.items():
-            self._add_emblem(
-                ch.uuid, actions=[self._action_helper(name, filters=filters[0])]
-            )
+            self._action_helper(name, filters=filters[0])
 
         actions, routes = CharacterRules.get_relevant_actions(ch, radius=3)
         self.assertEqual(len(actions), len(filters_list))
@@ -240,33 +219,22 @@ class CharacterTest(FlatworldTestBase):
 
     def test_triggers(self) -> None:
         ch = Character.load_by_name(self.CHARACTER)
-        guuid = self._add_emblem(ch.uuid, triggers=[])
         effects = CharacterRules.run_triggers(ch, TriggerType.MOVE_HEX, "AA08")
         self.assertEqual(len(effects), 0)
 
-        with Gadget.load_for_write(guuid) as gadget:
-            gadget.add_trigger_object(self._trigger_helper(EffectType.MODIFY_COINS))
-            gadget.add_trigger_object(
-                self._trigger_helper(EffectType.MODIFY_SPEED, subtype="AA08")
-            )
-            gadget.add_trigger_object(
-                self._trigger_helper(EffectType.MODIFY_REPUTATION, subtype="AB10")
-            )
-            gadget.add_trigger_object(
-                self._trigger_helper(
-                    EffectType.MODIFY_LUCK,
-                    subtype="AC05",
-                    filters=[Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=1)],
-                )
-            )
-            gadget.add_trigger_object(
-                self._trigger_helper(
-                    EffectType.MODIFY_HEALTH,
-                    subtype=None,
-                    filters=[Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=1)],
-                )
-            )
-            get_rules_cache().triggers.pop(ch.uuid, None)
+        self._trigger_helper(EffectType.MODIFY_COINS)
+        self._trigger_helper(EffectType.MODIFY_SPEED, subtype="AA08")
+        self._trigger_helper(EffectType.MODIFY_REPUTATION, subtype="AB10")
+        self._trigger_helper(
+            EffectType.MODIFY_LUCK,
+            subtype="AC05",
+            filters=[Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=1)],
+        )
+        self._trigger_helper(
+            EffectType.MODIFY_HEALTH,
+            subtype=None,
+            filters=[Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=1)],
+        )
 
         effects = CharacterRules.run_triggers(ch, TriggerType.MOVE_HEX, None)
         self.assertEqual({e.type for e in effects}, {EffectType.MODIFY_COINS})
@@ -320,34 +288,8 @@ class CharacterTest(FlatworldTestBase):
             CharacterRules.switch_job(ch, "Red Job 2")
             self.assertEqual(CharacterRules.find_bad_job(ch), "Green Job")
 
-    def _add_emblem(
-        self,
-        entity_uuid: str,
-        overlays: List[Overlay] = [],
-        triggers: List[Trigger] = [],
-        actions: List[Action] = [],
-    ) -> str:
-        guuid = Gadget.create(
-            uuid="",
-            name="Skill Certificate",
-            desc=None,
-            entity=entity_uuid,
-            triggers=[],
-            overlays=[],
-            actions=[],
-        )
-        with Gadget.load_for_write(guuid) as gadget:
-            for overlay in overlays:
-                gadget.add_overlay_object(overlay)
-            for trigger in triggers:
-                gadget.add_trigger_object(trigger)
-            for action in actions:
-                gadget.add_action_object(action)
-        return guuid
-
-    def _overlay_helper(self, value=1, filters: List[Filter] = []) -> Overlay:
-        return Overlay(
-            uuid="",
+    def _overlay_helper(self, value=1, filters: List[Filter] = []) -> None:
+        self.add_overlay(
             type=OverlayType.SKILL_RANK,
             subtype="Skill 3",
             value=value,
@@ -360,20 +302,22 @@ class CharacterTest(FlatworldTestBase):
         effect_type: EffectType,
         subtype: Optional[str] = None,
         filters: List[Filter] = [],
-    ) -> Trigger:
-        return Trigger(
-            uuid="",
+    ) -> None:
+        self.add_trigger(
+            name=None,
             type=TriggerType.MOVE_HEX,
             subtype=subtype,
+            costs=[],
             effects=[Effect(type=effect_type, subtype=None, value=1)],
             is_private=True,
             filters=filters,
         )
 
-    def _action_helper(self, name: str, filters: List[Filter] = []) -> Action:
-        return Action(
-            uuid="",
+    def _action_helper(self, name: str, filters: List[Filter] = []) -> None:
+        self.add_trigger(
             name=name,
+            type=TriggerType.ACTION,
+            subtype=None,
             costs=[],
             effects=[],
             is_private=True,

@@ -92,7 +92,8 @@ class BoardRules:
     @classmethod
     def draw_resource_card(cls, hex_name: str) -> ResourceCard:
         hx = Hex.load(hex_name)
-        with ResourceDeck.load_for_write(hx.country) as deck:
+        df = lambda: ResourceDeck.create_detached(name=hx.country, cards=[])
+        with ResourceDeck.load_for_write(hx.country, if_missing=df) as deck:
             if not deck.cards:
                 deck.cards = cls._make_resource_deck(hx.country)
             return deck.cards.pop(0)

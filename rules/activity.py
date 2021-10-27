@@ -23,7 +23,6 @@ from .types.internal import (
     EncounterContextType,
     FullCard,
     FullCardType,
-    Gadget,
     Game,
     Hex,
     HexDeck,
@@ -33,6 +32,7 @@ from .types.internal import (
     TravelCard,
     TravelCardType,
     TriggerType,
+    Trigger,
     TurnFlags,
 )
 
@@ -65,7 +65,9 @@ class ActivityRules:
         cls, character_name: str, action_uuid: str
     ) -> Sequence[external_Record]:
         records: List[Record] = []
-        action = Gadget.load_action_by_uuid(action_uuid)
+        action = Trigger.load(action_uuid)
+        if action.type != TriggerType.ACTION:
+            raise BadStateException(f"That ({action.uuid}) isn't an action.")
         with Character.load_by_name_for_write(character_name) as ch:
             if GameRules.encounter_check(ch):
                 raise BadStateException("An encounter is currently active.")
@@ -144,7 +146,8 @@ class ActivityRules:
     @classmethod
     def _draw_hex_card(cls, hx: Hex) -> FullCard:
         deck_name = hx.terrain
-        with HexDeck.load_for_write(deck_name) as deck:
+        df = lambda: HexDeck.create_detached(name=deck_name, cards=[])
+        with HexDeck.load_for_write(deck_name, if_missing=df) as deck:
             if not deck.cards:
                 deck.cards = EncounterRules.load_deck(deck_name)
             return EncounterRules.reify_card(

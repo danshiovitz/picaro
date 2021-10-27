@@ -10,15 +10,17 @@ from unittest import main
 
 from picaro.common.exceptions import IllegalMoveException
 from picaro.rules.board import BoardRules
+from picaro.rules.character import CharacterRules
 from picaro.rules.game import GameRules
 from picaro.rules.test.test_base import FlatworldTestBase
+from picaro.rules.types.external import Title, Overlay as external_Overlay
 from picaro.rules.types.internal import (
     Character,
     Effect,
     EffectType,
     FullCard,
     FullCardType,
-    Gadget,
+    OverlayType,
     TemplateCard,
     TemplateCardType,
     TurnFlags,
@@ -191,13 +193,15 @@ class GameTest(FlatworldTestBase):
             self.assertEqual(len(ch.resources), 5)
             self.assertEqual(len(records), 6, msg=str([r._data for r in records]))
 
-    # def test_apply_effects_add_emblem(self) -> None:
-    #     with Character.load_by_name_for_write(self.CHARACTER) as ch:
-    #         effects = [Effect(type=EffectType.ADD_EMBLEM, subtype=None, value=emblem)]
-    #         records = []
-    #         GameRules.apply_effects(ch, [], effects, records)
-    #         self.assertEqual(ch.coins, 5)
-    #         self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
+    def test_apply_effects_add_title(self) -> None:
+        with Character.load_by_name_for_write(self.CHARACTER) as ch:
+            overlay = external_Overlay(uuid="", type=OverlayType.INIT_SPEED, subtype=None, is_private=True, filters=[], value=2)
+            title = Title(name="Sir Kicks-a-lot", overlays=[overlay], triggers=[], actions=[])
+            effects = [Effect(type=EffectType.ADD_TITLE, subtype=None, value=title)]
+            records = []
+            GameRules.apply_effects(ch, [], effects, records)
+            self.assertEqual(CharacterRules.get_init_speed(ch), 5)
+            self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
     def test_apply_effects_queue_encounter(self) -> None:
         with Character.load_by_name_for_write(self.CHARACTER) as ch:

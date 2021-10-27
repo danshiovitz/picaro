@@ -24,9 +24,9 @@ class CharacterCommand:
         if not client.args.all:
             print("(Use --all to see all skills)")
         print()
-        print("Emblems:")
-        for emblem in ch.emblems:
-            print(f"* {client.render_gadget(emblem)}")
-        if not ch.emblems:
+        print("Titles:")
+        for title in ch.titles:
+            print(f"* {client.render_title(title)}")
+        if not ch.titles:
             print("* None")
         print()

@@ -7,9 +7,10 @@ from typing import Any, Dict, List, Optional
 from unittest import main
 
 from picaro.common.exceptions import BadStateException
+from picaro.rules.base import get_rules_cache
 from picaro.rules.search import SearchRules
 from picaro.rules.test.test_base import FlatworldTestBase
-from picaro.rules.types.internal import Action, Character, Gadget
+from picaro.rules.types.internal import Character, TriggerType, Trigger
 
 
 class SearchTest(FlatworldTestBase):
@@ -46,14 +47,22 @@ class SearchTest(FlatworldTestBase):
         self.assertEqual(len(actual), 4)
 
     def test_search_entities(self) -> None:
-        self._add_emblem()
+        self.add_trigger(
+            name="Thingo",
+            type=TriggerType.ACTION,
+            subtype=None,
+            costs=[],
+            effects=[],
+            is_private=False,
+            filters=[],
+        )
         actual = SearchRules.search_entities(details=False)
         ch = [a for a in actual if a.name == self.CHARACTER][0]
-        self.assertEqual(len(ch.gadgets), 0)
+        self.assertEqual(len(ch.titles), 0)
         self.assertEqual(len(actual), 5)
         actual = SearchRules.search_entities(details=True)
         ch = [a for a in actual if a.name == self.CHARACTER][0]
-        self.assertEqual(len(ch.gadgets), 1)
+        self.assertEqual(len(ch.titles), 1)
 
     def test_search_characters(self) -> None:
         actual = SearchRules.search_characters()
@@ -64,31 +73,18 @@ class SearchTest(FlatworldTestBase):
     def test_search_actions(self) -> None:
         actual = SearchRules.search_actions(self.CHARACTER)
         self.assertEqual(len(actual), 0)
-        self._add_emblem()
+
+        self.add_trigger(
+            name="Thingo",
+            type=TriggerType.ACTION,
+            subtype=None,
+            costs=[],
+            effects=[],
+            is_private=False,
+            filters=[],
+        )
         actual = SearchRules.search_actions(self.CHARACTER)
         self.assertEqual(len(actual), 1)
-
-    def _add_emblem(self) -> str:
-        ch = Character.load_by_name(self.CHARACTER)
-        guuid = Gadget.create(
-            uuid="",
-            name="Thing-o-matic",
-            desc=None,
-            entity=ch.uuid,
-            triggers=[],
-            overlays=[],
-            actions=[
-                Action(
-                    uuid="",
-                    name="Thingo",
-                    costs=[],
-                    effects=[],
-                    is_private=False,
-                    filters=[],
-                )
-            ],
-        )
-        return guuid
 
 
 if __name__ == "__main__":

@@ -11,56 +11,61 @@ from picaro.rules.types.external import (
     Encounter as external_Encounter,
     EncounterType as external_EncounterType,
     Entity as external_Entity,
-    Gadget as external_Gadget,
     Game as external_Game,
     Hex as external_Hex,
     Job as external_Job,
+    Overlay as external_Overlay,
     Record as external_Record,
     TableauCard as external_TableauCard,
     TemplateDeck as external_TemplateDeck,
+    Title as external_Title,
+    Trigger as external_Trigger,
 )
 from picaro.rules.types.internal import (
-    Action,
     Character,
     Country,
     EffectType,
     Encounter,
     Entity,
     FullCardType,
-    Gadget,
     Game,
     Hex,
     Job,
+    Overlay,
     Record,
     Route,
     RouteType,
     TableauCard,
     TemplateDeck,
     Token,
+    Trigger,
+    TriggerType,
 )
 
 
 def from_external_entity(
     external_entity: external_Entity,
-) -> Tuple[Entity, List[Gadget], List[Token]]:
+) -> Tuple[Entity, List[Token], List[Overlay], List[Trigger]]:
     entity = from_external_helper(external_entity, Entity)
-    gadgets = [from_external_gadget(g, entity.uuid) for g in external_entity.gadgets]
     tokens = [
         Token.create_detached(entity=entity.uuid, location=loc)
         for loc in external_entity.locations
     ]
-    return entity, gadgets, tokens
+    overlays, triggers = from_external_titles(external_entity.titles, entity.uuid)
+    return entity, tokens, overlays, triggers
 
 
 def to_external_entity(entity: Entity, details: bool) -> external_Entity:
-    gadgets = []
-    if details:
-        gadgets = [to_external_gadget(g) for g in Gadget.load_for_entity(entity.uuid)]
     locations = [t.location for t in Token.load_all_by_entity(entity.uuid)]
+    titles: List[external_Title] = []
+    if details:
+        overlays = Overlay.load_for_entity(entity.uuid)
+        triggers = Trigger.load_for_entity(entity.uuid)
+        titles = to_external_titles(overlays, triggers)
 
     def modify(field_map: Dict[str, Any], extra: Dict[str, Any]) -> None:
-        field_map["gadgets"] = gadgets
         field_map["locations"] = locations
+        field_map["titles"] = titles
 
     return to_external_helper(entity, external_Entity, modify)
 
@@ -98,55 +103,100 @@ def from_external_country(country: external_Country) -> Country:
     return from_external_helper(country, Country)
 
 
-def to_external_gadget(gadget: Gadget) -> external_Gadget:
+def from_external_overlay(
+    overlay: external_Overlay, entity_uuid: str, title: Optional[str]
+) -> Overlay:
     def modify(field_map: Dict[str, Any], extra: Dict[str, Any]) -> None:
-        field_map["actions"] = tuple(
-            to_external_action(a) for a in field_map["actions"]
-        )
+        field_map["name"] = None
+        field_map["entity_uuid"] = entity_uuid
+        field_map["title"] = title
 
-    return to_external_helper(gadget, external_Gadget, modify)
+    return from_external_helper(overlay, Overlay, modify)
 
 
-def from_external_gadget(
-    gadget: external_Gadget, entity_uuid: Optional[str] = None
-) -> Gadget:
-    overlays = []
-    triggers = []
-    actions = []
+def to_external_overlay(overlay: Overlay) -> external_Overlay:
+    return to_external_helper(overlay, external_Overlay)
 
+
+def from_external_trigger(
+    trigger: external_Trigger, entity_uuid: str, title: Optional[str]
+) -> Trigger:
     def modify(field_map: Dict[str, Any], extra: Dict[str, Any]) -> None:
-        nonlocal overlays, triggers, actions
-        overlays = field_map["overlays"]
-        field_map["overlays"] = []
-        triggers = field_map["triggers"]
-        field_map["triggers"] = []
-        actions = field_map["actions"]
-        field_map["actions"] = []
-        if entity_uuid:
-            field_map["entity"] = entity_uuid
+        field_map["name"] = None
+        field_map["costs"] = ()
+        field_map["entity_uuid"] = entity_uuid
+        field_map["title"] = title
 
-    ret = from_external_helper(gadget, Gadget, modify)
-    # now add in the subthings so they get the correct uuid:
-    for overlay in overlays:
-        ret.add_overlay_object(from_external_overlay(overlay))
-    for trigger in triggers:
-        ret.add_trigger_object(from_external_trigger(trigger))
-    for action in actions:
-        ret.add_action_object(from_external_action(action))
-    return ret
+    return from_external_helper(trigger, Trigger, modify)
 
 
-def from_external_action(action: external_Action) -> Action:
-    return from_external_helper(action, Action)
+def to_external_trigger(trigger: Trigger) -> external_Trigger:
+    return to_external_helper(trigger, external_Trigger)
+
+
+def from_external_action(
+    action: external_Action, entity_uuid: str, title: Optional[str]
+) -> Trigger:
+    def modify(field_map: Dict[str, Any], extra: Dict[str, Any]) -> None:
+        field_map["type"] = TriggerType.ACTION
+        field_map["subtype"] = None
+        field_map["entity_uuid"] = entity_uuid
+        field_map["title"] = title
+
+    return from_external_helper(action, Trigger, modify)
 
 
 def to_external_action(
-    action: Action, route: Optional[Sequence[str]] = None
+    action: Trigger, route: Optional[Sequence[str]] = None
 ) -> external_Action:
     def modify(field_map: Dict[str, Any], extra: Dict[str, Any]) -> None:
         field_map["route"] = route
 
+    if action.type != TriggerType.ACTION:
+        raise Exception(
+            f"Trying to convert non-action trigger to action: {action.uuid}"
+        )
     return to_external_helper(action, external_Action, modify)
+
+
+# titles don't actually have an internal representation
+def to_external_titles(
+    overlays: List[Overlay], triggers: List[Trigger]
+) -> List[external_Title]:
+    title_map: Dict[
+        Optional[str],
+        Tuple[List[external_Overlay], List[external_Trigger], List[external_Action]],
+    ] = {
+        tt: ([], [], [])
+        for tt in {o.title for o in overlays} | {t.title for t in triggers}
+    }
+    for overlay in overlays:
+        title_map[overlay.title][0].append(to_external_overlay(overlay))
+    for trigger in triggers:
+        if trigger.type == TriggerType.ACTION:
+            title_map[trigger.title][2].append(to_external_action(trigger))
+        else:
+            title_map[trigger.title][1].append(to_external_trigger(trigger))
+    return [
+        external_Title(name=k, overlays=v[0], triggers=v[1], actions=v[2])
+        for k, v in title_map.items()
+    ]
+
+
+def from_external_titles(
+    titles: List[external_Title], entity_uuid: str
+) -> Tuple[List[Overlay], List[Trigger]]:
+    overlays = []
+    triggers = []
+
+    for title in titles:
+        for overlay in title.overlays:
+            overlays.append(from_external_overlay(overlay, entity_uuid, title.name))
+        for trigger in title.triggers:
+            triggers.append(from_external_trigger(trigger, entity_uuid, title.name))
+        for action in title.actions:
+            triggers.append(from_external_action(action, entity_uuid, title.name))
+    return overlays, triggers
 
 
 def from_external_template_deck(deck: external_TemplateDeck) -> TemplateDeck:
@@ -174,7 +224,8 @@ def to_external_character(ch: Character) -> external_Character:
     location = Token.load_single_by_entity(ch.uuid).location
     routes = BoardRules.best_routes(location, {c.location for c in ch.tableau})
     all_skills = Game.load().skills
-    emblems = Gadget.load_for_entity(ch.uuid)
+    overlays = Overlay.load_for_entity(ch.uuid)
+    triggers = Trigger.load_for_entity(ch.uuid)
     return external_Character(
         uuid=ch.uuid,
         name=entity.name,
@@ -199,7 +250,7 @@ def to_external_character(ch: Character) -> external_Character:
         ),
         encounter=to_external_encounter(ch.encounter) if ch.encounter else None,
         queued=tuple(ch.queued),
-        emblems=[to_external_gadget(g) for g in emblems],
+        titles=tuple(to_external_titles(overlays, triggers)),
     )
 
 

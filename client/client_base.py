@@ -1,4 +1,5 @@
 from argparse import ArgumentParser, Namespace
+from dataclasses import replace as dataclasses_replace
 from http.client import HTTPResponse
 from typing import (
     Any,
@@ -102,9 +103,9 @@ class ClientBase:
 
         self.games = SingleCache[Game](lambda: self._get_games())
         self.entities = SingleCache[Entity](
-            lambda: self._get(
-                f"/entities?details=False", SearchEntitiesResponse
-            ).entities
+            lambda: list(
+                self._get(f"/entities?details=False", SearchEntitiesResponse).entities
+            )
         )
         self.hexes = SingleCache[Hex](
             lambda: self._get(f"/hexes", SearchHexesResponse).hexes
@@ -118,9 +119,17 @@ class ClientBase:
         self.jobs = SingleCache[Job](
             lambda: self._get(f"/jobs", SearchJobsResponse).jobs
         )
-        self.characters = SingleCache[Character](
-            lambda: [self._get(f"/character", Character)]
-        )
+        self.characters = SingleCache[Character](lambda: self._refill_character())
+
+    def _refill_character(self) -> List[Character]:
+        ch = self._get(f"/character", Character)
+        # need to fix up the corresponding entity's location
+        if self.entities._data:
+            idx = self.entities._by_uuid[ch.uuid]
+            self.entities._data[idx] = dataclasses_replace(
+                self.entities._data[idx], locations=(ch.location,)
+            )
+        return [ch]
 
     @property
     def character(self) -> Character:

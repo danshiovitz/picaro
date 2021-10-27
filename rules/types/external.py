@@ -36,7 +36,7 @@ class EffectType(Enum):
     MODIFY_SPEED = enum_auto()
     MODIFY_ACTIVITY = enum_auto()
     MODIFY_LUCK = enum_auto()
-    ADD_EMBLEM = enum_auto()
+    ADD_TITLE = enum_auto()
     QUEUE_ENCOUNTER = enum_auto()
     MODIFY_LOCATION = enum_auto()
     MODIFY_JOB = enum_auto()
@@ -66,8 +66,8 @@ class Effect:
 
     @classmethod
     def any_type(cls, type_val: EffectType) -> type:
-        if type_val == EffectType.ADD_EMBLEM:
-            return Gadget
+        if type_val == EffectType.ADD_TITLE:
+            return Title
         elif type_val == EffectType.QUEUE_ENCOUNTER:
             return TemplateCard
         elif type_val in (EffectType.MODIFY_LOCATION, EffectType.MODIFY_JOB):
@@ -81,60 +81,6 @@ class JobType(Enum):
     SOLO = enum_auto()
     CAPTAIN = enum_auto()
     KING = enum_auto()
-
-
-class FilterType(Enum):
-    SKILL_GTE = enum_auto()
-    NEAR_HEX = enum_auto()
-    IN_COUNTRY = enum_auto()
-    NOT_IN_COUNTRY = enum_auto()
-
-
-@dataclass(frozen=True)
-class Filter:
-    type: FilterType
-    subtype: Optional[str]
-    value: Optional[int]
-
-
-class OverlayType(Enum):
-    INIT_TABLEAU_AGE = enum_auto()
-    INIT_TURNS = enum_auto()
-    MAX_HEALTH = enum_auto()
-    MAX_LUCK = enum_auto()
-    MAX_TABLEAU_SIZE = enum_auto()
-    SKILL_RANK = enum_auto()
-    RELIABLE_SKILL = enum_auto()
-    INIT_SPEED = enum_auto()
-    MAX_RESOURCES = enum_auto()
-    INIT_REPUTATION = enum_auto()
-    TRADE_PRICE = enum_auto()
-
-
-@dataclass(frozen=True)
-class Overlay:
-    uuid: str
-    type: OverlayType
-    value: int
-    subtype: Optional[str]
-    is_private: bool
-    filters: Sequence[Filter]
-
-
-class TriggerType(Enum):
-    MOVE_HEX = enum_auto()
-    START_TURN = enum_auto()
-    END_TURN = enum_auto()
-
-
-@dataclass(frozen=True)
-class Trigger:
-    uuid: str
-    type: TriggerType
-    effects: Sequence[Effect]
-    subtype: Optional[str]
-    is_private: bool
-    filters: Sequence[Filter]
 
 
 @dataclass(frozen=True)
@@ -271,6 +217,61 @@ class Country:
     resources: Sequence[str]
 
 
+class FilterType(Enum):
+    SKILL_GTE = enum_auto()
+    NEAR_HEX = enum_auto()
+    IN_COUNTRY = enum_auto()
+    NOT_IN_COUNTRY = enum_auto()
+
+
+@dataclass(frozen=True)
+class Filter:
+    type: FilterType
+    subtype: Optional[str]
+    value: Optional[int]
+
+
+class OverlayType(Enum):
+    INIT_TABLEAU_AGE = enum_auto()
+    INIT_TURNS = enum_auto()
+    MAX_HEALTH = enum_auto()
+    MAX_LUCK = enum_auto()
+    MAX_TABLEAU_SIZE = enum_auto()
+    SKILL_RANK = enum_auto()
+    RELIABLE_SKILL = enum_auto()
+    INIT_SPEED = enum_auto()
+    MAX_RESOURCES = enum_auto()
+    INIT_REPUTATION = enum_auto()
+    TRADE_PRICE = enum_auto()
+
+
+@dataclass(frozen=True)
+class Overlay:
+    uuid: str
+    type: OverlayType
+    subtype: Optional[str]
+    is_private: bool
+    filters: Sequence[Filter]
+    value: int
+
+
+class TriggerType(Enum):
+    ACTION = enum_auto()
+    MOVE_HEX = enum_auto()
+    START_TURN = enum_auto()
+    END_TURN = enum_auto()
+
+
+@dataclass(frozen=True)
+class Trigger:
+    uuid: str
+    type: TriggerType
+    subtype: Optional[str]
+    is_private: bool
+    filters: Sequence[Filter]
+    effects: Sequence[Effect]
+
+
 @dataclass(frozen=True)
 class Action:
     uuid: str
@@ -283,14 +284,11 @@ class Action:
 
 
 @dataclass(frozen=True)
-class Gadget:
-    uuid: str
-    name: str
-    desc: Optional[str]
+class Title:
+    name: Optional[str]
     overlays: Sequence[Overlay]
     triggers: Sequence[Trigger]
     actions: Sequence[Action]
-    entity: str
 
 
 @dataclass(frozen=True)
@@ -299,8 +297,9 @@ class Entity:
     type: EntityType
     subtype: Optional[str]
     name: str
-    gadgets: Sequence[Gadget]
-    locations: Sequence[str]
+    desc: Optional[str] = None
+    titles: Sequence[Title] = ()
+    locations: Sequence[str] = ()
 
 
 @dataclass(frozen=True)
@@ -391,7 +390,7 @@ class Character:
     tableau: Sequence[TableauCard]
     encounter: Optional[Encounter]
     queued: Sequence[FullCard]
-    emblems: Sequence[Gadget]
+    titles: Sequence[Title] = ()
 
 
 @dataclass(frozen=True)
@@ -417,8 +416,8 @@ class Record:
 
     @classmethod
     def any_type(cls, type_val: EffectType) -> type:
-        if type_val == EffectType.ADD_EMBLEM:
-            return Gadget
+        if type_val == EffectType.ADD_TITLE:
+            return Title
         elif type_val == EffectType.QUEUE_ENCOUNTER:
             return TemplateCard
         elif type_val in (

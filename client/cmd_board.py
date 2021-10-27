@@ -1,6 +1,7 @@
 from collections import defaultdict
 from typing import Any
 
+from picaro.common.hexmap.types import CubeCoordinate
 from picaro.server.api_types import *
 from .read import ReadClientBase
 
@@ -23,10 +24,10 @@ class BoardCommand:
             for location in entity.locations:
                 entities[location].append(entity)
 
-        if client.args.large:
-            center_name = client.args.center or client.character.location
-            center_coord = client.hexes.get_by_name(center_name).coordinate
+        center_name = client.args.center or client.character.location
+        center_coord = client.hexes.get_by_name(center_name).coordinate
 
+        if client.args.large:
             for line in client.render_large_map(
                 entities,
                 center=center_coord,
@@ -41,7 +42,10 @@ class BoardCommand:
         if entity_list:
             print()
             for entity in entity_list:
-                if entity.type == EntityType.CHARACTER:
+                if (
+                    entity.type == EntityType.CHARACTER
+                    or self._entity_dist(center_coord, entity, client) <= 5
+                ):
                     print(entity)
 
         if client.args.country:
@@ -49,3 +53,13 @@ class BoardCommand:
             for hx in hexes:
                 ccount[hx.country] += 1
             print(sorted(ccount.items()))
+
+    def _entity_dist(
+        self, start: OffsetCoordinate, entity: Entity, client: ReadClientBase
+    ) -> int:
+        if not entity.locations:
+            return 0
+        sc = CubeCoordinate.from_offset(start)
+        offsets = (client.hexes.get_by_name(e).coordinate for e in entity.locations)
+        cubes = (CubeCoordinate.from_offset(o) for o in offsets)
+        return min(sc.distance(c) for c in cubes)

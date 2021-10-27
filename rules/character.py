@@ -9,10 +9,9 @@ from .board import BoardRules
 from .lib.gadget import (
     compute_overlay_value,
     compute_trigger_effects,
-    load_available_actions,
+    compute_actions,
 )
 from .types.internal import (
-    Action,
     Character,
     Effect,
     Encounter,
@@ -23,7 +22,6 @@ from .types.internal import (
     FilterType,
     FullCard,
     FullCardType,
-    Gadget,
     Game,
     Hex,
     Job,
@@ -74,11 +72,11 @@ class CharacterRules:
     @classmethod
     def get_relevant_actions(
         cls, ch: Character, radius: int = 5
-    ) -> Tuple[List[Action], Dict[str, Route]]:
-        actions: List[Action] = []
+    ) -> Tuple[List[Trigger], Dict[str, Route]]:
+        actions: List[Trigger] = []
         routes: Dict[str, Route] = {}
 
-        all_actions = load_available_actions(ch.uuid)
+        all_actions = compute_actions(ch.uuid)
         hexes = BoardRules.find_entity_neighbors(ch.uuid, 0, radius)
         dests: Dict[str, str] = {}
 

@@ -74,13 +74,8 @@ class RenderClientBase(ClientBase):
             line += "speed has " + render_single_int(record)
         elif record.type == EffectType.MODIFY_LUCK:
             line += "luck has " + render_single_int(record)
-        elif record.type == EffectType.ADD_EMBLEM:
-            if record.old_value:
-                line += f"emblem was updated to {self.render_gadget(record.new_value)}."
-            else:
-                line = (
-                    f"* {subj} gained the emblem {self.render_gadget(record.new_value)}"
-                )
+        elif record.type == EffectType.ADD_TITLE:
+            line = f"* {subj} gained the title {self.render_title(record.new_value)}"
         elif record.type == EffectType.QUEUE_ENCOUNTER:
             line = f"* {subj} had the encounter {self.render_template_card(record.new_value)}"
         elif record.type == EffectType.MODIFY_LOCATION:
@@ -177,8 +172,8 @@ class RenderClientBase(ClientBase):
             return f"random transport ({eff.value:+}){entity}"
         elif eff.type == EffectType.MODIFY_ACTIVITY:
             return ("use activity" if eff.value <= 0 else "refresh activity") + entity
-        elif eff.type == EffectType.ADD_EMBLEM:
-            return "add an emblem (" + self.render_gadget(eff.value) + ")" + entity
+        elif eff.type == EffectType.ADD_TITLE:
+            return "add a title (" + self.render_title(eff.value) + ")" + entity
         elif eff.type == EffectType.QUEUE_ENCOUNTER:
             return (
                 "queue an encounter ("
@@ -193,10 +188,14 @@ class RenderClientBase(ClientBase):
         else:
             return eff
 
-    def render_gadget(self, gadget: Gadget) -> str:
-        ret = gadget.name
-        if gadget.overlays:
-            ret += f" ({'; '.join(self.render_overlay(f) for f in gadget.overlays)})"
+    def render_title(self, title: Title) -> str:
+        ret = title.name or "<innate>"
+        if title.overlays:
+            ret += f" ({'; '.join(self.render_overlay(f) for f in title.overlays)})"
+        if title.triggers:
+            ret += f" ({'; '.join(self.render_trigger(f) for f in title.triggers)})"
+        if title.actions:
+            ret += f" ({'; '.join(self.render_action(f) for f in title.actions)})"
         return ret
 
     def render_overlay(self, overlay: Overlay) -> str:
@@ -218,6 +217,34 @@ class RenderClientBase(ClientBase):
         val = f"{overlay.value:+} {name}"
         if overlay.filters:
             val += f" if {', '.join(self.render_filter(f) for f in overlay.filters)}"
+        return val
+
+    def render_trigger(self, trigger: Trigger) -> str:
+        names = {
+            TriggerType.MOVE_HEX: "move to a new hex",
+            TriggerType.START_TURN: "start a turn",
+            TriggerType.END_TURN: "end a turn",
+        }
+        name = names.get(trigger.type, trigger.type.name)
+        if trigger.subtype:
+            name = trigger.subtype + " " + name
+        val = f"when you {name}: "
+        val += ", ".join(render_effect(e) for e in trigger.effects)
+        if trigger.filters:
+            val += f" if {', '.join(self.render_filter(f) for f in trigger.filters)}"
+        return val
+
+    def render_action(self, action: Action) -> str:
+        val = f"on action {action.name}: "
+        if action.costs:
+            val += "pay "
+            val += ", ".join(render_effect(e) for e in action.costs)
+        if action.costs and action.effects:
+            val += " to "
+        if action.effects:
+            val += ", ".join(render_effect(e) for e in action.effects)
+        if action.filters:
+            val += f" if {', '.join(self.render_filter(f) for f in action.filters)}"
         return val
 
     def render_filter(self, filter: Filter) -> str:
@@ -271,6 +298,8 @@ class RenderClientBase(ClientBase):
         for entity in self.entities.get_all():
             for location in entity.locations:
                 tokens[location].append(entity)
+        for entities in tokens.values():
+            entities.sort(key=lambda e: (e.type.value, e.name, e.uuid))
 
         encounters = (
             {card.location for card in self.character.tableau}

@@ -369,11 +369,20 @@ class StandardWrapper:
         return cls._load_helper([], {})
 
     @classmethod
-    def load_for_write(cls, key: str) -> Any:  # should be type(self)
+    def load_for_write(
+        cls, key: str, if_missing: Optional[Callable[[], Any]] = None
+    ) -> Any:  # should be type(self)
         pk_field = cls.Data.LOAD_KEY or list(cls.Data.PRIMARY_KEYS)[0]
-        return cls._load_helper_single(
-            [f"{pk_field} = :{pk_field}"], {pk_field: key}, can_write=True
+        ret = cls._load_helper_single(
+            [f"{pk_field} = :{pk_field}"],
+            {pk_field: key},
+            can_write=True,
+            allow_none=(if_missing is not None),
         )
+        if ret is not None:
+            return ret
+        cls.insert([if_missing()])
+        return cls.load_for_write(key)
 
     @classmethod
     def _load_helper(
@@ -384,11 +393,18 @@ class StandardWrapper:
 
     @classmethod
     def _load_helper_single(
-        cls, where_clauses: List[str], params: Dict[str, Any], can_write: bool = False
+        cls,
+        where_clauses: List[str],
+        params: Dict[str, Any],
+        can_write: bool = False,
+        allow_none: bool = False,
     ) -> Any:  # should be type(self)
         vals = cls._load_helper(where_clauses, params, can_write)
         if not vals:
-            raise BadStateException(f"No such {cls.Data.TABLE_NAME}: {params}")
+            if allow_none:
+                return None
+            else:
+                raise BadStateException(f"No such {cls.Data.TABLE_NAME}: {params}")
         return vals[0]
 
     def __enter__(self) -> Any:  # should be type(self)

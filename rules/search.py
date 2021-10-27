@@ -12,11 +12,9 @@ from .types.external import (
     Job as external_Job,
 )
 from .types.internal import (
-    Action,
     Character,
     Country,
     Entity,
-    Gadget,
     Game,
     Hex,
     Job,

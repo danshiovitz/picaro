@@ -26,11 +26,9 @@ from picaro.rules.types.internal import (
     FilterType,
     FullCard,
     FullCardType,
-    Gadget,
     Outcome,
     TemplateCard,
     TemplateCardType,
-    Trigger,
     TriggerType,
     TurnFlags,
 )
@@ -106,26 +104,15 @@ class ActivityTest(FlatworldTestBase):
         self.assertEqual(ch.coins, 6)
 
     def _add_action(self) -> str:
-        ch = Character.load_by_name(self.CHARACTER)
-        guuid = Gadget.create(
-            uuid="",
-            name="Thing-o-matic",
-            desc=None,
-            entity=ch.uuid,
-            triggers=[],
-            overlays=[],
-            actions=[],
+        return self.add_trigger(
+            name="Thingo",
+            type=TriggerType.ACTION,
+            subtype=None,
+            costs=[],
+            effects=[Effect(type=EffectType.MODIFY_COINS, subtype=None, value=6)],
+            is_private=False,
+            filters=[Filter(type=FilterType.NEAR_HEX, subtype="AF08", value=1)],
         )
-        with Gadget.load_for_write(guuid) as gadget:
-            gadget.add_action(
-                name="Thingo",
-                costs=[],
-                effects=[Effect(type=EffectType.MODIFY_COINS, subtype=None, value=6)],
-                is_private=False,
-                filters=[Filter(type=FilterType.NEAR_HEX, subtype="AF08", value=1)],
-            )
-        gadget = Gadget.load(guuid)
-        return gadget.actions[0].uuid
 
     def test_camp(self) -> None:
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
@@ -197,24 +184,15 @@ class ActivityTest(FlatworldTestBase):
         # maybe taking hex danger into account
 
     def _add_trigger(self, ch: Character, hex: str) -> None:
-        guuid = Gadget.create(
-            uuid="",
-            name="Thing-o-matic",
-            desc=None,
-            entity=ch.uuid,
-            triggers=[],
-            overlays=[],
-            actions=[],
+        self.add_trigger(
+            name=None,
+            type=TriggerType.MOVE_HEX,
+            subtype=hex,
+            costs=[],
+            effects=[Effect(type=EffectType.MODIFY_COINS, subtype=None, value=5)],
+            is_private=False,
+            filters=[],
         )
-        with Gadget.load_for_write(guuid) as gadget:
-            gadget.add_trigger(
-                type=TriggerType.MOVE_HEX,
-                subtype=hex,
-                effects=[Effect(type=EffectType.MODIFY_COINS, subtype=None, value=5)],
-                is_private=False,
-                filters=[],
-            )
-        get_rules_cache().triggers.pop(ch.uuid, None)
 
     def test_end_turn(self) -> None:
         with Character.load_by_name_for_write(self.CHARACTER) as ch:

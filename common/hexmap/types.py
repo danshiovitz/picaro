@@ -25,6 +25,10 @@ class CubeCoordinate:
         y = -x - z
         return CubeCoordinate(x=x, y=y, z=z)
 
+    @classmethod
+    def from_offset(cls, offset: OffsetCoordinate) -> "CubeCoordinate":
+        return cls.from_row_col(row=offset.row, col=offset.column)
+
     def to_offset(self) -> OffsetCoordinate:
         row = self.z + (self.x + (self.x & 1)) // 2
         column = self.x

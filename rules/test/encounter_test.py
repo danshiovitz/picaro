@@ -23,7 +23,6 @@ from picaro.rules.types.internal import (
     EncounterContextType,
     FullCard,
     FullCardType,
-    Gadget,
     Outcome,
     Overlay,
     OverlayType,
@@ -185,47 +184,27 @@ class EncounterTest(FlatworldTestBase):
             self.assertGreaterEqual(cnt, 75)
 
     def _make_skill_boost(self, ch: Character) -> None:
-        guuid = Gadget.create(
-            uuid="",
-            name="Skill Certificate",
-            desc=None,
-            entity=ch.uuid,
-            triggers=[],
-            overlays=[],
-            actions=[],
+        self.add_overlay(
+            type=OverlayType.SKILL_RANK,
+            subtype="Skill 2",
+            value=2,
+            is_private=True,
+            filters=[],
         )
-        with Gadget.load_for_write(guuid) as gadget:
-            gadget.add_overlay_object(
-                Overlay(
-                    uuid="",
-                    type=OverlayType.SKILL_RANK,
-                    subtype="Skill 2",
-                    value=2,
-                    is_private=True,
-                    filters=[],
-                )
-            )
-            gadget.add_overlay_object(
-                Overlay(
-                    uuid="",
-                    type=OverlayType.SKILL_RANK,
-                    subtype="Skill 3",
-                    value=2,
-                    is_private=True,
-                    filters=[],
-                )
-            )
-            gadget.add_overlay_object(
-                Overlay(
-                    uuid="",
-                    type=OverlayType.RELIABLE_SKILL,
-                    subtype="Skill 3",
-                    value=2,
-                    is_private=True,
-                    filters=[],
-                )
-            )
-        get_rules_cache().overlays.clear()
+        self.add_overlay(
+            type=OverlayType.SKILL_RANK,
+            subtype="Skill 3",
+            value=2,
+            is_private=True,
+            filters=[],
+        )
+        self.add_overlay(
+            type=OverlayType.RELIABLE_SKILL,
+            subtype="Skill 3",
+            value=2,
+            is_private=True,
+            filters=[],
+        )
 
     def test_make_encounter_choice(self) -> None:
         card = FullCard(
@@ -273,37 +252,20 @@ class EncounterTest(FlatworldTestBase):
         )
 
     def _make_trade_price(self, ch: Character) -> None:
-        guuid = Gadget.create(
-            uuid="",
-            name="Trade Certificate",
-            desc=None,
-            entity=ch.uuid,
-            triggers=[],
-            overlays=[],
-            actions=[],
+        self.add_overlay(
+            type=OverlayType.TRADE_PRICE,
+            subtype="Resource B1",
+            value=2,
+            is_private=True,
+            filters=[],
         )
-        with Gadget.load_for_write(guuid) as gadget:
-            gadget.add_overlay_object(
-                Overlay(
-                    uuid="",
-                    type=OverlayType.TRADE_PRICE,
-                    subtype="Resource B1",
-                    value=2,
-                    is_private=True,
-                    filters=[],
-                )
-            )
-            gadget.add_overlay_object(
-                Overlay(
-                    uuid="",
-                    type=OverlayType.TRADE_PRICE,
-                    subtype="Resource C",
-                    value=-3,
-                    is_private=True,
-                    filters=[],
-                )
-            )
-        get_rules_cache().overlays.clear()
+        self.add_overlay(
+            type=OverlayType.TRADE_PRICE,
+            subtype="Resource C",
+            value=-3,
+            is_private=True,
+            filters=[],
+        )
 
     def test_make_encounter_special_leadership(self) -> None:
         card = FullCard(

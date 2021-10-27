@@ -15,7 +15,6 @@ from picaro.server.api_types import (
     Entity,
     Filter,
     FilterType,
-    Gadget,
     Hex,
     Job,
     JobType,
@@ -237,7 +236,7 @@ def generate_entities() -> List[Entity]:
             type=EntityType.LANDMARK,
             subtype="city",
             name="Alpha City",
-            gadgets=[],
+            titles=[],
             locations=["AA01"],
         ),
         Entity(
@@ -245,7 +244,7 @@ def generate_entities() -> List[Entity]:
             type=EntityType.LANDMARK,
             subtype="city",
             name="Alphaburbs",
-            gadgets=[],
+            titles=[],
             locations=["AK01"],
         ),
         Entity(
@@ -253,7 +252,7 @@ def generate_entities() -> List[Entity]:
             type=EntityType.LANDMARK,
             subtype="city",
             name="Central Bravo",
-            gadgets=[],
+            titles=[],
             locations=["AF09"],
         ),
     ]

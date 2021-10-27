@@ -5,9 +5,10 @@ from typing import Any, Dict, List, Optional
 from unittest import TestCase
 
 from picaro.common.storage import ConnectionManager
-from picaro.rules.base import RulesManager
+from picaro.rules.base import RulesManager, get_rules_cache
 from picaro.rules.game import GameRules
 from picaro.rules.test.gen_flat import generate_flatworld
+from picaro.rules.types.internal import Overlay, OverlayType, Trigger, TriggerType
 
 
 class FlatworldTestBase(TestCase):
@@ -30,8 +31,10 @@ class FlatworldTestBase(TestCase):
         self.rules_manager = RulesManager(self.CHARACTER)
         self.rules_manager.__enter__()
 
-        GameRules.add_character(self.CHARACTER, self.PLAYER_UUID, "Red Job 1", "AG04")
-        GameRules.add_character(
+        self.CH_UUID = GameRules.add_character(
+            self.CHARACTER, self.PLAYER_UUID, "Red Job 1", "AG04"
+        )
+        self.OTHER_UUID = GameRules.add_character(
             self.OTHER_CHARACTER, self.OTHER_PLAYER_UUID, "Blue Job", "AB02"
         )
 
@@ -44,3 +47,25 @@ class FlatworldTestBase(TestCase):
     def assertNotRaises(self, excls) -> None:
         # dummy thing basically for parity with assertRaises, does nothing
         return nullcontext()
+
+    def add_overlay(self, **kwargs) -> str:
+        if "entity_uuid" not in kwargs:
+            kwargs["entity_uuid"] = self.CH_UUID
+        if "title" not in kwargs:
+            kwargs["title"] = "Some Title"
+        if "name" not in kwargs:
+            kwargs["name"] = None
+        uuid = Overlay.create(**kwargs)
+        get_rules_cache().overlays.pop(kwargs["entity_uuid"], None)
+        return uuid
+
+    def add_trigger(self, **kwargs) -> str:
+        if "entity_uuid" not in kwargs:
+            kwargs["entity_uuid"] = self.CH_UUID
+        if "title" not in kwargs:
+            kwargs["title"] = "Some Title"
+        if "name" not in kwargs:
+            kwargs["name"] = None
+        uuid = Trigger.create(**kwargs)
+        get_rules_cache().triggers.pop(kwargs["entity_uuid"], None)
+        return uuid

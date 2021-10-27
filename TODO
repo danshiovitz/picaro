@@ -231,3 +231,23 @@ Gadgets should maybe also have timers + a thing that fires when the timer goes o
 - btw btw, I feel a little better saying a city is an entity than a project is. but then how do we say that a project gains 10 xp? I guess if we assume projects only have a single meter, you can (maybe) type=tick_meter, subtype=project, value=10 and this will work for them as gadgets.
 - I think the premise of this previous item is we don't need special typing for projects/tasks at all, they can be a kind of gadget - eg, the waiting task has a trigger that's "at the end of turn, tick the meter" and the delivery task has an action that's "-1 iron to tick the meter" and both tasks have a "when the meter is full, tick the parent project's meter". this does raise the question of whether we need support for designing these (I guess the client can help you out here with standard templates) or displaying them (here it can be hard for 'standard' projects to be displayed in a way that makes it clear they're standard)
 - I note in passing that gadgets seem like they might want to be able to talk about "the owning entity" "this gadget" "this gadget's parent" which means that effects need to be able to target those. piggy bank gadget: one action that does -1 gold and tick this gadget's meter; another action that's "if this gadget's meter is at least 10, set it ot 0 and +10 gold"
+- I dunno, perhaps gadgets and entities should be merged after all, or entities should have a default 'innate' gadget. It seems likely to lead to confusion if people aren't sure if something should be modelled as a gadget or an entity. I guess entity could be another layer on top of gadget in the system that gives you the ability to have a token and be disabled? But some entities won't have tokens. I guess we're talking about:
+- Sauron
+- The One Ring
+- Conan
+- Taurus (an NPC)
+- A city
+- The Oberyth Festival
+- Hordes of orcs
+- The empire's tax levy
+- Veteran raider
+- Taurus's plan to infiltrate the elephant tower
+
+Some of these are material but the oberyth festival isn't (and the one ring might not have its own location), most are a thing in themselves but veteran raider is a quality. Most of these have associated mechanics but Taurus might not (but he has a plan which does).
+
+I think I'm ok calling almost all of these entities except veteran raider and possibly Taurus's plan, so I guess entities don't have to be material. Those two are more sort of attributes or qualities or possessions of another entity.
+
+The real-world analogy here is entities are things that get written on an index card and put next to the board. Qualities are things written on the index card (or the character sheet) that are sort of groupings of things. We could just have an optional quality field on overlays/triggers/actions, and do the grouping in the UI.
+
+- Add ADD_ENTITY effect, and then we can implement the storm of swords event
+- Fix up display of entities in board command

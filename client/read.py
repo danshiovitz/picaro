@@ -132,11 +132,11 @@ class ReadClientBase(RenderClientBase):
                 ),
             ),
             (
-                "Add emblem <name>",
+                "Add title <name>",
                 lambda ln: self._lparse_effect(
-                    EffectType.ADD_EMBLEM,
+                    EffectType.ADD_TITLE,
                     ln,
-                    lparse_val=lambda ln: fixup(self._lparse_gadget(ln)),
+                    lparse_val=lambda ln: fixup(self._lparse_title(ln)),
                 ),
             ),
             (
@@ -356,13 +356,18 @@ class ReadClientBase(RenderClientBase):
             line,
         )
 
-    def _lparse_gadget(
+    def _lparse_title(
         self,
         line: str,
-    ) -> Tuple[Gadget, str]:
+    ) -> Tuple[Title, str]:
         name, line = self._lparse_str("name", line)
-        overlays = self.read_overlays("Enter overlays for this gadget:", [])
-        return Gadget(name, overlays), line
+        overlays = self.read_overlays("Enter overlays for this title:", [])
+        triggers = self.read_triggers("Enter triggers for this title:", [])
+        actions = self.read_actions("Enter actions for this title:", [])
+        return (
+            Title(name=name, overlays=overlays, triggers=triggers, actions=actions),
+            line,
+        )
 
     def _lparse_overlay(
         self,

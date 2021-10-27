@@ -21,12 +21,12 @@ from picaro.server.api_types import (
     Entity,
     Filter,
     FilterType,
-    Gadget,
     Hex,
     Job,
     TemplateCard,
     TemplateCardType,
     TemplateDeck,
+    Title,
 )
 
 
@@ -301,15 +301,12 @@ def generate_map_v2() -> Tuple[List[Hex], List[Country], List[Entity]]:
                 type=EntityType.LANDMARK,
                 subtype="city",
                 name=city_name,
-                gadgets=[
-                    Gadget(
-                        uuid="",
-                        name=city_name,
-                        desc=None,
+                titles=[
+                    Title(
+                        name=None,
                         overlays=[],
                         triggers=[],
                         actions=actions,
-                        entity=None,
                     ),
                 ],
                 locations=[hx.name],
@@ -342,15 +339,12 @@ def generate_map_v2() -> Tuple[List[Hex], List[Country], List[Entity]]:
                 type=EntityType.LANDMARK,
                 subtype="mine",
                 name=mine_name,
-                gadgets=[
-                    Gadget(
-                        uuid="",
-                        name=mine_name,
-                        desc=None,
+                titles=[
+                    Title(
+                        name=None,
                         overlays=[],
                         triggers=[],
                         actions=actions,
-                        entity=None,
                     ),
                 ],
                 locations=[hx.name],

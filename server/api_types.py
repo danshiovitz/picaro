@@ -22,7 +22,6 @@ from picaro.rules.types.external import (
     Filter,
     FilterType,
     FullCardType,
-    Gadget,
     Game,
     Hex,
     Job,
@@ -37,6 +36,8 @@ from picaro.rules.types.external import (
     TemplateCard,
     TemplateCardType,
     TemplateDeck,
+    Title,
+    Trigger,
 )
 
 

@@ -23,7 +23,6 @@ from .external import (
     FilterType,
     FullCard,
     FullCardType,
-    Gadget as external_Gadget,
     JobType,
     Outcome,
     Overlay,
@@ -32,19 +31,9 @@ from .external import (
     RouteType,
     TemplateCard,
     TemplateCardType,
-    Trigger,
+    Title,
     TriggerType,
 )
-
-
-@dataclass(frozen=True)
-class Action:
-    uuid: str
-    name: str
-    costs: Sequence[Effect]
-    effects: Sequence[Effect]
-    is_private: bool
-    filters: Sequence[Filter]
 
 
 @dataclass(frozen=True)
@@ -206,6 +195,7 @@ class Entity(StandardWrapper):
         type: EntityType
         subtype: Optional[str]
         name: str
+        desc: Optional[str] = None
 
     @classmethod
     def load_by_name(cls, name: str) -> "Entity":
@@ -227,111 +217,61 @@ class Job(StandardWrapper):
         encounter_distances: List[int]
 
 
-class Gadget(StandardWrapper):
-    class Data(StorageBase["Gadget.Data"]):
-        TABLE_NAME = "gadget"
+class Overlay(StandardWrapper):
+    class Data(StorageBase["Overlay.Data"]):
+        TABLE_NAME = "overlay"
 
         uuid: str
-        name: str
-        desc: Optional[str]
-        overlays: List[Overlay]
-        triggers: List[Trigger]
-        actions: List[Action]
-        entity: str
+        name: Optional[str]
+        entity_uuid: str
+        title: Optional[str]
+        type: OverlayType
+        subtype: Optional[str]
+        is_private: bool
+        filters: Sequence[Filter]
+        value: int
 
     @classmethod
-    def load_for_entity(cls, entity: str) -> List["Gadget"]:
-        return [g for g in cls.load_all() if g.entity == entity]
+    def load_for_entity(cls, entity_uuid: str) -> List["Overlay"]:
+        return cls._load_helper(
+            ["entity_uuid = :entity_uuid"], {"entity_uuid": entity_uuid}
+        )
 
     @classmethod
-    def load_action_by_uuid(cls, uuid: str) -> "Action":
-        gadget_uuid = get_parent_uuid(uuid)
-        gadget = cls.load(gadget_uuid)
-        actions = [a for a in gadget.actions if a.uuid == uuid]
-        if not actions:
-            raise IllegalMoveException(f"No such action: {uuid}")
-        return actions[0]
-
-    def add_overlay(
-        self,
-        type: OverlayType,
-        value: int,
-        subtype: Optional[str],
-        is_private: bool,
-        filters: Sequence[Filter],
-    ) -> None:
-        if not self._write:
-            raise Exception(f"Can't add overlay to non-writable gadget")
-        self.overlays.append(
-            Overlay(
-                uuid=make_double_uuid(self.uuid),
-                value=value,
-                type=type,
-                subtype=subtype,
-                is_private=is_private,
-                filters=filters,
-            )
+    def load_visible_for_entity(cls, entity_uuid: str) -> List["Overlay"]:
+        return cls._load_helper(
+            ["entity_uuid = :entity_uuid or is_private = 0"],
+            {"entity_uuid": entity_uuid},
         )
 
-    def add_overlay_object(self, overlay: Overlay) -> None:
-        if not self._write:
-            raise Exception(f"Can't add overlay to non-writable gadget")
-        overlay = dataclasses_replace(overlay, uuid=make_double_uuid(self.uuid))
-        self.overlays.append(overlay)
 
-    def add_trigger(
-        self,
-        type: TriggerType,
-        effects: Sequence[Effect],
-        subtype: Optional[str],
-        is_private: bool,
-        filters: Sequence[Filter],
-    ) -> None:
-        if not self._write:
-            raise Exception(f"Can't add trigger to non-writable gadget")
-        self.triggers.append(
-            Trigger(
-                uuid=make_double_uuid(self.uuid),
-                effects=effects,
-                type=type,
-                subtype=subtype,
-                is_private=is_private,
-                filters=filters,
-            )
+class Trigger(StandardWrapper):
+    class Data(StorageBase["Trigger.Data"]):
+        TABLE_NAME = "trigger"
+
+        uuid: str
+        name: Optional[str]
+        entity_uuid: str
+        title: Optional[str]
+        type: TriggerType
+        subtype: Optional[str]
+        is_private: bool
+        filters: Sequence[Filter]
+        costs: Sequence[Effect]
+        effects: Sequence[Effect]
+
+    @classmethod
+    def load_for_entity(cls, entity_uuid: str) -> List["Trigger"]:
+        return cls._load_helper(
+            ["entity_uuid = :entity_uuid"], {"entity_uuid": entity_uuid}
         )
 
-    def add_trigger_object(self, trigger: Trigger) -> None:
-        if not self._write:
-            raise Exception(f"Can't add trigger to non-writable gadget")
-        trigger = dataclasses_replace(trigger, uuid=make_double_uuid(self.uuid))
-        self.triggers.append(trigger)
-
-    def add_action(
-        self,
-        name: str,
-        costs: Sequence[Effect],
-        effects: Sequence[Effect],
-        is_private: bool,
-        filters: Sequence[Filter],
-    ) -> None:
-        if not self._write:
-            raise Exception(f"Can't add action to non-writable gadget")
-        self.actions.append(
-            Action(
-                uuid=make_double_uuid(self.uuid),
-                name=name,
-                costs=costs,
-                effects=effects,
-                is_private=is_private,
-                filters=filters,
-            )
+    @classmethod
+    def load_visible_for_entity(cls, entity_uuid: str) -> List["Trigger"]:
+        return cls._load_helper(
+            ["entity_uuid = :entity_uuid or is_private = 0"],
+            {"entity_uuid": entity_uuid},
         )
-
-    def add_action_object(self, action: Action) -> None:
-        if not self._write:
-            raise Exception(f"Can't add action to non-writable gadget")
-        action = dataclasses_replace(action, uuid=make_double_uuid(self.uuid))
-        self.actions.append(action)
 
 
 class TurnFlags(Enum):
@@ -406,8 +346,8 @@ class Record(StandardWrapper):
 
         @classmethod
         def any_type(cls, type_val: EffectType) -> type:
-            if type_val == EffectType.ADD_EMBLEM:
-                return external_Gadget
+            if type_val == EffectType.ADD_TITLE:
+                return Title
             elif type_val == EffectType.QUEUE_ENCOUNTER:
                 return Optional[TemplateCard]
             elif type_val in (

@@ -3,13 +3,11 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from picaro.rules.base import get_rules_cache
 from picaro.rules.types.internal import (
-    Action,
     Character,
     Effect,
     EffectType,
     EntityType,
     Filter,
-    Gadget,
     Overlay,
     OverlayType,
     Trigger,
@@ -51,11 +49,8 @@ def load_available_overlays(
     entity_uuid: str,
 ) -> Dict[Tuple[OverlayType, Optional[str]], List[Overlay]]:
     overlays = defaultdict(list)
-    for gadget in Gadget.load_all():
-        for overlay in gadget.overlays:
-            if overlay.is_private and gadget.entity != entity_uuid:
-                continue
-            overlays[(overlay.type, overlay.subtype)].append(overlay)
+    for overlay in Overlay.load_visible_for_entity(entity_uuid):
+        overlays[(overlay.type, overlay.subtype)].append(overlay)
     return overlays
 
 
@@ -88,19 +83,14 @@ def load_available_triggers(
     entity_uuid: str,
 ) -> Dict[Tuple[TriggerType, Optional[str]], List[Trigger]]:
     triggers = defaultdict(list)
-    for gadget in Gadget.load_all():
-        for trigger in gadget.triggers:
-            if trigger.is_private and gadget.entity != entity_uuid:
-                continue
-            triggers[(trigger.type, trigger.subtype)].append(trigger)
+    for trigger in Trigger.load_visible_for_entity(entity_uuid):
+        triggers[(trigger.type, trigger.subtype)].append(trigger)
     return triggers
 
 
-def load_available_actions(entity_uuid: str) -> List[Action]:
-    actions: List[Action] = []
-    for gadget in Gadget.load_all():
-        for action in gadget.actions:
-            if action.is_private and gadget.entity != entity_uuid:
-                continue
-            actions.append(action)
-    return actions
+def compute_actions(entity_uuid: str) -> List[Trigger]:
+    rules_cache = get_rules_cache()
+    if entity_uuid not in rules_cache.triggers:
+        rules_cache.triggers[entity_uuid] = load_available_triggers(entity_uuid)
+    triggers = rules_cache.triggers[entity_uuid]
+    return triggers.get((TriggerType.ACTION, None), [])

@@ -72,7 +72,6 @@ class Server:
 
                 from picaro.rules.types.internal import (
                     Character,
-                    Gadget,
                     Overlay,
                     OverlayType,
                     Filter,
@@ -80,46 +79,45 @@ class Server:
                 )
 
                 ch = Character.load_by_name("Conan")
-                Gadget.create(
-                    uuid="123",
-                    name="Cloak of Elvenkind",
-                    desc=None,
-                    entity=ch.uuid,
-                    triggers=[],
-                    overlays=[
-                        Overlay(
-                            uuid="123.456",
-                            type=OverlayType.SKILL_RANK,
-                            subtype="Stealth",
-                            value=1,
-                            is_private=True,
-                            filters=(),
-                        ),
-                        Overlay(
-                            uuid="123.457",
-                            type=OverlayType.SKILL_RANK,
-                            subtype="Stealth",
-                            value=1,
-                            is_private=True,
-                            filters=(
-                                Filter(
-                                    type=FilterType.SKILL_GTE,
-                                    subtype="Stealth",
-                                    value=2,
-                                ),
-                            ),
-                        ),
-                        Overlay(
-                            uuid="123.458",
-                            type=OverlayType.RELIABLE_SKILL,
-                            subtype="Stealth",
-                            value=3,
-                            is_private=True,
-                            filters=(),
-                        ),
-                    ],
-                    actions=[],
+                Overlay.create(
+                    uuid="123.456",
+                    name=None,
+                    type=OverlayType.SKILL_RANK,
+                    subtype="Stealth",
+                    value=1,
+                    is_private=True,
+                    filters=(),
+                    title="Cloak of Elvenkind",
+                    entity_uuid=ch.uuid,
                 )
+                Overlay.create(
+                    uuid="123.457",
+                    name=None,
+                    type=OverlayType.SKILL_RANK,
+                    subtype="Stealth",
+                    value=1,
+                    is_private=True,
+                    filters=(
+                        Filter(
+                            type=FilterType.SKILL_GTE,
+                            subtype="Stealth",
+                            value=2,
+                        ),
+                    ),
+                    title="Cloak of Elvenkind",
+                    entity_uuid=ch.uuid,
+                )
+                Overlay.create(
+                    uuid="123.458",
+                    name=None,
+                    type=OverlayType.RELIABLE_SKILL,
+                    subtype="Stealth",
+                    value=3,
+                    is_private=True,
+                    filters=(),
+                    title="Cloak of Elvenkind",
+                    entity_uuid=ch.uuid,
+                ),
                 with Character.load_by_name_for_write("Conan") as ch:
                     GameRules.apply_effects(
                         ch,
@@ -156,7 +154,6 @@ class Server:
 
                 from picaro.rules.types.internal import (
                     Character,
-                    Gadget,
                     Overlay,
                     OverlayType,
                     Filter,
