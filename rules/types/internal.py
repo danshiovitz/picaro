@@ -19,6 +19,7 @@ from .external import (
     EncounterCheck,
     EncounterContextType,
     EntityType,
+    Entity as external_Entity,
     Filter,
     FilterType,
     FullCard,
@@ -346,7 +347,9 @@ class Record(StandardWrapper):
 
         @classmethod
         def any_type(cls, type_val: EffectType) -> type:
-            if type_val == EffectType.ADD_TITLE:
+            if type_val == EffectType.ADD_ENTITY:
+                return external_Entity
+            elif type_val == EffectType.ADD_TITLE:
                 return Title
             elif type_val == EffectType.QUEUE_ENCOUNTER:
                 return Optional[TemplateCard]

@@ -13,11 +13,16 @@ from picaro.rules.board import BoardRules
 from picaro.rules.character import CharacterRules
 from picaro.rules.game import GameRules
 from picaro.rules.test.test_base import FlatworldTestBase
-from picaro.rules.types.external import Title, Overlay as external_Overlay
+from picaro.rules.types.external import (
+    Entity as external_Entity,
+    Title,
+    Overlay as external_Overlay,
+)
 from picaro.rules.types.internal import (
     Character,
     Effect,
     EffectType,
+    EntityType,
     FullCard,
     FullCardType,
     OverlayType,
@@ -110,7 +115,7 @@ class GameTest(FlatworldTestBase):
 
     def test_apply_effects(self) -> None:
         # not sure how to force we have total coverage other than this:
-        self.assertEqual(len(EffectType), 15)
+        self.assertEqual(len(EffectType), 16)
 
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
             effects = [Effect(type=EffectType.MODIFY_COINS, subtype=None, value=5)]
@@ -193,19 +198,50 @@ class GameTest(FlatworldTestBase):
             self.assertEqual(len(ch.resources), 5)
             self.assertEqual(len(records), 6, msg=str([r._data for r in records]))
 
-    def test_apply_effects_add_title(self) -> None:
+    def test_apply_effects_add_entity(self) -> None:
+        overlay = external_Overlay(
+            uuid="",
+            type=OverlayType.MAX_LUCK,
+            subtype=None,
+            is_private=False,
+            filters=[],
+            value=1,
+        )
+        entity = external_Entity(
+            type=EntityType.LANDMARK,
+            subtype=None,
+            name="Giant Clover",
+            titles=[
+                Title(
+                    name=None,
+                    overlays=[overlay],
+                    triggers=[],
+                    actions=[],
+                ),
+            ],
+            locations=["AB05"],
+            uuid="",
+        )
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
-            overlay = external_Overlay(
-                uuid="",
-                type=OverlayType.INIT_SPEED,
-                subtype=None,
-                is_private=True,
-                filters=[],
-                value=2,
-            )
-            title = Title(
-                name="Sir Kicks-a-lot", overlays=[overlay], triggers=[], actions=[]
-            )
+            effects = [Effect(type=EffectType.ADD_ENTITY, subtype=None, value=entity)]
+            records = []
+            GameRules.apply_effects(ch, [], effects, records)
+            self.assertEqual(CharacterRules.get_max_luck(ch), 6)
+            self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
+
+    def test_apply_effects_add_title(self) -> None:
+        overlay = external_Overlay(
+            uuid="",
+            type=OverlayType.INIT_SPEED,
+            subtype=None,
+            is_private=True,
+            filters=[],
+            value=2,
+        )
+        title = Title(
+            name="Sir Kicks-a-lot", overlays=[overlay], triggers=[], actions=[]
+        )
+        with Character.load_by_name_for_write(self.CHARACTER) as ch:
             effects = [Effect(type=EffectType.ADD_TITLE, subtype=None, value=title)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)

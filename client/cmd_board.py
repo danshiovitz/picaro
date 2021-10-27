@@ -46,7 +46,7 @@ class BoardCommand:
                     entity.type == EntityType.CHARACTER
                     or self._entity_dist(center_coord, entity, client) <= 5
                 ):
-                    print(entity)
+                    print("* " + client.render_entity_brief(entity))
 
         if client.args.country:
             ccount: Dict[str, int] = defaultdict(int)

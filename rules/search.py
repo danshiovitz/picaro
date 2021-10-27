@@ -18,6 +18,7 @@ from .types.internal import (
     Game,
     Hex,
     Job,
+    RouteType,
 )
 
 
@@ -77,4 +78,5 @@ class SearchRules:
     def search_actions(cls, character_name: str) -> List[external_Action]:
         ch = Character.load_by_name(character_name)
         actions, routes = CharacterRules.get_relevant_actions(ch)
+        actions = [a for a in actions if routes[a.uuid].type != RouteType.UNAVAILABLE]
         return [translate.to_external_action(v, routes[v.uuid]) for v in actions]

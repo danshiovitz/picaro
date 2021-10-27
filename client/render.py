@@ -198,6 +198,18 @@ class RenderClientBase(ClientBase):
             ret += f" ({'; '.join(self.render_action(f) for f in title.actions)})"
         return ret
 
+    def render_title_extended(self, title: Title) -> List[str]:
+        ret = []
+        if title.name:
+            ret.append(title.name + ":")
+        for v in title.overlays:
+            ret.append("* " + self.render_overlay(v))
+        for v in title.triggers:
+            ret.append("* " + self.render_trigger(v))
+        for v in title.actions:
+            ret.append("* " + self.render_action(v))
+        return ret
+
     def render_overlay(self, overlay: Overlay) -> str:
         names = {
             OverlayType.INIT_SPEED: "init speed",
@@ -229,7 +241,7 @@ class RenderClientBase(ClientBase):
         if trigger.subtype:
             name = trigger.subtype + " " + name
         val = f"when you {name}: "
-        val += ", ".join(render_effect(e) for e in trigger.effects)
+        val += ", ".join(self.render_effect(e) for e in trigger.effects)
         if trigger.filters:
             val += f" if {', '.join(self.render_filter(f) for f in trigger.filters)}"
         return val
@@ -238,11 +250,11 @@ class RenderClientBase(ClientBase):
         val = f"on action {action.name}: "
         if action.costs:
             val += "pay "
-            val += ", ".join(render_effect(e) for e in action.costs)
+            val += ", ".join(self.render_effect(e) for e in action.costs)
         if action.costs and action.effects:
             val += " to "
         if action.effects:
-            val += ", ".join(render_effect(e) for e in action.effects)
+            val += ", ".join(self.render_effect(e) for e in action.effects)
         if action.filters:
             val += f" if {', '.join(self.render_filter(f) for f in action.filters)}"
         return val
@@ -298,8 +310,6 @@ class RenderClientBase(ClientBase):
         for entity in self.entities.get_all():
             for location in entity.locations:
                 tokens[location].append(entity)
-        for entities in tokens.values():
-            entities.sort(key=lambda e: (e.type.value, e.name, e.uuid))
 
         encounters = (
             {card.location for card in self.character.tableau}
@@ -370,3 +380,42 @@ class RenderClientBase(ClientBase):
             )
 
         return render_large(set(coords), display, center=center, radius=radius)
+
+    def render_entity_brief(self, entity: Entity) -> str:
+        if entity.type == EntityType.CHARACTER:
+            if entity.locations:
+                return f"{entity.name} (in {entity.locations[0]})"
+            else:
+                return f"{entity.name} (nowhere)"
+        elif entity.type == EntityType.LANDMARK or entity.type == EntityType.EVENT:
+            ret = entity.name
+            if entity.subtype:
+                ret += f", a {entity.subtype}"
+            if entity.locations:
+                ret += f" (in {', '.join(entity.locations)})"
+            return ret
+        else:
+            return str(entity)
+
+    def render_entity_extended(self, entity: Entity) -> List[str]:
+        ret: List[str] = []
+        if entity.type == EntityType.CHARACTER:
+            if entity.locations:
+                ret.append(f"{entity.name} (in {entity.locations[0]})")
+            else:
+                ret.append(f"{entity.name} (nowhere)")
+        elif entity.type == EntityType.LANDMARK or entity.type == EntityType.EVENT:
+            ln = entity.name
+            if entity.subtype:
+                ln += f", a {entity.subtype}"
+            if entity.locations:
+                ln += f" (in {', '.join(entity.locations)})"
+            ret.append(ln)
+        else:
+            raise Exception(f"Unknown entity type: {entity}")
+
+        if len(entity.titles) > 1:
+            print("Titles:")
+        for title in entity.titles:
+            ret.extend(self.render_title_extended(title))
+        return ret

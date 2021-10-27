@@ -70,55 +70,193 @@ class Server:
                     "Taurus", other_player_uuid, "Merchant", "random"
                 )
 
-                from picaro.rules.types.internal import (
-                    Character,
-                    Overlay,
-                    OverlayType,
-                    Filter,
-                    FilterType,
+                title = Title(
+                    name="Cloak of Elvenkind",
+                    overlays=[
+                        Overlay(
+                            uuid="123.456",
+                            type=OverlayType.SKILL_RANK,
+                            subtype="Stealth",
+                            value=1,
+                            is_private=True,
+                            filters=(),
+                        ),
+                        Overlay(
+                            uuid="123.457",
+                            type=OverlayType.SKILL_RANK,
+                            subtype="Stealth",
+                            value=1,
+                            is_private=True,
+                            filters=(
+                                Filter(
+                                    type=FilterType.SKILL_GTE,
+                                    subtype="Stealth",
+                                    value=2,
+                                ),
+                            ),
+                        ),
+                        Overlay(
+                            uuid="123.458",
+                            type=OverlayType.RELIABLE_SKILL,
+                            subtype="Stealth",
+                            value=3,
+                            is_private=True,
+                            filters=(),
+                        ),
+                    ],
+                    triggers=[],
+                    actions=[],
                 )
 
-                ch = Character.load_by_name("Conan")
-                Overlay.create(
-                    uuid="123.456",
-                    name=None,
-                    type=OverlayType.SKILL_RANK,
-                    subtype="Stealth",
-                    value=1,
-                    is_private=True,
-                    filters=(),
-                    title="Cloak of Elvenkind",
-                    entity_uuid=ch.uuid,
-                )
-                Overlay.create(
-                    uuid="123.457",
-                    name=None,
-                    type=OverlayType.SKILL_RANK,
-                    subtype="Stealth",
-                    value=1,
-                    is_private=True,
-                    filters=(
-                        Filter(
-                            type=FilterType.SKILL_GTE,
-                            subtype="Stealth",
-                            value=2,
-                        ),
+                zeta_loc = [c for c in data.countries if c.name == "Zeta"][
+                    0
+                ].capitol_hex
+                sword_overlays = [
+                    Overlay(
+                        uuid="",
+                        type=OverlayType.TRADE_PRICE,
+                        subtype="Steel",
+                        value=-1,
+                        is_private=False,
+                        filters=[
+                            Filter(
+                                type=FilterType.IN_COUNTRY,
+                                subtype="Zeta",
+                                value=None,
+                            ),
+                        ],
                     ),
-                    title="Cloak of Elvenkind",
-                    entity_uuid=ch.uuid,
+                    Overlay(
+                        uuid="",
+                        type=OverlayType.TRADE_PRICE,
+                        subtype="Wine",
+                        value=1,
+                        is_private=False,
+                        filters=[
+                            Filter(
+                                type=FilterType.IN_COUNTRY,
+                                subtype="Zeta",
+                                value=None,
+                            ),
+                        ],
+                    ),
+                    Overlay(
+                        uuid="",
+                        type=OverlayType.TRADE_PRICE,
+                        subtype="Steel",
+                        value=1,
+                        is_private=False,
+                        filters=[
+                            Filter(
+                                type=FilterType.NOT_IN_COUNTRY,
+                                subtype="Zeta",
+                                value=None,
+                            ),
+                        ],
+                    ),
+                ]
+                sword_triggers = [
+                    Trigger(
+                        uuid="",
+                        type=TriggerType.MOVE_HEX,
+                        subtype=None,
+                        is_private=False,
+                        filters=[
+                            Filter(
+                                type=FilterType.NEAR_HEX,
+                                subtype=zeta_loc,
+                                value=3,
+                            ),
+                        ],
+                        effects=[
+                            Effect(
+                                type=EffectType.MODIFY_HEALTH, subtype=None, value=-1
+                            ),
+                        ],
+                    ),
+                ]
+                fight_template = TemplateCard(
+                    name="Fight a Sword",
+                    desc="This sword is itchin' for a fight.",
+                    type=TemplateCardType.CHALLENGE,
+                    data=Challenge(
+                        skills=["Speed", "Dueling", "Thaumaturgy"],
+                        rewards=[Outcome.GAIN_COINS, Outcome.GAIN_RESOURCES],
+                        penalties=[Outcome.LOSE_REPUTATION, Outcome.LOSE_SPEED],
+                    ),
                 )
-                Overlay.create(
-                    uuid="123.458",
-                    name=None,
-                    type=OverlayType.RELIABLE_SKILL,
-                    subtype="Stealth",
-                    value=3,
-                    is_private=True,
-                    filters=(),
-                    title="Cloak of Elvenkind",
-                    entity_uuid=ch.uuid,
-                ),
-                with Character.load_by_name_for_write("Conan") as ch:
+                sword_actions = [
+                    Action(
+                        uuid="",
+                        name="Ride a Sword",
+                        is_private=False,
+                        filters=[],
+                        costs=[
+                            Effect(
+                                type=EffectType.MODIFY_HEALTH, subtype=None, value=-5
+                            ),
+                        ],
+                        effects=[
+                            Effect(
+                                type=EffectType.MODIFY_LOCATION,
+                                subtype=None,
+                                value=zeta_loc,
+                            ),
+                            Effect(
+                                type=EffectType.MODIFY_SPEED,
+                                subtype=None,
+                                value=0,
+                                is_absolute=True,
+                            ),
+                        ],
+                        route=None,
+                    ),
+                    Action(
+                        uuid="",
+                        name="Fight a Sword",
+                        is_private=False,
+                        filters=[
+                            Filter(
+                                type=FilterType.NEAR_HEX,
+                                subtype=zeta_loc,
+                                value=5,
+                            ),
+                        ],
+                        costs=[
+                            Effect(
+                                type=EffectType.MODIFY_ACTIVITY, subtype=None, value=-1
+                            ),
+                        ],
+                        effects=[
+                            Effect(
+                                type=EffectType.QUEUE_ENCOUNTER,
+                                subtype=None,
+                                value=fight_template,
+                            ),
+                        ],
+                        route=None,
+                    ),
+                ]
+
+                entity = Entity(
+                    type=EntityType.EVENT,
+                    subtype=None,
+                    name="Storm of Swords",
+                    desc="Swords are just flying through the air, it's weird.",
+                    titles=[
+                        Title(
+                            name=None,
+                            overlays=sword_overlays,
+                            triggers=sword_triggers,
+                            actions=sword_actions,
+                        ),
+                    ],
+                    locations=[],
+                    uuid="",
+                )
+                from picaro.rules.types.internal import Character as internal_Character
+
+                with internal_Character.load_by_name_for_write("Conan") as ch:
                     GameRules.apply_effects(
                         ch,
                         [],
@@ -132,6 +270,16 @@ class Server:
                                 type=EffectType.MODIFY_XP,
                                 subtype="Brutal Fighting",
                                 value=25,
+                            ),
+                            Effect(
+                                type=EffectType.ADD_TITLE,
+                                subtype=None,
+                                value=title,
+                            ),
+                            Effect(
+                                type=EffectType.ADD_ENTITY,
+                                subtype=None,
+                                value=entity,
                             ),
                         ],
                         [],
@@ -337,7 +485,7 @@ class Server:
         return AddCharacterResponse(ch.uuid)
 
     def _parse_bool(self, val: str) -> bool:
-        return val.lower() == "t"
+        return val and val[0].lower() == "t"
 
     def run(self) -> None:
         bottle.route(

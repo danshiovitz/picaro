@@ -103,8 +103,9 @@ class ClientBase:
 
         self.games = SingleCache[Game](lambda: self._get_games())
         self.entities = SingleCache[Entity](
-            lambda: list(
-                self._get(f"/entities?details=False", SearchEntitiesResponse).entities
+            lambda: sorted(
+                self._get(f"/entities?details=true", SearchEntitiesResponse).entities,
+                key=lambda e: (e.type.value, e.subtype, e.name, e.uuid),
             )
         )
         self.hexes = SingleCache[Hex](

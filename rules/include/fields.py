@@ -12,6 +12,7 @@ from picaro.rules.types.internal import (
     Effect,
     EffectType,
     EncounterContextType,
+    Entity,
     FullCard,
     FullCardType,
     Game,
@@ -218,6 +219,35 @@ class ModifyActivityField(IntField):
         return True
 
 
+class AddEntityField(Field):
+    def __init__(self):
+        super().__init__("entity", EffectType.ADD_ENTITY, None)
+
+    def _update(
+        self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool
+    ) -> None:
+        entity, tokens, overlays, triggers = translate.from_external_entity(
+            effect.value
+        )
+        Entity.insert([entity])
+        Token.insert(tokens)
+        Overlay.insert(overlays)
+        Trigger.insert(triggers)
+
+        self._records.append(
+            Record.create_detached(
+                entity_uuid=self._ch.uuid,
+                type=self._type,
+                subtype=self._subtype,
+                old_value=None,
+                new_value=effect.value,
+                comments=[effect.comment] if effect.comment else [],
+            )
+        )
+        get_rules_cache().overlays.pop(self._ch.uuid, None)
+        get_rules_cache().triggers.pop(self._ch.uuid, None)
+
+
 class AddTitleField(Field):
     def __init__(self):
         super().__init__("titles", EffectType.ADD_TITLE, None)
@@ -225,19 +255,9 @@ class AddTitleField(Field):
     def _update(
         self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool
     ) -> None:
-        overlays = [
-            translate.from_external_overlay(v, self._ch.uuid, effect.value.name)
-            for v in effect.value.overlays
-        ]
-        triggers = [
-            translate.from_external_trigger(v, self._ch.uuid, effect.value.name)
-            for v in effect.value.triggers
-        ]
-        triggers.extend(
-            translate.from_external_action(v, self._ch.uuid, effect.value.name)
-            for v in effect.value.actions
+        overlays, triggers = translate.from_external_titles(
+            [effect.value], self._ch.uuid
         )
-
         Overlay.insert(overlays)
         Trigger.insert(triggers)
 

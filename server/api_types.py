@@ -38,6 +38,7 @@ from picaro.rules.types.external import (
     TemplateDeck,
     Title,
     Trigger,
+    TriggerType,
 )
 
 

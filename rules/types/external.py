@@ -36,6 +36,7 @@ class EffectType(Enum):
     MODIFY_SPEED = enum_auto()
     MODIFY_ACTIVITY = enum_auto()
     MODIFY_LUCK = enum_auto()
+    ADD_ENTITY = enum_auto()
     ADD_TITLE = enum_auto()
     QUEUE_ENCOUNTER = enum_auto()
     MODIFY_LOCATION = enum_auto()
@@ -48,6 +49,7 @@ class EffectType(Enum):
 class EntityType(Enum):
     CHARACTER = enum_auto()
     LANDMARK = enum_auto()
+    EVENT = enum_auto()
 
 
 @dataclass(frozen=True)
@@ -66,7 +68,9 @@ class Effect:
 
     @classmethod
     def any_type(cls, type_val: EffectType) -> type:
-        if type_val == EffectType.ADD_TITLE:
+        if type_val == EffectType.ADD_ENTITY:
+            return Entity
+        elif type_val == EffectType.ADD_TITLE:
             return Title
         elif type_val == EffectType.QUEUE_ENCOUNTER:
             return TemplateCard
@@ -416,7 +420,9 @@ class Record:
 
     @classmethod
     def any_type(cls, type_val: EffectType) -> type:
-        if type_val == EffectType.ADD_TITLE:
+        if type_val == EffectType.ADD_ENTITY:
+            return Entity
+        elif type_val == EffectType.ADD_TITLE:
             return Title
         elif type_val == EffectType.QUEUE_ENCOUNTER:
             return TemplateCard
