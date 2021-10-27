@@ -8,9 +8,9 @@ from picaro.common.storage import ConnectionManager, make_uuid
 from .board import BoardRules
 from .character import CharacterRules
 from .encounter import EncounterRules
-from .lib import translate
-from .lib.apply import SimpleIntField, SimpleDictIntField, apply_effects
-from .lib.fields import (
+from .include import translate
+from .include.apply import SimpleIntField, SimpleDictIntField, apply_effects
+from .include.fields import (
     LeadershipMetaField,
     ModifyJobField,
     ResourceDrawMetaField,
@@ -21,7 +21,7 @@ from .lib.fields import (
     QueueEncounterField,
     ModifyFreeXpField,
 )
-from .lib.special_cards import (
+from .include.special_cards import (
     actualize_special_card,
     queue_bad_reputation_check,
     queue_discard_resources,

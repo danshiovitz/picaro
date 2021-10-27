@@ -6,8 +6,8 @@ from typing import Dict, List, Optional, Sequence, Tuple, cast
 from picaro.common.storage import make_uuid
 
 from .character import CharacterRules
-from .lib.deck import shuffle_discard
-from .lib.special_cards import actualize_special_card
+from .include.deck import shuffle_discard
+from .include.special_cards import actualize_special_card
 from .types.external import EncounterCommands
 from .types.internal import (
     Character,

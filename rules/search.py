@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional, Sequence
 
 from .character import CharacterRules
-from .lib import translate
+from .include import translate
 from .types.external import (
     Action as external_Action,
     Character as external_Character,

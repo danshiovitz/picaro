@@ -195,8 +195,17 @@ class GameTest(FlatworldTestBase):
 
     def test_apply_effects_add_title(self) -> None:
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
-            overlay = external_Overlay(uuid="", type=OverlayType.INIT_SPEED, subtype=None, is_private=True, filters=[], value=2)
-            title = Title(name="Sir Kicks-a-lot", overlays=[overlay], triggers=[], actions=[])
+            overlay = external_Overlay(
+                uuid="",
+                type=OverlayType.INIT_SPEED,
+                subtype=None,
+                is_private=True,
+                filters=[],
+                value=2,
+            )
+            title = Title(
+                name="Sir Kicks-a-lot", overlays=[overlay], triggers=[], actions=[]
+            )
             effects = [Effect(type=EffectType.ADD_TITLE, subtype=None, value=title)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)

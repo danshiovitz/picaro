@@ -5,7 +5,7 @@ from picaro.common.exceptions import IllegalMoveException
 from picaro.common.hexmap.types import CubeCoordinate
 from picaro.common.hexmap.utils import cube_linedraw
 
-from .lib.deck import shuffle_discard
+from .include.deck import shuffle_discard
 from .types.internal import Country, Game, Hex, ResourceCard, ResourceDeck, Token
 
 

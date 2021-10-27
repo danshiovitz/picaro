@@ -6,7 +6,7 @@ sys.path.append(str(Path(__file__).absolute().parent.parent.parent.parent))
 
 from typing import List
 
-from picaro.rules.lib.deck import shuffle_discard
+from picaro.rules.include.deck import shuffle_discard
 from picaro.rules.types.internal import TravelCard, TravelCardType
 
 

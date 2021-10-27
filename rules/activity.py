@@ -9,8 +9,8 @@ from .board import BoardRules
 from .character import CharacterRules
 from .encounter import EncounterRules
 from .game import GameRules
-from .lib.deck import shuffle_discard
-from .lib.special_cards import make_promo_card
+from .include.deck import shuffle_discard
+from .include.special_cards import make_promo_card
 from .types.external import EncounterCommands, Record as external_Record
 from .types.internal import (
     Character,

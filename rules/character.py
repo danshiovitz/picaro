@@ -6,7 +6,7 @@ from picaro.common.exceptions import IllegalMoveException
 from picaro.common.utils import clamp, pop_func
 
 from .board import BoardRules
-from .lib.gadget import (
+from .include.gadget import (
     compute_overlay_value,
     compute_trigger_effects,
     compute_actions,
