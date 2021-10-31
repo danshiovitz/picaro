@@ -148,9 +148,10 @@ class Server:
                         is_private=False,
                         filters=[
                             Filter(
-                                type=FilterType.NOT_IN_COUNTRY,
+                                type=FilterType.IN_COUNTRY,
                                 subtype="Zeta",
                                 value=None,
+                                reverse=True,
                             ),
                         ],
                     ),

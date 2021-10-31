@@ -224,8 +224,8 @@ class Country:
 class FilterType(Enum):
     SKILL_GTE = enum_auto()
     NEAR_HEX = enum_auto()
+    NEAR_TOKEN = enum_auto()
     IN_COUNTRY = enum_auto()
-    NOT_IN_COUNTRY = enum_auto()
 
 
 @dataclass(frozen=True)
@@ -233,6 +233,7 @@ class Filter:
     type: FilterType
     subtype: Optional[str]
     value: Optional[int]
+    reverse: bool = False
 
 
 class OverlayType(Enum):

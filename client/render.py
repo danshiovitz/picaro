@@ -260,14 +260,18 @@ class RenderClientBase(ClientBase):
         return val
 
     def render_filter(self, filter: Filter) -> str:
+        ns = "not " if filter.reverse else ""
         if filter.type == FilterType.SKILL_GTE:
-            return f"{filter.subtype} >= {filter.value}"
+            if filter.reverse:
+                return f"{filter.subtype} < {filter.value}"
+            else:
+                return f"{filter.subtype} >= {filter.value}"
         elif filter.type == FilterType.NEAR_HEX:
-            return f"within {filter.value} hexes of {filter.subtype}"
+            return f"{ns}within {filter.value} hexes of {filter.subtype}"
+        elif filter.type == FilterType.NEAR_TOKEN:
+            return f"{ns}within {filter.value} hexes of {filter.subtype}"
         elif filter.type == FilterType.IN_COUNTRY:
-            return f"within {filter.subtype}"
-        elif filter.type == FilterType.NOT_IN_COUNTRY:
-            return f"not within {filter.subtype}"
+            return f"{ns}within {filter.subtype}"
         else:
             return str(filter)
 

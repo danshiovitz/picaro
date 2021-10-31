@@ -63,13 +63,22 @@ class BoardTest(FlatworldTestBase):
             actual = BoardRules.best_routes(start, ends)
             self.assertEqual(actual, expected)
 
-    def test_min_distance_from_entity(self) -> None:
+    def test_min_distance_from_entity_to_hex(self) -> None:
         entity = Entity.load_by_name("Alpha City")
-        dist = BoardRules.min_distance_from_entity(entity.uuid, "AA08")
+        dist = BoardRules.min_distance_from_entity_to_hex(entity.uuid, "AA08")
         self.assertEqual(dist, 7)
         Token.create(entity=entity.uuid, location="AA10")
-        dist = BoardRules.min_distance_from_entity(entity.uuid, "AA08")
+        dist = BoardRules.min_distance_from_entity_to_hex(entity.uuid, "AA08")
         self.assertEqual(dist, 2)
+
+    def test_min_distance_from_entity_to_entity(self) -> None:
+        entity = Entity.load_by_name("Alpha City")
+        other = Entity.load_by_name("Alphaburbs")
+        dist = BoardRules.min_distance_from_entity_to_entity(entity.uuid, other.uuid)
+        self.assertEqual(dist, 10)
+        Token.create(entity=entity.uuid, location="AJ01")
+        dist = BoardRules.min_distance_from_entity_to_entity(entity.uuid, other.uuid)
+        self.assertEqual(dist, 1)
 
     def test_distance(self) -> None:
         all_expected = {

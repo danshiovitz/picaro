@@ -3,6 +3,7 @@ import sys
 
 sys.path.append(str(pathlib.Path(__file__).absolute().parent.parent.parent.parent))
 
+from dataclasses import replace as dataclasses_replace
 from typing import Any, Dict, List, Optional
 from unittest import main
 
@@ -88,50 +89,62 @@ class CharacterTest(FlatworldTestBase):
     def test_check_filters(self) -> None:
         skill_f = Filter(type=FilterType.SKILL_GTE, subtype="Skill 3", value=1)
         hex_f = Filter(type=FilterType.NEAR_HEX, subtype="AA04", value=2)
+        token_f = Filter(type=FilterType.NEAR_TOKEN, subtype="Alpha City", value=2)
         cty_f = Filter(type=FilterType.IN_COUNTRY, subtype="Alpha", value=None)
-        ncty_f = Filter(type=FilterType.NOT_IN_COUNTRY, subtype="Alpha", value=None)
 
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
-            with self.assertRaises(IllegalMoveException):
-                CharacterRules.check_filters(ch, [skill_f])
+            self._check_both(ch, False, skill_f)
+
             ch.skill_xp["Skill 3"] = 20
             self.assertEqual(1, CharacterRules.get_skill_rank(ch, "Skill 3"))
-            with self.assertNotRaises(IllegalMoveException):
-                CharacterRules.check_filters(ch, [skill_f])
+            self._check_both(ch, True, skill_f)
+
             ch.skill_xp["Skill 3"] = 50
             self.assertEqual(2, CharacterRules.get_skill_rank(ch, "Skill 3"))
-            with self.assertNotRaises(IllegalMoveException):
-                CharacterRules.check_filters(ch, [skill_f])
+            self._check_both(ch, True, skill_f)
 
         ch = Character.load_by_name(self.CHARACTER)
 
         BoardRules.move_token_for_entity(ch.uuid, "AF10", adjacent=False)
-        with self.assertRaises(IllegalMoveException):
-            CharacterRules.check_filters(ch, [hex_f])
+        self._check_both(ch, False, hex_f)
+
         BoardRules.move_token_for_entity(ch.uuid, "AA06", adjacent=False)
-        with self.assertNotRaises(IllegalMoveException):
-            CharacterRules.check_filters(ch, [hex_f])
+        self._check_both(ch, True, hex_f)
+
         BoardRules.move_token_for_entity(ch.uuid, "AA04", adjacent=False)
-        with self.assertNotRaises(IllegalMoveException):
-            CharacterRules.check_filters(ch, [hex_f])
+        self._check_both(ch, True, hex_f)
 
         BoardRules.move_token_for_entity(ch.uuid, "AF10", adjacent=False)
-        with self.assertRaises(IllegalMoveException):
-            CharacterRules.check_filters(ch, [cty_f])
-        with self.assertNotRaises(IllegalMoveException):
-            CharacterRules.check_filters(ch, [ncty_f])
+        self._check_both(ch, False, cty_f)
 
         BoardRules.move_token_for_entity(ch.uuid, "AC03", adjacent=False)
-        with self.assertNotRaises(IllegalMoveException):
-            CharacterRules.check_filters(ch, [cty_f])
-        with self.assertRaises(IllegalMoveException):
-            CharacterRules.check_filters(ch, [ncty_f])
+        self._check_both(ch, True, cty_f)
+
+        multi_filters = [cty_f, hex_f]
+        multi_rev_filters = [cty_f, dataclasses_replace(hex_f, reverse=True)]
 
         with self.assertRaises(IllegalMoveException):
-            CharacterRules.check_filters(ch, [cty_f, hex_f])
+            CharacterRules.check_filters(ch, multi_filters)
+        with self.assertNotRaises(IllegalMoveException):
+            CharacterRules.check_filters(ch, multi_rev_filters)
         BoardRules.move_token_for_entity(ch.uuid, "AA03", adjacent=False)
         with self.assertNotRaises(IllegalMoveException):
-            CharacterRules.check_filters(ch, [cty_f, hex_f])
+            CharacterRules.check_filters(ch, multi_filters)
+        with self.assertRaises(IllegalMoveException):
+            CharacterRules.check_filters(ch, multi_rev_filters)
+
+    def _check_both(self, ch: Character, should_pass: bool, filter: Filter) -> None:
+        reverse_filter = dataclasses_replace(filter, reverse=True)
+        if should_pass:
+            with self.assertNotRaises(IllegalMoveException):
+                CharacterRules.check_filters(ch, [filter])
+            with self.assertRaises(IllegalMoveException):
+                CharacterRules.check_filters(ch, [reverse_filter])
+        else:
+            with self.assertRaises(IllegalMoveException):
+                CharacterRules.check_filters(ch, [filter])
+            with self.assertNotRaises(IllegalMoveException):
+                CharacterRules.check_filters(ch, [reverse_filter])
 
     def test_overlay_filters_worst_case(self) -> None:
         num_overlays = 10
@@ -165,14 +178,17 @@ class CharacterTest(FlatworldTestBase):
             ([], [r_global]),
             ([Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=0)], [r_global]),
             ([Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=1)], [r_unavail]),
+            ([Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=0, reverse=True)], [r_unavail]),
             ([Filter(FilterType.NEAR_HEX, subtype="AE06", value=1)], [r_AE06]),
-            ([Filter(FilterType.NEAR_HEX, subtype="AF06", value=1)], [r_AE06]),
+            ([Filter(FilterType.NEAR_HEX, subtype="AE06", value=0, reverse=True)], [r_AE05]),
+            ([Filter(FilterType.NEAR_TOKEN, subtype="Central Bravo", value=2)], [r_AE07]),
+            ([Filter(FilterType.NEAR_TOKEN, subtype="Central Bravo", value=2, reverse=True)], [r_AE06]),
             (
                 [Filter(FilterType.IN_COUNTRY, subtype="Alpha", value=None)],
                 [r_AD05, r_AE05],
             ),
             (
-                [Filter(FilterType.NOT_IN_COUNTRY, subtype="Alpha", value=None)],
+                [Filter(FilterType.IN_COUNTRY, subtype="Alpha", value=None, reverse=True)],
                 [r_AE06],
             ),
             (
