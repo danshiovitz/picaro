@@ -275,6 +275,27 @@ class Trigger(StandardWrapper):
         )
 
 
+class Meter(StandardWrapper):
+    class Data(StorageBase["Meter.Data"]):
+        TABLE_NAME = "meter"
+
+        uuid: str
+        name: str
+        entity_uuid: str
+        title: Optional[str]
+        min_value: int
+        max_value: int
+        cur_value: int
+        empty_effects: Sequence[Effect]
+        full_effects: Sequence[Effect]
+
+    @classmethod
+    def load_for_entity(cls, entity_uuid: str) -> List["Meter"]:
+        return cls._load_helper(
+            ["entity_uuid = :entity_uuid"], {"entity_uuid": entity_uuid}
+        )
+
+
 class TurnFlags(Enum):
     ACTED = enum_auto()
     HAD_TRAVEL_ENCOUNTER = enum_auto()

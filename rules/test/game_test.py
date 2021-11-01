@@ -25,6 +25,7 @@ from picaro.rules.types.internal import (
     EntityType,
     FullCard,
     FullCardType,
+    Meter,
     OverlayType,
     TemplateCard,
     TemplateCardType,
@@ -115,7 +116,7 @@ class GameTest(FlatworldTestBase):
 
     def test_apply_effects(self) -> None:
         # not sure how to force we have total coverage other than this:
-        self.assertEqual(len(EffectType), 16)
+        self.assertEqual(len(EffectType), 17)
 
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
             effects = [Effect(type=EffectType.MODIFY_COINS, subtype=None, value=5)]
@@ -217,6 +218,7 @@ class GameTest(FlatworldTestBase):
                     overlays=[overlay],
                     triggers=[],
                     actions=[],
+                    meters=[],
                 ),
             ],
             locations=["AB05"],
@@ -239,7 +241,11 @@ class GameTest(FlatworldTestBase):
             value=2,
         )
         title = Title(
-            name="Sir Kicks-a-lot", overlays=[overlay], triggers=[], actions=[]
+            name="Sir Kicks-a-lot",
+            overlays=[overlay],
+            triggers=[],
+            actions=[],
+            meters=[],
         )
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
             effects = [Effect(type=EffectType.ADD_TITLE, subtype=None, value=title)]
@@ -303,6 +309,48 @@ class GameTest(FlatworldTestBase):
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
+
+    def test_apply_effects_tick_meter(self) -> None:
+        muuid = self.add_meter(
+            name="Some Meter",
+            min_value=0,
+            max_value=10,
+            cur_value=5,
+            empty_effects=[Effect(type=EffectType.MODIFY_COINS, subtype=None, value=3)],
+            full_effects=[Effect(type=EffectType.MODIFY_LUCK, subtype=None, value=4)],
+        )
+
+        with Character.load_by_name_for_write(self.CHARACTER) as ch:
+            effects = [Effect(type=EffectType.TICK_METER, subtype=muuid, value=3)]
+
+            records = []
+            GameRules.apply_effects(ch, [], effects, records)
+            self.assertEqual(Meter.load(muuid).cur_value, 8)
+            self.assertEqual(len(ch.queued), 0)
+            self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
+
+            records = []
+            GameRules.apply_effects(ch, [], effects, records)
+            self.assertEqual(Meter.load(muuid).cur_value, 10)
+            self.assertEqual(len(ch.queued), 1)
+            self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
+            self.assertEqual(ch.queued[0].name, "Meter Full")
+            self.assertEqual(
+                ch.queued[0].data.choice_list[0].effects[0].type, EffectType.MODIFY_LUCK
+            )
+            ch.queued = []
+
+            effects = [Effect(type=EffectType.TICK_METER, subtype=muuid, value=-10)]
+            records = []
+            GameRules.apply_effects(ch, [], effects, records)
+            self.assertEqual(Meter.load(muuid).cur_value, 0)
+            self.assertEqual(len(ch.queued), 1)
+            self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
+            self.assertEqual(ch.queued[0].name, "Meter Empty")
+            self.assertEqual(
+                ch.queued[0].data.choice_list[0].effects[0].type,
+                EffectType.MODIFY_COINS,
+            )
 
     def test_apply_effects_costs(self) -> None:
         costs = [

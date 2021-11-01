@@ -41,6 +41,7 @@ class EffectType(Enum):
     QUEUE_ENCOUNTER = enum_auto()
     MODIFY_LOCATION = enum_auto()
     MODIFY_JOB = enum_auto()
+    TICK_METER = enum_auto()
     # "complex" effects that trigger others
     LEADERSHIP = enum_auto()
     TRANSPORT = enum_auto()
@@ -262,7 +263,7 @@ class Overlay:
 
 class TriggerType(Enum):
     ACTION = enum_auto()
-    MOVE_HEX = enum_auto()
+    ENTER_HEX = enum_auto()
     START_TURN = enum_auto()
     END_TURN = enum_auto()
 
@@ -289,11 +290,23 @@ class Action:
 
 
 @dataclass(frozen=True)
+class Meter:
+    uuid: str
+    name: str
+    min_value: int
+    max_value: int
+    cur_value: int
+    empty_effects: Sequence[Effect]
+    full_effects: Sequence[Effect]
+
+
+@dataclass(frozen=True)
 class Title:
     name: Optional[str]
     overlays: Sequence[Overlay]
     triggers: Sequence[Trigger]
     actions: Sequence[Action]
+    meters: Sequence[Meter]
 
 
 @dataclass(frozen=True)

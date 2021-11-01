@@ -178,17 +178,44 @@ class CharacterTest(FlatworldTestBase):
             ([], [r_global]),
             ([Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=0)], [r_global]),
             ([Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=1)], [r_unavail]),
-            ([Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=0, reverse=True)], [r_unavail]),
+            (
+                [
+                    Filter(
+                        FilterType.SKILL_GTE, subtype="Skill 3", value=0, reverse=True
+                    )
+                ],
+                [r_unavail],
+            ),
             ([Filter(FilterType.NEAR_HEX, subtype="AE06", value=1)], [r_AE06]),
-            ([Filter(FilterType.NEAR_HEX, subtype="AE06", value=0, reverse=True)], [r_AE05]),
-            ([Filter(FilterType.NEAR_TOKEN, subtype="Central Bravo", value=2)], [r_AE07]),
-            ([Filter(FilterType.NEAR_TOKEN, subtype="Central Bravo", value=2, reverse=True)], [r_AE06]),
+            (
+                [Filter(FilterType.NEAR_HEX, subtype="AE06", value=0, reverse=True)],
+                [r_AE05],
+            ),
+            (
+                [Filter(FilterType.NEAR_TOKEN, subtype="Central Bravo", value=2)],
+                [r_AE07],
+            ),
+            (
+                [
+                    Filter(
+                        FilterType.NEAR_TOKEN,
+                        subtype="Central Bravo",
+                        value=2,
+                        reverse=True,
+                    )
+                ],
+                [r_AE06],
+            ),
             (
                 [Filter(FilterType.IN_COUNTRY, subtype="Alpha", value=None)],
                 [r_AD05, r_AE05],
             ),
             (
-                [Filter(FilterType.IN_COUNTRY, subtype="Alpha", value=None, reverse=True)],
+                [
+                    Filter(
+                        FilterType.IN_COUNTRY, subtype="Alpha", value=None, reverse=True
+                    )
+                ],
                 [r_AE06],
             ),
             (
@@ -235,7 +262,7 @@ class CharacterTest(FlatworldTestBase):
 
     def test_triggers(self) -> None:
         ch = Character.load_by_name(self.CHARACTER)
-        effects = CharacterRules.run_triggers(ch, TriggerType.MOVE_HEX, "AA08")
+        effects = CharacterRules.run_triggers(ch, TriggerType.ENTER_HEX, "AA08")
         self.assertEqual(len(effects), 0)
 
         self._trigger_helper(EffectType.MODIFY_COINS)
@@ -252,26 +279,26 @@ class CharacterTest(FlatworldTestBase):
             filters=[Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=1)],
         )
 
-        effects = CharacterRules.run_triggers(ch, TriggerType.MOVE_HEX, None)
+        effects = CharacterRules.run_triggers(ch, TriggerType.ENTER_HEX, None)
         self.assertEqual({e.type for e in effects}, {EffectType.MODIFY_COINS})
-        effects = CharacterRules.run_triggers(ch, TriggerType.MOVE_HEX, "AA08")
+        effects = CharacterRules.run_triggers(ch, TriggerType.ENTER_HEX, "AA08")
         self.assertEqual(
             {e.type for e in effects},
             {EffectType.MODIFY_COINS, EffectType.MODIFY_SPEED},
         )
-        effects = CharacterRules.run_triggers(ch, TriggerType.MOVE_HEX, "AB10")
+        effects = CharacterRules.run_triggers(ch, TriggerType.ENTER_HEX, "AB10")
         self.assertEqual(
             {e.type for e in effects},
             {EffectType.MODIFY_COINS, EffectType.MODIFY_REPUTATION},
         )
-        effects = CharacterRules.run_triggers(ch, TriggerType.MOVE_HEX, "AC05")
+        effects = CharacterRules.run_triggers(ch, TriggerType.ENTER_HEX, "AC05")
         self.assertEqual({e.type for e in effects}, {EffectType.MODIFY_COINS})
 
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
             ch.skill_xp["Skill 3"] = 25
         self.assertEqual(1, CharacterRules.get_skill_rank(ch, "Skill 3"))
 
-        effects = CharacterRules.run_triggers(ch, TriggerType.MOVE_HEX, "AB10")
+        effects = CharacterRules.run_triggers(ch, TriggerType.ENTER_HEX, "AB10")
         self.assertEqual(
             {e.type for e in effects},
             {
@@ -280,7 +307,7 @@ class CharacterTest(FlatworldTestBase):
                 EffectType.MODIFY_HEALTH,
             },
         )
-        effects = CharacterRules.run_triggers(ch, TriggerType.MOVE_HEX, "AC05")
+        effects = CharacterRules.run_triggers(ch, TriggerType.ENTER_HEX, "AC05")
         self.assertEqual(
             {e.type for e in effects},
             {EffectType.MODIFY_COINS, EffectType.MODIFY_LUCK, EffectType.MODIFY_HEALTH},
@@ -321,7 +348,7 @@ class CharacterTest(FlatworldTestBase):
     ) -> None:
         self.add_trigger(
             name=None,
-            type=TriggerType.MOVE_HEX,
+            type=TriggerType.ENTER_HEX,
             subtype=subtype,
             costs=[],
             effects=[Effect(type=effect_type, subtype=None, value=1)],

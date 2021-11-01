@@ -14,6 +14,7 @@ from picaro.rules.types.external import (
     Game as external_Game,
     Hex as external_Hex,
     Job as external_Job,
+    Meter as external_Meter,
     Overlay as external_Overlay,
     Record as external_Record,
     TableauCard as external_TableauCard,
@@ -31,6 +32,7 @@ from picaro.rules.types.internal import (
     Game,
     Hex,
     Job,
+    Meter,
     Overlay,
     Record,
     Route,
@@ -45,14 +47,16 @@ from picaro.rules.types.internal import (
 
 def from_external_entity(
     external_entity: external_Entity,
-) -> Tuple[Entity, List[Token], List[Overlay], List[Trigger]]:
+) -> Tuple[Entity, List[Token], List[Overlay], List[Trigger], List[Meter]]:
     entity = from_external_helper(external_entity, Entity)
     tokens = [
         Token.create_detached(entity=entity.uuid, location=loc)
         for loc in external_entity.locations
     ]
-    overlays, triggers = from_external_titles(external_entity.titles, entity.uuid)
-    return entity, tokens, overlays, triggers
+    overlays, triggers, meters = from_external_titles(
+        external_entity.titles, entity.uuid
+    )
+    return entity, tokens, overlays, triggers, meters
 
 
 def to_external_entity(entity: Entity, details: bool) -> external_Entity:
@@ -61,7 +65,8 @@ def to_external_entity(entity: Entity, details: bool) -> external_Entity:
     if details:
         overlays = Overlay.load_for_entity(entity.uuid)
         triggers = Trigger.load_for_entity(entity.uuid)
-        titles = to_external_titles(overlays, triggers)
+        meters = Meter.load_for_entity(entity.uuid)
+        titles = to_external_titles(overlays, triggers, meters)
 
     def modify(field_map: Dict[str, Any], extra: Dict[str, Any]) -> None:
         field_map["locations"] = locations
@@ -159,15 +164,31 @@ def to_external_action(
     return to_external_helper(action, external_Action, modify)
 
 
+def from_external_meter(
+    meter: external_Meter, entity_uuid: str, title: Optional[str]
+) -> Meter:
+    def modify(field_map: Dict[str, Any], extra: Dict[str, Any]) -> None:
+        field_map["entity_uuid"] = entity_uuid
+        field_map["title"] = title
+
+    return from_external_helper(meter, Meter, modify)
+
+
+def to_external_meter(meter: Meter) -> external_Meter:
+    return to_external_helper(meter, external_Meter)
+
+
 # titles don't actually have an internal representation
 def to_external_titles(
-    overlays: List[Overlay], triggers: List[Trigger]
+    overlays: List[Overlay],
+    triggers: List[Trigger],
+    meters: List[Meter],
 ) -> List[external_Title]:
     title_map: Dict[
         Optional[str],
         Tuple[List[external_Overlay], List[external_Trigger], List[external_Action]],
     ] = {
-        tt: ([], [], [])
+        tt: ([], [], [], [])
         for tt in {o.title for o in overlays} | {t.title for t in triggers}
     }
     for overlay in overlays:
@@ -177,17 +198,20 @@ def to_external_titles(
             title_map[trigger.title][2].append(to_external_action(trigger))
         else:
             title_map[trigger.title][1].append(to_external_trigger(trigger))
+    for meter in meters:
+        title_map[meter.title][3].append(to_external_meter(meter))
     return [
-        external_Title(name=k, overlays=v[0], triggers=v[1], actions=v[2])
+        external_Title(name=k, overlays=v[0], triggers=v[1], actions=v[2], meters=v[3])
         for k, v in title_map.items()
     ]
 
 
 def from_external_titles(
     titles: List[external_Title], entity_uuid: str
-) -> Tuple[List[Overlay], List[Trigger]]:
+) -> Tuple[List[Overlay], List[Trigger], List[Meter]]:
     overlays = []
     triggers = []
+    meters = []
 
     for title in titles:
         for overlay in title.overlays:
@@ -196,7 +220,9 @@ def from_external_titles(
             triggers.append(from_external_trigger(trigger, entity_uuid, title.name))
         for action in title.actions:
             triggers.append(from_external_action(action, entity_uuid, title.name))
-    return overlays, triggers
+        for meter in title.meters:
+            meters.append(from_external_meter(meter, entity_uuid, title.name))
+    return overlays, triggers, meters
 
 
 def from_external_template_deck(deck: external_TemplateDeck) -> TemplateDeck:
@@ -226,6 +252,7 @@ def to_external_character(ch: Character) -> external_Character:
     all_skills = Game.load().skills
     overlays = Overlay.load_for_entity(ch.uuid)
     triggers = Trigger.load_for_entity(ch.uuid)
+    meters = Meter.load_for_entity(ch.uuid)
     return external_Character(
         uuid=ch.uuid,
         name=entity.name,
@@ -250,7 +277,7 @@ def to_external_character(ch: Character) -> external_Character:
         ),
         encounter=to_external_encounter(ch.encounter) if ch.encounter else None,
         queued=tuple(ch.queued),
-        titles=tuple(to_external_titles(overlays, triggers)),
+        titles=tuple(to_external_titles(overlays, triggers, meters)),
     )
 
 

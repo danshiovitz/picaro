@@ -309,11 +309,22 @@ class CharacterRules:
                 return set()  # impossible to ever pass this by moving around
             return None
         elif filter.type == FilterType.NEAR_HEX:
-            chk = lambda hx: (BoardRules.distance(hx.name, filter.subtype) <= filter.value) != filter.reverse
+            chk = (
+                lambda hx: (
+                    BoardRules.distance(hx.name, filter.subtype) <= filter.value
+                )
+                != filter.reverse
+            )
             return {hx.name for hx in hexes if chk(hx)}
         elif filter.type == FilterType.NEAR_TOKEN:
             entity = Entity.load_by_name(filter.subtype)
-            chk = lambda hx: (BoardRules.min_distance_from_entity_to_hex(entity.uuid, hx.name) <= filter.value) != filter.reverse
+            chk = (
+                lambda hx: (
+                    BoardRules.min_distance_from_entity_to_hex(entity.uuid, hx.name)
+                    <= filter.value
+                )
+                != filter.reverse
+            )
             return {hx.name for hx in hexes if chk(hx)}
         elif filter.type == FilterType.IN_COUNTRY:
             chk = lambda hx: (hx.country == filter.subtype) != filter.reverse

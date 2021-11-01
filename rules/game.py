@@ -21,6 +21,7 @@ from .include.fields import (
     AddTitleField,
     QueueEncounterField,
     ModifyFreeXpField,
+    TickMeterField,
 )
 from .include.special_cards import (
     actualize_special_card,
@@ -43,6 +44,7 @@ from .types.internal import (
     Hex,
     HexDeck,
     Job,
+    Meter,
     Overlay,
     Record,
     ResourceDeck,
@@ -76,21 +78,25 @@ class GameRules:
         tokens: List[Token] = []
         overlays: List[Overlay] = []
         triggers: List[Trigger] = []
+        meters: List[Meter] = []
         for external_entity in data.entities:
             (
                 cur_entity,
                 cur_tokens,
                 cur_overlays,
                 cur_triggers,
+                cur_meters,
             ) = translate.from_external_entity(external_entity)
             entities.append(cur_entity)
             tokens.extend(cur_tokens)
             overlays.extend(cur_overlays)
             triggers.extend(cur_triggers)
+            meters.extend(cur_meters)
         Entity.insert(entities)
         Token.insert(tokens)
         Overlay.insert(overlays)
         Trigger.insert(triggers)
+        Meter.insert(meters)
         return game
 
     @classmethod
@@ -325,4 +331,5 @@ class GameRules:
             recs, "xp", "skill_xp", EffectType.MODIFY_XP
         ),
         lambda _vs: [ModifyFreeXpField()],
+        lambda recs: TickMeterField.make_fields(recs),
     ]

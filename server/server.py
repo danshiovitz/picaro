@@ -159,7 +159,7 @@ class Server:
                 sword_triggers = [
                     Trigger(
                         uuid="",
-                        type=TriggerType.MOVE_HEX,
+                        type=TriggerType.ENTER_HEX,
                         subtype=None,
                         is_private=False,
                         filters=[

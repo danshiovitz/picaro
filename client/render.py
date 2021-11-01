@@ -196,6 +196,8 @@ class RenderClientBase(ClientBase):
             ret += f" ({'; '.join(self.render_trigger(f) for f in title.triggers)})"
         if title.actions:
             ret += f" ({'; '.join(self.render_action(f) for f in title.actions)})"
+        if title.meters:
+            ret += f" ({'; '.join(self.render_meter(f) for f in title.meters)})"
         return ret
 
     def render_title_extended(self, title: Title) -> List[str]:
@@ -208,6 +210,8 @@ class RenderClientBase(ClientBase):
             ret.append("* " + self.render_trigger(v))
         for v in title.actions:
             ret.append("* " + self.render_action(v))
+        for v in title.meters:
+            ret.append("* " + self.render_meter(v))
         return ret
 
     def render_overlay(self, overlay: Overlay) -> str:
@@ -233,7 +237,7 @@ class RenderClientBase(ClientBase):
 
     def render_trigger(self, trigger: Trigger) -> str:
         names = {
-            TriggerType.MOVE_HEX: "move to a new hex",
+            TriggerType.ENTER_HEX: "move to a new hex",
             TriggerType.START_TURN: "start a turn",
             TriggerType.END_TURN: "end a turn",
         }
@@ -258,6 +262,12 @@ class RenderClientBase(ClientBase):
         if action.filters:
             val += f" if {', '.join(self.render_filter(f) for f in action.filters)}"
         return val
+
+    def render_meter(self, meter: Meter) -> str:
+        return (
+            f"meter {meter.name} @ {meter.cur_value} "
+            f"({meter.min_value} - {meter.max_value})"
+        )
 
     def render_filter(self, filter: Filter) -> str:
         ns = "not " if filter.reverse else ""

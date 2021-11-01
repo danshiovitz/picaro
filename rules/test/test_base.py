@@ -8,7 +8,13 @@ from picaro.common.storage import ConnectionManager
 from picaro.rules.base import RulesManager, get_rules_cache
 from picaro.rules.game import GameRules
 from picaro.rules.test.gen_flat import generate_flatworld
-from picaro.rules.types.internal import Overlay, OverlayType, Trigger, TriggerType
+from picaro.rules.types.internal import (
+    Meter,
+    Overlay,
+    OverlayType,
+    Trigger,
+    TriggerType,
+)
 
 
 class FlatworldTestBase(TestCase):
@@ -68,4 +74,12 @@ class FlatworldTestBase(TestCase):
             kwargs["name"] = None
         uuid = Trigger.create(**kwargs)
         get_rules_cache().triggers.pop(kwargs["entity_uuid"], None)
+        return uuid
+
+    def add_meter(self, **kwargs) -> str:
+        if "entity_uuid" not in kwargs:
+            kwargs["entity_uuid"] = self.CH_UUID
+        if "title" not in kwargs:
+            kwargs["title"] = "Some Title"
+        uuid = Meter.create(**kwargs)
         return uuid

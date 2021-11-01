@@ -186,7 +186,7 @@ class ActivityTest(FlatworldTestBase):
     def _add_trigger(self, ch: Character, hex: str) -> None:
         self.add_trigger(
             name=None,
-            type=TriggerType.MOVE_HEX,
+            type=TriggerType.ENTER_HEX,
             subtype=hex,
             costs=[],
             effects=[Effect(type=EffectType.MODIFY_COINS, subtype=None, value=5)],

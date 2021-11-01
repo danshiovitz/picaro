@@ -1,4 +1,5 @@
 import random
+from typing import Dict, List, Optional, Tuple
 
 from picaro.common.storage import make_uuid
 from picaro.common.utils import clamp
@@ -16,6 +17,7 @@ from picaro.rules.types.internal import (
     FullCard,
     FullCardType,
     Game,
+    Meter,
     Overlay,
     Record,
     Token,
@@ -25,11 +27,11 @@ from picaro.rules.types.internal import (
 
 from . import translate
 from .apply import Field, IntField
-from .special_cards import make_assign_xp_card
+from .special_cards import make_assign_xp_card, make_meter_card
 
 
 class LeadershipMetaField(IntField):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             "leadership challenge",
             EffectType.LEADERSHIP,
@@ -55,7 +57,7 @@ class LeadershipMetaField(IntField):
 
 
 class ModifyJobField(Field):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__("job", EffectType.MODIFY_JOB, None)
 
     def _update(
@@ -79,7 +81,7 @@ class ModifyJobField(Field):
 
 
 class ResourceDrawMetaField(IntField):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             "resource draws",
             EffectType.MODIFY_RESOURCES,
@@ -149,7 +151,7 @@ class ResourceDrawMetaField(IntField):
 
 
 class TransportField(IntField):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             "transport",
             EffectType.TRANSPORT,
@@ -177,7 +179,7 @@ class TransportField(IntField):
 
 
 class ModifyLocationField(Field):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__("location", EffectType.MODIFY_LOCATION, None)
 
     def _update(
@@ -202,7 +204,7 @@ class ModifyLocationField(Field):
 
 
 class ModifyActivityField(IntField):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             "available activity",
             EffectType.MODIFY_ACTIVITY,
@@ -220,19 +222,20 @@ class ModifyActivityField(IntField):
 
 
 class AddEntityField(Field):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__("entity", EffectType.ADD_ENTITY, None)
 
     def _update(
         self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool
     ) -> None:
-        entity, tokens, overlays, triggers = translate.from_external_entity(
+        entity, tokens, overlays, triggers, meters = translate.from_external_entity(
             effect.value
         )
         Entity.insert([entity])
         Token.insert(tokens)
         Overlay.insert(overlays)
         Trigger.insert(triggers)
+        Meter.insert(meters)
 
         self._records.append(
             Record.create_detached(
@@ -255,11 +258,12 @@ class AddTitleField(Field):
     def _update(
         self, effect: Effect, is_first: bool, is_last: bool, enforce_costs: bool
     ) -> None:
-        overlays, triggers = translate.from_external_titles(
+        overlays, triggers, meters = translate.from_external_titles(
             [effect.value], self._ch.uuid
         )
         Overlay.insert(overlays)
         Trigger.insert(triggers)
+        Meter.insert(meters)
 
         self._records.append(
             Record.create_detached(
@@ -276,7 +280,7 @@ class AddTitleField(Field):
 
 
 class QueueEncounterField(Field):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__("encounter", EffectType.QUEUE_ENCOUNTER, None)
 
     def _update(
@@ -300,7 +304,7 @@ class QueueEncounterField(Field):
 
 
 class ModifyFreeXpField(IntField):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             "free xp",
             EffectType.MODIFY_XP,
@@ -314,3 +318,49 @@ class ModifyFreeXpField(IntField):
             raise Exception("Don't know how to subtract unassigned xp yet")
         self._ch.queued.append(make_assign_xp_card(ch, val))
         return True
+
+
+class TickMeterField(IntField):
+    def __init__(self, subtype: str) -> None:
+        super().__init__(
+            "meter",
+            EffectType.TICK_METER,
+            subtype,
+            init_v=self._get_init_value,
+            set_v=self._do_modify,
+            min_value=self._get_min_value,
+            max_value=self._get_max_value,
+        )
+
+    def _get_init_value(self, ch: Character) -> int:
+        meter = Meter.load(self._subtype)
+        return meter.cur_value
+
+    def _get_min_value(self, ch: Character) -> Optional[int]:
+        meter = Meter.load(self._subtype)
+        return meter.min_value
+
+    def _get_max_value(self, ch: Character) -> Optional[int]:
+        meter = Meter.load(self._subtype)
+        return meter.max_value
+
+    def _do_modify(self, ch: Character, val: int) -> None:
+        with Meter.load_for_write(self._subtype) as meter:
+            meter.cur_value = val
+            if meter.cur_value == meter.min_value and meter.empty_effects:
+                ch.queued.append(make_meter_card(ch, meter, False))
+            elif meter.cur_value == meter.max_value and meter.full_effects:
+                ch.queued.append(make_meter_card(ch, meter, True))
+        return True
+
+    @classmethod
+    def make_fields(
+        cls,
+        split_effects: Dict[Tuple[EffectType, Optional[str]], List[Effect]],
+    ) -> List[Field]:
+        subtypes = [
+            k[1]
+            for k in split_effects
+            if k[0] == EffectType.TICK_METER and k[1] is not None
+        ]
+        return [cls(subtype) for subtype in subtypes]

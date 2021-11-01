@@ -364,8 +364,15 @@ class ReadClientBase(RenderClientBase):
         overlays = self.read_overlays("Enter overlays for this title:", [])
         triggers = self.read_triggers("Enter triggers for this title:", [])
         actions = self.read_actions("Enter actions for this title:", [])
+        meters = self.read_meters("Enter meters for this title:", [])
         return (
-            Title(name=name, overlays=overlays, triggers=triggers, actions=actions),
+            Title(
+                name=name,
+                overlays=overlays,
+                triggers=triggers,
+                actions=actions,
+                meters=meters,
+            ),
             line,
         )
 

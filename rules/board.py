@@ -29,7 +29,9 @@ class BoardRules:
         return ret
 
     @classmethod
-    def min_distance_from_entity_to_hex(cls, entity_uuid: str, end: str) -> Optional[int]:
+    def min_distance_from_entity_to_hex(
+        cls, entity_uuid: str, end: str
+    ) -> Optional[int]:
         vals = []
         for token in Token.load_all_by_entity(entity_uuid):
             vals.append(cls.distance(token.location, end))
@@ -38,7 +40,9 @@ class BoardRules:
         return min(vals)
 
     @classmethod
-    def min_distance_from_entity_to_entity(cls, entity_uuid: str, other_uuid: str) -> Optional[int]:
+    def min_distance_from_entity_to_entity(
+        cls, entity_uuid: str, other_uuid: str
+    ) -> Optional[int]:
         vals = []
         for token in Token.load_all_by_entity(entity_uuid):
             for other_token in Token.load_all_by_entity(other_uuid):

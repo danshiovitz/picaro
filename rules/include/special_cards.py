@@ -16,6 +16,7 @@ from picaro.rules.types.internal import (
     FullCardType,
     Game,
     Job,
+    Meter,
     Outcome,
     Overlay,
     OverlayType,
@@ -144,6 +145,23 @@ def make_assign_xp_card(ch: Character, amount: int) -> FullCard:
                     )
                 )
                 for sk in Game.load().skills
+            ],
+        ),
+    )
+
+
+def make_meter_card(ch: Character, meter: Meter, is_full: bool) -> FullCard:
+    return FullCard(
+        uuid=make_uuid(),
+        name=f"Meter {'Full' if is_full else 'Empty'}",
+        desc=f"The {meter.name} meter is now {'full' if is_full else 'empty'}.",
+        type=FullCardType.CHOICE,
+        signs=[],
+        data=Choices(
+            min_choices=1,
+            max_choices=1,
+            choice_list=[
+                Choice(effects=(meter.full_effects if is_full else meter.empty_effects))
             ],
         ),
     )

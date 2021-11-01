@@ -26,6 +26,7 @@ from picaro.rules.types.external import (
     Hex,
     Job,
     JobType,
+    Meter,
     Outcome,
     Overlay,
     OverlayType,
