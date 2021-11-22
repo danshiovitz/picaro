@@ -1,8 +1,15 @@
 import json
 from collections.abc import Sequence
-from dataclasses import _MISSING_TYPE, fields as dataclass_fields, is_dataclass
+from dataclasses import (
+    MISSING,
+    dataclass,
+    field as dataclass_field,
+    fields as dataclass_fields,
+    is_dataclass,
+    make_dataclass,
+)
 from enum import Enum
-from typing import Any, Dict, Iterable, Optional, Type, TypeVar, Union
+from typing import Any, Dict, Iterable, List, Optional, Type, TypeVar, Union
 
 
 T = TypeVar("T")
@@ -27,7 +34,7 @@ def to_safe_type(
     try:
         return _to_safe_type(val, cls, any_type, path)
     except Exception as e:
-        print(f"Error converting to type at {path}: {e}")
+        print(f"Error converting to type at {path} for {cls}: {e}")
         raise
 
 
@@ -65,12 +72,25 @@ def _to_safe_type(
     elif val is None:
         return None
     elif is_dataclass(cls_base):
+        if hasattr(cls_base, "SUBCLASS_INDICATOR"):
+            indicator = cls_base.SUBCLASS_INDICATOR
+            type_val = getattr(val, indicator)
+            subclass_type = cls_base.SUBCLASS_MAP[type_val]
+            if subclass_type is None:
+                raise Exception(
+                    f"No subclass type defined for indicator {type_val} ({indicator})"
+                )
+            cls_base = subclass_type
         ret = {}
         cur_any: Optional[Type[Any]] = None
-        if hasattr(cls_base, "type_field"):
-            indicator = cls_base.type_field()
-            cur_any = cls_base.any_type(getattr(val, indicator))
-
+        if hasattr(cls_base, "TYPE_INDICATOR"):
+            indicator = cls_base.TYPE_INDICATOR
+            type_val = getattr(val, indicator)
+            cur_any = cls_base.ANY_TYPE_MAP[type_val]
+            if cur_any is None:
+                raise Exception(
+                    f"No any type defined for indicator {type_val} ({indicator})"
+                )
         for field in dataclass_fields(cls_base):
             field_val = getattr(val, field.name)
             ret[field.name] = to_safe_type(
@@ -182,7 +202,7 @@ def _from_safe_type(
         fields = dataclass_fields(cls_base)
 
         def lookup(field, any_repl) -> Any:
-            if field.name not in val and not isinstance(field.default, _MISSING_TYPE):
+            if field.name not in val and field.default != MISSING:
                 return field.default
             else:
                 return from_safe_type(
@@ -193,11 +213,29 @@ def _from_safe_type(
                     path + "." + field.name,
                 )
 
-        cur_any: Optional[Type[Any]] = None
-        if hasattr(cls_base, "type_field"):
-            indicator = cls_base.type_field()
+        if hasattr(cls_base, "SUBCLASS_INDICATOR"):
+            indicator = cls_base.SUBCLASS_INDICATOR
             ind_field = [f for f in fields if f.name == indicator][0]
-            cur_any = cls_base.any_type(lookup(ind_field, any_type))
+            type_val = lookup(ind_field, any_type)
+            subclass_type = cls_base.SUBCLASS_MAP[type_val]
+            if subclass_type is None:
+                raise Exception(
+                    f"No subclass type defined for indicator {type_val} ({indicator})"
+                )
+            cls_base = subclass_type
+            cls = subclass_type
+            fields = dataclass_fields(cls_base)
+
+        cur_any: Optional[Type[Any]] = None
+        if hasattr(cls_base, "TYPE_INDICATOR"):
+            indicator = cls_base.TYPE_INDICATOR
+            ind_field = [f for f in fields if f.name == indicator][0]
+            type_val = lookup(ind_field, any_type)
+            cur_any = cls_base.ANY_TYPE_MAP[type_val]
+            if cur_any is None:
+                raise Exception(
+                    f"No any type defined for indicator {type_val} ({indicator})"
+                )
 
         for field in fields:
             params[field.name] = lookup(field, cur_any)
@@ -231,3 +269,57 @@ def _from_safe_type(
         return tuple(seq) if frozen or cls_base == Sequence else cls_base(seq)
     else:
         raise Exception(f"Un(de)serializable type {cls_base}")
+
+
+class HasAnyType:
+    TYPE_INDICATOR = "type"
+    ANY_TYPE_MAP = {}
+
+
+def external_fields_for(parent_cls, type_vals: List[Any]):
+    def decorate(cls):
+        if not is_dataclass(cls):
+            cls = dataclass(cls, frozen=True)
+        for type_val in type_vals:
+            parent_cls.ANY_TYPE_MAP[type_val] = cls
+        return cls
+
+    return decorate
+
+
+class SubclassVariant:
+    SUBCLASS_INDICATOR = "type"
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)  # type: ignore
+        cls.SUBCLASS_MAP = {}
+
+
+def subclass_of(parent_cls, type_vals: List[Any]):
+    def decorate(cls):
+        # A bunch of ugly workarounds for not being able to mark default
+        # fields in the parent class as kw_only, which leads to issues
+        # when we inherit from that class
+        fields = list(dataclass_fields(cls.__bases__[0]))
+        default_fields = []
+        while fields and fields[-1].default != MISSING:
+            default_fields.insert(0, fields.pop())
+        dc_fields = [(f.name, f.type, f) for f in fields]
+        for anno_name, anno_type in cls.__annotations__.items():
+            dc_fields.append(
+                (
+                    anno_name,
+                    anno_type,
+                    dataclass_field(default=getattr(cls, anno_name, MISSING)),
+                )
+            )
+        dc_fields.extend((f.name, f.type, f) for f in default_fields)
+        cls = make_dataclass(
+            cls.__name__, dc_fields, frozen=parent_cls.__dataclass_params__.frozen
+        )
+
+        for type_val in type_vals:
+            parent_cls.SUBCLASS_MAP[type_val] = cls
+        return cls
+
+    return decorate

@@ -41,7 +41,7 @@ def compute_overlay_value(
                 continue
         finally:
             rules_cache.in_use_overlays.discard(overlay.uuid)
-        val += overlay.value
+        val += overlay.amount
     return val
 
 
@@ -50,7 +50,14 @@ def load_available_overlays(
 ) -> Dict[Tuple[OverlayType, Optional[str]], List[Overlay]]:
     overlays = defaultdict(list)
     for overlay in Overlay.load_visible_for_entity(entity_uuid):
-        overlays[(overlay.type, overlay.subtype)].append(overlay)
+        subtype = None
+        if hasattr(overlay, "skill"):
+            subtype = overlay.skill
+        elif hasattr(overlay, "hex"):
+            subtype = overlay.hex
+        elif hasattr(overlay, "resource"):
+            subtype = overlay.resource
+        overlays[(overlay.type, subtype)].append(overlay)
     return overlays
 
 
@@ -84,7 +91,14 @@ def load_available_triggers(
 ) -> Dict[Tuple[TriggerType, Optional[str]], List[Trigger]]:
     triggers = defaultdict(list)
     for trigger in Trigger.load_visible_for_entity(entity_uuid):
-        triggers[(trigger.type, trigger.subtype)].append(trigger)
+        subtype = None
+        if hasattr(trigger, "skill"):
+            subtype = trigger.skill
+        elif hasattr(trigger, "resource"):
+            subtype = trigger.resource
+        elif hasattr(trigger, "hex"):
+            subtype = trigger.hex
+        triggers[(trigger.type, subtype)].append(trigger)
     return triggers
 
 

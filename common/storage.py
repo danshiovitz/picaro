@@ -27,7 +27,7 @@ from typing import (
 )
 
 from .exceptions import BadStateException
-from .serializer import from_safe_type, to_safe_type
+from .serializer import from_safe_type, to_safe_type, subclass_of
 
 
 @dataclass
@@ -51,6 +51,10 @@ class StorageBase(Generic[T]):
     SECONDARY_TABLE: bool = False
     LOAD_KEY: Optional[str] = None
 
+    BASE_FIELDS: Dict[str, dataclass_Field]
+    ALL_FIELDS: Dict[str, dataclass_Field]
+    SUBCLASS_FIELDS: Dict[Type, Dict[str, dataclass_Field]]
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)  # type: ignore
         if cls.TABLE_NAME != "unset":
@@ -60,8 +64,8 @@ class StorageBase(Generic[T]):
     @classmethod
     def _table_schema(cls) -> List[Tuple[str, str, bool]]:
         cols = []
-        val_type = cls._get_val_type()
-        for field_info in dataclass_fields(val_type):
+
+        for field_info in cls.ALL_FIELDS.values():
             fname = field_info.name
             ftype = field_info.type
             col_name = fname
@@ -72,6 +76,10 @@ class StorageBase(Generic[T]):
                 ftype = ftype.__args__[0]
                 base_type = getattr(ftype, "__origin__", ftype)
                 nn = " null"
+            # subclass-only fields have to be nullable since not all may have them
+            elif fname not in cls.BASE_FIELDS:
+                nn = " null"
+
             if base_type == int:
                 col_type = "integer" + nn
             else:
@@ -115,6 +123,12 @@ class StorageBase(Generic[T]):
             session = current_session.get()
             if session.game_uuid is not None:
                 ret["game_uuid"] = session.game_uuid
+
+        # if this class is a subclass, we want to fill in all the fields
+        # possible, not just the ones for this particular subclass
+        for fname in cls.ALL_FIELDS:
+            if fname not in ret:
+                ret[fname] = None
 
         return ret
 
@@ -281,13 +295,15 @@ def get_parent_uuid(uuid: str) -> str:
 
 
 class StandardWrapper:
-    FIELDS: Dict[str, dataclass_Field]
     Data: Type[Any]
 
     def __init__(self, data: Any, can_write: bool = False) -> None:
-        if not isinstance(data, self.Data):
+        if not isinstance(data, self.Data) and (
+            not hasattr(self.Data, "SUBCLASS_MAP")
+            or data.__class__ not in self.Data.SUBCLASS_MAP.values()
+        ):
             raise Exception(
-                f"Bad initialization - expected {self.Data.__name__}, got {data.__class__.__name__}"
+                f"Bad initialization - expected {self.Data}, got {data.__class__.__module__}"
             )
         super().__setattr__("_data", data)
         super().__setattr__("_can_write", can_write)
@@ -296,18 +312,23 @@ class StandardWrapper:
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)  # type: ignore
         cls.Data = dataclass(cls.Data)
-        cls.FIELDS = {f.name: f for f in dataclass_fields(cls.Data)}
-        if "uuid" in cls.FIELDS:
+        cls.Data.BASE_FIELDS = {f.name: f for f in dataclass_fields(cls.Data)}
+        cls.Data.ALL_FIELDS = {k: v for k, v in cls.Data.BASE_FIELDS.items()}
+        cls.Data.SUBCLASS_FIELDS = {}
+        if "uuid" in cls.Data.ALL_FIELDS:
             cls.HAS_UUID = True
             cls.Data.PRIMARY_KEYS = {"uuid"}
-        elif "name" in cls.FIELDS:
+        elif "name" in cls.Data.ALL_FIELDS:
             cls.HAS_UUID = False
             cls.Data.PRIMARY_KEYS = {"name"}
         else:
-            raise Exception(f"Can't figure out pk for class from {cls.FIELDS}")
+            raise Exception(f"Can't figure out pk for class from {cls.Data.ALL_FIELDS}")
 
     def __setattr__(self, name: str, value: Any) -> None:
-        if name in self.FIELDS:
+        fields = self.Data.SUBCLASS_FIELDS.get(
+            self._data.__class__, self.Data.BASE_FIELDS
+        )
+        if name in fields:
             if self._write:
                 self._data.__setattr__(name, value)
             else:
@@ -316,40 +337,61 @@ class StandardWrapper:
             super().__setattr__(name, value)
 
     def __getattr__(self, name: str) -> Any:
-        if name in self.FIELDS:
-            val = getattr(self._data, name)
-            if self._write:
-                return val
-            ut = self.FIELDS[name].type
+        fields = self.Data.SUBCLASS_FIELDS.get(
+            self._data.__class__, self.Data.BASE_FIELDS
+        )
+        if name not in fields:
+            raise AttributeError(f"No such field: {name}")
+
+        val = getattr(self._data, name)
+        if self._write:
+            return val
+        ut = fields[name].type
+        cls_base = getattr(ut, "__origin__", ut)
+        if hasattr(self._data, "SUBCLASS_INDICATOR"):
+            indicator = self._data.SUBCLASS_INDICATOR
+            type_val = getattr(self._data, indicator)
+            ut = self._data.SUBCLASS_MAP[type_val]
+            if ut is None:
+                raise Exception(
+                    f"No subclass type defined for indicator {type_val} ({indicator})"
+                )
             cls_base = getattr(ut, "__origin__", ut)
-            if cls_base == Union:
-                if val is None:
-                    return None
-                # pull out the first type which is assumed to be the non-none type
-                ut = ut.__args__[0]
+
+        if cls_base == Union:
+            if val is None:
+                return None
+            # pull out the first type which is assumed to be the non-none type
+            ut = ut.__args__[0]
+            cls_base = getattr(ut, "__origin__", ut)
+        if cls_base == Any:
+            if hasattr(self._data, "TYPE_INDICATOR"):
+                indicator = self._data.TYPE_INDICATOR
+                type_val = getattr(self._data, indicator)
+                ut = self._data.ANY_TYPE_MAP[type_val]
+                if ut is None:
+                    raise Exception(
+                        f"No any type defined for indicator {type_val} ({indicator})"
+                    )
                 cls_base = getattr(ut, "__origin__", ut)
-            if cls_base == Any:
-                indicator = self._data.type_field()
-                ut = self._data.any_type(getattr(self._data, indicator))
-                cls_base = getattr(ut, "__origin__", ut)
-            if cls_base == Union:
-                if val is None:
-                    return None
-                # pull out the first type which is assumed to be the non-none type
-                ut = ut.__args__[0]
-                cls_base = getattr(ut, "__origin__", ut)
-            try:
-                if issubclass(cls_base, dict):
-                    return MappingProxyType(val)
-                elif cls_base not in (str, tuple) and issubclass(cls_base, Iterable):
-                    return tuple(val)
-                else:
-                    return val
-            except Exception:
-                print(f"Bad type reading field {name} ({ut}, {cls_base}, {val})")
-                raise
-        else:
-            raise Exception(f"No such field: {name}")
+            else:
+                raise Exception(f"No any type defined for field {name})")
+        if cls_base == Union:
+            if val is None:
+                return None
+            # pull out the first type which is assumed to be the non-none type
+            ut = ut.__args__[0]
+            cls_base = getattr(ut, "__origin__", ut)
+        try:
+            if issubclass(cls_base, dict):
+                return MappingProxyType(val)
+            elif cls_base not in (str, tuple) and issubclass(cls_base, Iterable):
+                return tuple(val)
+            else:
+                return val
+        except Exception:
+            print(f"Bad type reading field {name} ({ut}, {cls_base}, {val})")
+            raise
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, StandardWrapper) or self.Data != other.Data:
@@ -432,7 +474,12 @@ class StandardWrapper:
     def create_detached(cls, **kwargs) -> Any:  # should be type(self)
         if cls.HAS_UUID and not cls.Data.SECONDARY_TABLE:
             kwargs["uuid"] = make_uuid()
-        ret = cls(cls.Data(**kwargs), can_write=True)
+        eff_data = cls.Data
+        if hasattr(cls.Data, "SUBCLASS_MAP"):
+            indicator = cls.Data.SUBCLASS_INDICATOR
+            type_val = kwargs[indicator]
+            eff_data = cls.Data.SUBCLASS_MAP[type_val]
+        ret = cls(eff_data(**kwargs), can_write=True)
         ret._write = True
         return ret
 
@@ -447,3 +494,22 @@ class StandardWrapper:
         if cls.HAS_UUID:
             return val.uuid
         return None
+
+
+def data_subclass_of(parent_cls, type_vals: List[Any]):
+    def decorate(cls):
+        all_stores.discard(cls)
+        cls = subclass_of(parent_cls, type_vals)(cls)
+        subclass_fields = dataclass_fields(cls)
+        for f in subclass_fields:
+            if f.name in parent_cls.ALL_FIELDS:
+                if f.type != parent_cls.ALL_FIELDS[f.name].type:
+                    raise Exception(
+                        f"Subtype field mismatch for {f.name}: found {f}, expected {parent_cls.ALL_FIELDS[f.name]}"
+                    )
+            else:
+                parent_cls.ALL_FIELDS[f.name] = f
+        parent_cls.SUBCLASS_FIELDS[cls] = {f.name: f for f in subclass_fields}
+        return cls
+
+    return decorate

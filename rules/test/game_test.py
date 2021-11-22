@@ -14,21 +14,31 @@ from picaro.rules.character import CharacterRules
 from picaro.rules.game import GameRules
 from picaro.rules.test.test_base import FlatworldTestBase
 from picaro.rules.types.external import (
+    AmountOverlay as external_AmountOverlay,
     Entity as external_Entity,
     Title,
-    Overlay as external_Overlay,
 )
 from picaro.rules.types.internal import (
+    AmountEffect,
     Character,
     Effect,
     EffectType,
+    EnableEffect,
+    EncounterEffect,
+    EntityAmountEffect,
+    AddEntityEffect,
     EntityType,
     FullCard,
     FullCardType,
+    JobEffect,
+    LocationEffect,
     Meter,
     OverlayType,
+    ResourceAmountEffect,
+    SkillAmountEffect,
     TemplateCard,
     TemplateCardType,
+    AddTitleEffect,
     TurnFlags,
 )
 
@@ -119,63 +129,67 @@ class GameTest(FlatworldTestBase):
         self.assertEqual(len(EffectType), 17)
 
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
-            effects = [Effect(type=EffectType.MODIFY_COINS, subtype=None, value=5)]
+            effects = [AmountEffect(type=EffectType.MODIFY_COINS, amount=5)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(ch.coins, 5)
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
-            effects = [Effect(type=EffectType.MODIFY_XP, subtype="Skill 6", value=10)]
+            effects = [
+                SkillAmountEffect(type=EffectType.MODIFY_XP, skill="Skill 6", amount=10)
+            ]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(ch.skill_xp.get("Skill 6", 0), 10)
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
-            effects = [Effect(type=EffectType.MODIFY_XP, subtype=None, value=10)]
+            effects = [
+                SkillAmountEffect(type=EffectType.MODIFY_XP, skill=None, amount=10)
+            ]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(len(ch.queued), 1)
             self.assertEqual(ch.queued[0].name, "Assign XP")
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
-            effects = [Effect(type=EffectType.MODIFY_REPUTATION, subtype=None, value=5)]
+            effects = [AmountEffect(type=EffectType.MODIFY_REPUTATION, amount=5)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(ch.reputation, 8)  # because initial value was 3
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
-            effects = [Effect(type=EffectType.MODIFY_HEALTH, subtype=None, value=-5)]
+            effects = [AmountEffect(type=EffectType.MODIFY_HEALTH, amount=-5)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(ch.health, 15)
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
-            effects = [Effect(type=EffectType.MODIFY_TURNS, subtype=None, value=5)]
+            effects = [AmountEffect(type=EffectType.MODIFY_TURNS, amount=5)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(ch.remaining_turns, 25)
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
-            effects = [Effect(type=EffectType.MODIFY_SPEED, subtype=None, value=2)]
+            effects = [AmountEffect(type=EffectType.MODIFY_SPEED, amount=2)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(ch.speed, 5)
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
             self.assertNotIn(TurnFlags.ACTED, ch.turn_flags)
-            effects = [Effect(type=EffectType.MODIFY_ACTIVITY, subtype=None, value=-1)]
+            effects = [EnableEffect(type=EffectType.MODIFY_ACTIVITY, enable=False)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertIn(TurnFlags.ACTED, ch.turn_flags)
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
-            effects = [Effect(type=EffectType.MODIFY_ACTIVITY, subtype=None, value=1)]
+            effects = [EnableEffect(type=EffectType.MODIFY_ACTIVITY, enable=True)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertNotIn(TurnFlags.ACTED, ch.turn_flags)
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
-            effects = [Effect(type=EffectType.MODIFY_LUCK, subtype=None, value=2)]
+            effects = [AmountEffect(type=EffectType.MODIFY_LUCK, amount=2)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(ch.luck, 7)
@@ -184,7 +198,9 @@ class GameTest(FlatworldTestBase):
     def test_apply_effects_modify_resources(self) -> None:
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
             effects = [
-                Effect(type=EffectType.MODIFY_RESOURCES, subtype="Resource C", value=5)
+                ResourceAmountEffect(
+                    type=EffectType.MODIFY_RESOURCES, resource="Resource C", amount=5
+                ),
             ]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
@@ -193,20 +209,23 @@ class GameTest(FlatworldTestBase):
 
             # not worrying about exact draws, but we should end up with a
             # couple resources
-            effects = [Effect(type=EffectType.MODIFY_RESOURCES, subtype=None, value=50)]
+            effects = [
+                ResourceAmountEffect(
+                    type=EffectType.MODIFY_RESOURCES, resource=None, amount=50
+                )
+            ]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(len(ch.resources), 5)
             self.assertEqual(len(records), 6, msg=str([r._data for r in records]))
 
     def test_apply_effects_add_entity(self) -> None:
-        overlay = external_Overlay(
+        overlay = external_AmountOverlay(
             uuid="",
             type=OverlayType.MAX_LUCK,
-            subtype=None,
             is_private=False,
             filters=[],
-            value=1,
+            amount=1,
         )
         entity = external_Entity(
             type=EntityType.LANDMARK,
@@ -225,20 +244,19 @@ class GameTest(FlatworldTestBase):
             uuid="",
         )
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
-            effects = [Effect(type=EffectType.ADD_ENTITY, subtype=None, value=entity)]
+            effects = [AddEntityEffect(type=EffectType.ADD_ENTITY, entity=entity)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(CharacterRules.get_max_luck(ch), 6)
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
     def test_apply_effects_add_title(self) -> None:
-        overlay = external_Overlay(
+        overlay = external_AmountOverlay(
             uuid="",
             type=OverlayType.INIT_SPEED,
-            subtype=None,
             is_private=True,
             filters=[],
-            value=2,
+            amount=2,
         )
         title = Title(
             name="Sir Kicks-a-lot",
@@ -248,7 +266,7 @@ class GameTest(FlatworldTestBase):
             meters=[],
         )
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
-            effects = [Effect(type=EffectType.ADD_TITLE, subtype=None, value=title)]
+            effects = [AddTitleEffect(type=EffectType.ADD_TITLE, title=title)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(CharacterRules.get_init_speed(ch), 5)
@@ -264,7 +282,7 @@ class GameTest(FlatworldTestBase):
             )
 
             effects = [
-                Effect(type=EffectType.QUEUE_ENCOUNTER, subtype=None, value=template)
+                EncounterEffect(type=EffectType.QUEUE_ENCOUNTER, encounter=template)
             ]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
@@ -277,7 +295,7 @@ class GameTest(FlatworldTestBase):
 
         BoardRules.move_token_for_entity(ch.uuid, "AA03", adjacent=False)
         self.assertEqual(BoardRules.get_single_token_hex(ch.uuid).name, "AA03")
-        effects = [Effect(type=EffectType.MODIFY_LOCATION, subtype=None, value="AG10")]
+        effects = [LocationEffect(type=EffectType.MODIFY_LOCATION, hex="AG10")]
         records = []
         GameRules.apply_effects(ch, [], effects, records)
         self.assertEqual(BoardRules.get_single_token_hex(ch.uuid).name, "AG10")
@@ -286,9 +304,7 @@ class GameTest(FlatworldTestBase):
     def test_apply_effects_modify_job(self) -> None:
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
             self.assertEqual(ch.job_name, "Red Job 1")
-            effects = [
-                Effect(type=EffectType.MODIFY_JOB, subtype=None, value="Blue Job")
-            ]
+            effects = [JobEffect(type=EffectType.MODIFY_JOB, job_name="Blue Job")]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(ch.job_name, "Blue Job")
@@ -296,7 +312,7 @@ class GameTest(FlatworldTestBase):
 
     def test_apply_effects_leadership(self) -> None:
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
-            effects = [Effect(type=EffectType.LEADERSHIP, subtype=None, value=-1)]
+            effects = [AmountEffect(type=EffectType.LEADERSHIP, amount=-1)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(len(ch.queued), 1)
@@ -305,7 +321,7 @@ class GameTest(FlatworldTestBase):
 
     def test_apply_effects_transport(self) -> None:
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
-            effects = [Effect(type=EffectType.TRANSPORT, subtype=None, value=5)]
+            effects = [AmountEffect(type=EffectType.TRANSPORT, amount=5)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
@@ -316,12 +332,16 @@ class GameTest(FlatworldTestBase):
             min_value=0,
             max_value=10,
             cur_value=5,
-            empty_effects=[Effect(type=EffectType.MODIFY_COINS, subtype=None, value=3)],
-            full_effects=[Effect(type=EffectType.MODIFY_LUCK, subtype=None, value=4)],
+            empty_effects=[AmountEffect(type=EffectType.MODIFY_COINS, amount=3)],
+            full_effects=[AmountEffect(type=EffectType.MODIFY_LUCK, amount=4)],
         )
 
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
-            effects = [Effect(type=EffectType.TICK_METER, subtype=muuid, value=3)]
+            effects = [
+                EntityAmountEffect(
+                    type=EffectType.TICK_METER, entity_uuid=muuid, amount=3
+                )
+            ]
 
             records = []
             GameRules.apply_effects(ch, [], effects, records)
@@ -340,7 +360,11 @@ class GameTest(FlatworldTestBase):
             )
             ch.queued = []
 
-            effects = [Effect(type=EffectType.TICK_METER, subtype=muuid, value=-10)]
+            effects = [
+                EntityAmountEffect(
+                    type=EffectType.TICK_METER, entity_uuid=muuid, amount=-10
+                )
+            ]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(Meter.load(muuid).cur_value, 0)
@@ -354,8 +378,8 @@ class GameTest(FlatworldTestBase):
 
     def test_apply_effects_costs(self) -> None:
         costs = [
-            Effect(type=EffectType.MODIFY_COINS, subtype=None, value=-5),
-            Effect(type=EffectType.MODIFY_REPUTATION, subtype=None, value=3),
+            AmountEffect(type=EffectType.MODIFY_COINS, amount=-5),
+            AmountEffect(type=EffectType.MODIFY_REPUTATION, amount=3),
         ]
 
         with Character.load_by_name_for_write(self.CHARACTER) as ch:

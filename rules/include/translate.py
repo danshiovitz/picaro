@@ -144,11 +144,12 @@ def from_external_action(
 ) -> Trigger:
     def modify(field_map: Dict[str, Any], extra: Dict[str, Any]) -> None:
         field_map["type"] = TriggerType.ACTION
-        field_map["subtype"] = None
         field_map["entity_uuid"] = entity_uuid
         field_map["title"] = title
 
-    return from_external_helper(action, Trigger, modify)
+    return from_external_helper(
+        action, Trigger, modify, indicator_val=TriggerType.ACTION
+    )
 
 
 def to_external_action(
@@ -327,11 +328,19 @@ def to_external_helper(
 ) -> S:
     field_map: Dict[str, Any] = {}
     extra: Dict[str, Any] = {}
+
+    external_cls = cls_to_subcls(external_cls, val)
     external_fields = {f.name for f in dataclass_fields(external_cls)}
+
     if is_dataclass(val):
-        val_fields = {f.name for f in dataclass_fields(val)}
+        val_subcls = cls_to_subcls(val.__class__, val)
+        val_fields = {f.name for f in dataclass_fields(val_subcls)}
     else:
-        val_fields = val.FIELDS
+        val_subcls = cls_to_subcls(val.Data, val)
+        val_fields = val.Data.SUBCLASS_FIELDS.get(
+            val_subcls, val.Data.BASE_FIELDS
+        ).keys()
+
     for f in val_fields:
         cur = getattr(val, f)
         if f in external_fields:
@@ -346,16 +355,25 @@ def from_external_helper(
     snapshot: S,
     val_cls: Type[T],
     modify: Callable[[Dict[str, Any], Dict[str, Any]], None] = lambda _d, _e: None,
+    indicator_val: Optional[Any] = None,
 ) -> T:
     field_map: Dict[str, Any] = {}
     extra: Dict[str, Any] = {}
-    external_fields = {f.name for f in dataclass_fields(snapshot)}
+
+    external_cls = cls_to_subcls(snapshot.__class__, snapshot)
+    external_fields = {f.name for f in dataclass_fields(external_cls)}
+
     if is_dataclass(val_cls):
-        val_fields = {f.name for f in dataclass_fields(val_cls)}
-        create_val = lambda fm: val_cls(**fm)
+        val_subcls = cls_to_subcls(val_cls, snapshot)
+        val_fields = {f.name for f in dataclass_fields(val_subcls)}
+        create_val = lambda fm: subtype_builder(val_cls, fm)
     else:
-        val_fields = val_cls.FIELDS
+        val_subcls = cls_to_subcls(val_cls.Data, snapshot, indicator_val=indicator_val)
+        val_fields = val_cls.Data.SUBCLASS_FIELDS.get(
+            val_subcls, val_cls.Data.BASE_FIELDS
+        ).keys()
         create_val = lambda fm: val_cls.create_detached(**fm)
+
     for sf in external_fields:
         cur = getattr(snapshot, sf)
         if sf in val_fields:
@@ -364,3 +382,18 @@ def from_external_helper(
             extra[sf] = cur
     modify(field_map, extra)
     return create_val(field_map)
+
+
+def cls_to_subcls(cls: Type[T], val: T, indicator_val: Optional[Any] = None) -> Type[T]:
+    if not hasattr(cls, "SUBCLASS_INDICATOR"):
+        return cls
+    if indicator_val:
+        type_val = indicator_val
+    else:
+        indicator = cls.SUBCLASS_INDICATOR
+        type_val = getattr(val, indicator)
+        if type_val not in cls.SUBCLASS_MAP:
+            raise Exception(
+                f"Can't find indicator ({type_val}) in subclass of {cls.__name__}"
+            )
+    return cls.SUBCLASS_MAP[type_val]

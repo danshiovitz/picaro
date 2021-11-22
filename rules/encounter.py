@@ -10,6 +10,7 @@ from .include.deck import shuffle_discard
 from .include.special_cards import actualize_special_card
 from .types.external import EncounterCommands
 from .types.internal import (
+    AmountEffect,
     Character,
     Challenge,
     Choice,
@@ -23,6 +24,7 @@ from .types.internal import (
     FullCardType,
     Game,
     Outcome,
+    SkillAmountEffect,
     TemplateCard,
     TemplateCardType,
     TemplateDeck,
@@ -263,37 +265,41 @@ class EncounterRules:
         default_skill = card.data[0].skill
         sum_til = lambda v: (v * v + v) // 2
         if outcome == Outcome.GAIN_COINS:
-            return [Effect(type=EffectType.MODIFY_COINS, value=sum_til(cnt))]
+            return [AmountEffect(type=EffectType.MODIFY_COINS, amount=sum_til(cnt))]
         elif outcome == Outcome.LOSE_COINS:
-            return [Effect(type=EffectType.MODIFY_COINS, value=-cnt)]
+            return [AmountEffect(type=EffectType.MODIFY_COINS, amount=-cnt)]
         elif outcome == Outcome.GAIN_REPUTATION:
-            return [Effect(type=EffectType.MODIFY_REPUTATION, value=sum_til(cnt))]
+            return [
+                AmountEffect(type=EffectType.MODIFY_REPUTATION, amount=sum_til(cnt))
+            ]
         elif outcome == Outcome.LOSE_REPUTATION:
-            return [Effect(type=EffectType.MODIFY_REPUTATION, value=-cnt)]
+            return [AmountEffect(type=EffectType.MODIFY_REPUTATION, amount=-cnt)]
         elif outcome == Outcome.GAIN_HEALING:
-            return [Effect(type=EffectType.MODIFY_HEALTH, value=cnt * 3)]
+            return [AmountEffect(type=EffectType.MODIFY_HEALTH, amount=cnt * 3)]
         elif outcome == Outcome.DAMAGE:
-            return [Effect(type=EffectType.MODIFY_HEALTH, value=-sum_til(cnt))]
+            return [AmountEffect(type=EffectType.MODIFY_HEALTH, amount=-sum_til(cnt))]
         elif outcome == Outcome.GAIN_XP:
             return [
-                Effect(type=EffectType.MODIFY_XP, subtype=default_skill, value=cnt * 5)
+                SkillAmountEffect(
+                    type=EffectType.MODIFY_XP, skill=default_skill, amount=cnt * 5
+                )
             ]
         elif outcome == Outcome.GAIN_RESOURCES:
-            return [Effect(type=EffectType.MODIFY_RESOURCES, value=cnt)]
+            return [AmountEffect(type=EffectType.MODIFY_RESOURCES, amount=cnt)]
         elif outcome == Outcome.LOSE_RESOURCES:
-            return [Effect(type=EffectType.MODIFY_RESOURCES, value=-cnt)]
+            return [AmountEffect(type=EffectType.MODIFY_RESOURCES, amount=-cnt)]
         elif outcome == Outcome.GAIN_TURNS:
-            return [Effect(type=EffectType.MODIFY_TURNS, value=cnt)]
+            return [AmountEffect(type=EffectType.MODIFY_TURNS, amount=cnt)]
         elif outcome == Outcome.LOSE_TURNS:
-            return [Effect(type=EffectType.MODIFY_TURNS, value=-cnt)]
+            return [AmountEffect(type=EffectType.MODIFY_TURNS, amount=-cnt)]
         elif outcome == Outcome.GAIN_SPEED:
-            return [Effect(type=EffectType.MODIFY_SPEED, value=cnt * 2)]
+            return [AmountEffect(type=EffectType.MODIFY_SPEED, amount=cnt * 2)]
         elif outcome == Outcome.LOSE_SPEED:
-            return [Effect(type=EffectType.MODIFY_SPEED, value=-cnt)]
+            return [AmountEffect(type=EffectType.MODIFY_SPEED, amount=-cnt)]
         elif outcome == Outcome.TRANSPORT:
-            return [Effect(type=EffectType.TRANSPORT, value=cnt * 5)]
+            return [AmountEffect(type=EffectType.TRANSPORT, amount=cnt * 5)]
         elif outcome == Outcome.LOSE_LEADERSHIP:
-            return [Effect(type=EffectType.LEADERSHIP, value=-cnt)]
+            return [AmountEffect(type=EffectType.LEADERSHIP, amount=-cnt)]
         elif outcome == Outcome.NOTHING:
             return []
         else:

@@ -31,28 +31,26 @@ class RenderClientBase(ClientBase):
 
     def render_record(self, ch: Character, record: Record) -> str:
         def render_single_int(record: Record) -> str:
-            if record.new_value > record.old_value:
-                return f"increased to {record.new_value}"
-            elif record.new_value < record.old_value:
-                return f"decreased to {record.new_value}"
+            if record.new_amount > record.old_amount:
+                return f"increased to {record.new_amount}"
+            elif record.new_amount < record.old_amount:
+                return f"decreased to {record.new_amount}"
             else:
-                return f"remained at {record.new_value}"
+                return f"remained at {record.new_amount}"
 
         line = "* "
-        subj = self.entities.get_by_uuid(record.entity_uuid).name
-        if record.entity_uuid == ch.uuid:
+        subj = self.entities.get_by_uuid(record.target_uuid).name
+        if record.target_uuid == ch.uuid:
             line += "Your "
             subj = "You"
         else:
             line += subj + "'s "
 
         if record.type == EffectType.MODIFY_ACTIVITY:
-            if record.new_value <= 0 and record.old_value > 0:
+            if not record.enabled:
                 line += "activity was used"
-            elif record.new_value > 0 and record.old_value <= 0:
-                line += "activity was refreshed"
             else:
-                line += "activity is unchanged"
+                line += "activity was refreshed"
         elif record.type == EffectType.MODIFY_HEALTH:
             line += "health has " + render_single_int(record)
         elif record.type == EffectType.MODIFY_COINS:
@@ -60,14 +58,14 @@ class RenderClientBase(ClientBase):
         elif record.type == EffectType.MODIFY_REPUTATION:
             line += "reputation has " + render_single_int(record)
         elif record.type == EffectType.MODIFY_XP:
-            line += f"{record.subtype or 'unassigned'} xp has " + render_single_int(
+            line += f"{record.skill or 'unassigned'} xp has " + render_single_int(
                 record
             )
         elif record.type == EffectType.MODIFY_RESOURCES:
-            if record.subtype is None:
+            if record.resource is None:
                 line = f"* {subj} gained {record.new_value} resource draws"
             else:
-                line += f"{record.subtype} resources have " + render_single_int(record)
+                line += f"{record.resource} resources have " + render_single_int(record)
         elif record.type == EffectType.MODIFY_TURNS:
             line += "remaining turns have " + render_single_int(record)
         elif record.type == EffectType.MODIFY_SPEED:
@@ -75,27 +73,34 @@ class RenderClientBase(ClientBase):
         elif record.type == EffectType.MODIFY_LUCK:
             line += "luck has " + render_single_int(record)
         elif record.type == EffectType.ADD_TITLE:
-            line = f"* {subj} gained the title {self.render_title(record.new_value)}"
+            line = f"* {subj} gained the title {self.render_title(record.title)}"
+        elif record.type == EffectType.ADD_ENTITY:
+            line = f"* {subj} added the entity {self.render_entity(record.entity)}"
         elif record.type == EffectType.QUEUE_ENCOUNTER:
-            line = f"* {subj} had the encounter {self.render_template_card(record.new_value)}"
+            line = f"* {subj} had the encounter {self.render_template_card(record.encounter)}"
         elif record.type == EffectType.MODIFY_LOCATION:
             if subj == "You":
                 line = f"* {subj} are "
             else:
                 line = f"* {subj} is "
-            line += f"now in hex {record.new_value}"
+            line += f"now in hex {record.new_hex}"
         elif record.type == EffectType.MODIFY_JOB:
             if subj == "You":
                 line = f"* {subj} have "
             else:
                 line = f"* {subj} has "
-            line += f"become a {record.new_value}"
+            line += f"become a {record.new_job_name}"
         elif record.type == EffectType.LEADERSHIP:
             if subj == "You":
                 line = f"* {subj} have "
             else:
                 line = f"* {subj} has "
             line += f"entered into a leadership challenge"
+        elif record.type == EffectType.TICK_METER:
+            name = self.entities.get_by_uuid(record.entity_uuid).name
+            line = (
+                f"* {subj} set {name} from {record.old_amount} to {record.new_amount}"
+            )
         else:
             line += f"UNKNOWN EVENT TYPE: {record}"
 
@@ -131,25 +136,23 @@ class RenderClientBase(ClientBase):
             word: str, coll: bool = False, subtype: Optional[str] = None
         ) -> str:
             ln = "set to " if eff.is_absolute else ""
-            ln += f"{eff.value:+} "
+            ln += f"{eff.amount:+} "
             if subtype:
                 ln += subtype + " "
-            if eff.value == 1 or eff.value == -1 or coll:
+            if eff.amount == 1 or eff.amount == -1 or coll:
                 ln += word
             else:
                 ln += word + "s"
             return ln
 
         entity = ""
-        if eff.entity_uuid:
-            entity = f" for {self.entities.get_by_uuid(eff.entity_uuid).name}"
+        if eff.ch_uuid:
+            entity = f" for {self.entities.get_by_uuid(eff.ch_uuid).name}"
 
         if eff.type == EffectType.MODIFY_COINS:
             return _std_mod("coin") + entity
         elif eff.type == EffectType.MODIFY_XP:
-            return (
-                _std_mod("xp", coll=True, subtype=eff.subtype or "unassigned") + entity
-            )
+            return _std_mod("xp", coll=True, subtype=eff.skill or "unassigned") + entity
         elif eff.type == EffectType.MODIFY_REPUTATION:
             return _std_mod("reputation", coll=True) + entity
         elif eff.type == EffectType.MODIFY_HEALTH:
@@ -157,8 +160,8 @@ class RenderClientBase(ClientBase):
         elif eff.type == EffectType.MODIFY_RESOURCES:
             return (
                 _std_mod("resource draw")
-                if eff.subtype is None
-                else _std_mod("resource", subtype=eff.subtype)
+                if eff.resource is None
+                else _std_mod("resource", subtype=eff.resource)
             ) + entity
         elif eff.type == EffectType.MODIFY_LUCK:
             return _std_mod("luck", coll=True) + entity
@@ -167,24 +170,26 @@ class RenderClientBase(ClientBase):
         elif eff.type == EffectType.MODIFY_SPEED:
             return _std_mod("speed", coll=True) + entity
         elif eff.type == EffectType.LEADERSHIP:
-            return f"leadership challenge ({eff.value:+}){entity}"
+            return f"leadership challenge ({eff.amount:+}){entity}"
         elif eff.type == EffectType.TRANSPORT:
-            return f"random transport ({eff.value:+}){entity}"
+            return f"random transport ({eff.amount:+}){entity}"
         elif eff.type == EffectType.MODIFY_ACTIVITY:
-            return ("use activity" if eff.value <= 0 else "refresh activity") + entity
+            return ("use activity" if not eff.enabled else "refresh activity") + entity
         elif eff.type == EffectType.ADD_TITLE:
-            return "add a title (" + self.render_title(eff.value) + ")" + entity
+            return "add a title (" + self.render_title(eff.title) + ")" + entity
+        elif eff.type == EffectType.ADD_ENTITY:
+            return "add an entity (" + self.render_entity(eff.entity) + ")" + entity
         elif eff.type == EffectType.QUEUE_ENCOUNTER:
             return (
                 "queue an encounter ("
-                + self.render_template_card(eff.value)
+                + self.render_template_card(eff.encounter)
                 + ")"
                 + entity
             )
         elif eff.type == EffectType.MODIFY_LOCATION:
-            return f"move to {eff.value}{entity}"
+            return f"move to {eff.location}{entity}"
         elif eff.type == EffectType.MODIFY_JOB:
-            return f"change job to {eff.value}{entity}"
+            return f"change job to {eff.job_name}{entity}"
         else:
             return eff
 
@@ -228,8 +233,10 @@ class RenderClientBase(ClientBase):
             OverlayType.TRADE_PRICE: "trade price",
         }
         name = names.get(overlay.type, overlay.type.name)
-        if overlay.subtype:
-            name = overlay.subtype + " " + name
+        if isinstance(overlay, SkillAmountOverlay):
+            name = overlay.skill + " " + name
+        elif isinstance(overlay, ResourceAmountOverlay):
+            name = overlay.resource + " " + name
         val = f"{overlay.value:+} {name}"
         if overlay.filters:
             val += f" if {', '.join(self.render_filter(f) for f in overlay.filters)}"
@@ -242,8 +249,8 @@ class RenderClientBase(ClientBase):
             TriggerType.END_TURN: "end a turn",
         }
         name = names.get(trigger.type, trigger.type.name)
-        if trigger.subtype:
-            name = trigger.subtype + " " + name
+        if isinstance(trigger, HexTrigger):
+            name = trigger.hex + " " + name
         val = f"when you {name}: "
         val += ", ".join(self.render_effect(e) for e in trigger.effects)
         if trigger.filters:
@@ -273,15 +280,16 @@ class RenderClientBase(ClientBase):
         ns = "not " if filter.reverse else ""
         if filter.type == FilterType.SKILL_GTE:
             if filter.reverse:
-                return f"{filter.subtype} < {filter.value}"
+                return f"{filter.skill} < {filter.value}"
             else:
-                return f"{filter.subtype} >= {filter.value}"
+                return f"{filter.skill} >= {filter.value}"
         elif filter.type == FilterType.NEAR_HEX:
-            return f"{ns}within {filter.value} hexes of {filter.subtype}"
+            return f"{ns}within {filter.distance} hexes of {filter.hex}"
         elif filter.type == FilterType.NEAR_TOKEN:
-            return f"{ns}within {filter.value} hexes of {filter.subtype}"
+            name = self.entities.get_by_uuid(filter.entity_uuid).name
+            return f"{ns}within {filter.distance} hexes of {name}"
         elif filter.type == FilterType.IN_COUNTRY:
-            return f"{ns}within {filter.subtype}"
+            return f"{ns}within {filter.country}"
         else:
             return str(filter)
 

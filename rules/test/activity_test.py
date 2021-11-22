@@ -15,6 +15,7 @@ from picaro.rules.board import BoardRules
 from picaro.rules.test.test_base import FlatworldTestBase
 from picaro.rules.types.external import EncounterCommands
 from picaro.rules.types.internal import (
+    AmountEffect,
     Character,
     Choice,
     Choices,
@@ -26,6 +27,7 @@ from picaro.rules.types.internal import (
     FilterType,
     FullCard,
     FullCardType,
+    HexFilter,
     Outcome,
     TemplateCard,
     TemplateCardType,
@@ -107,11 +109,10 @@ class ActivityTest(FlatworldTestBase):
         return self.add_trigger(
             name="Thingo",
             type=TriggerType.ACTION,
-            subtype=None,
             costs=[],
-            effects=[Effect(type=EffectType.MODIFY_COINS, subtype=None, value=6)],
+            effects=[AmountEffect(type=EffectType.MODIFY_COINS, amount=6)],
             is_private=False,
-            filters=[Filter(type=FilterType.NEAR_HEX, subtype="AF08", value=1)],
+            filters=[HexFilter(type=FilterType.NEAR_HEX, hex="AF08", distance=1)],
         )
 
     def test_camp(self) -> None:
@@ -187,9 +188,9 @@ class ActivityTest(FlatworldTestBase):
         self.add_trigger(
             name=None,
             type=TriggerType.ENTER_HEX,
-            subtype=hex,
+            hex=hex,
             costs=[],
-            effects=[Effect(type=EffectType.MODIFY_COINS, subtype=None, value=5)],
+            effects=[AmountEffect(type=EffectType.MODIFY_COINS, amount=5)],
             is_private=False,
             filters=[],
         )
@@ -374,12 +375,12 @@ class ActivityTest(FlatworldTestBase):
                 data=Choices(
                     min_choices=overall_mm[0],
                     max_choices=overall_mm[1],
-                    effects=[Effect(type=types.pop(0), subtype=None, value=1)],
+                    effects=[AmountEffect(type=types.pop(0), amount=1)],
                     choice_list=[
                         Choice(
                             min_choices=mm[0],
                             max_choices=mm[1],
-                            effects=[Effect(type=types.pop(0), subtype=None, value=1)],
+                            effects=[AmountEffect(type=types.pop(0), amount=1)],
                         )
                         for mm in item_mms
                     ],

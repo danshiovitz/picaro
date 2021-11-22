@@ -1,9 +1,12 @@
+from collections import defaultdict
 from dataclasses import dataclass, replace as dataclasses_replace
 from enum import Enum, auto as enum_auto
 from typing import Any, Dict, List, Optional, Sequence, Set
 
 from picaro.common.hexmap.types import CubeCoordinate
+from picaro.common.serializer import SubclassVariant
 from picaro.common.storage import (
+    data_subclass_of,
     StorageBase,
     StandardWrapper,
     make_double_uuid,
@@ -11,28 +14,42 @@ from picaro.common.storage import (
 )
 
 from .external import (
+    AddEntityEffect,
+    AddTitleEffect,
+    AmountEffect,
     Challenge,
     Choice,
     Choices,
+    CountryFilter,
     Effect,
     EffectType,
+    EnableEffect,
     EncounterCheck,
     EncounterContextType,
-    EntityType,
+    EncounterEffect,
     Entity as external_Entity,
+    EntityAmountEffect,
+    EntityType,
     Filter,
     FilterType,
     FullCard,
     FullCardType,
+    HexFilter,
+    JobEffect,
     JobType,
+    LocationEffect,
     Outcome,
     Overlay,
     OverlayType,
+    ResourceAmountEffect,
     Route,
     RouteType,
+    SkillAmountEffect,
+    SkillFilter,
     TemplateCard,
     TemplateCardType,
     Title,
+    TokenFilter,
     TriggerType,
 )
 
@@ -219,7 +236,7 @@ class Job(StandardWrapper):
 
 
 class Overlay(StandardWrapper):
-    class Data(StorageBase["Overlay.Data"]):
+    class Data(StorageBase["Overlay.Data"], SubclassVariant):
         TABLE_NAME = "overlay"
 
         uuid: str
@@ -227,10 +244,8 @@ class Overlay(StandardWrapper):
         entity_uuid: str
         title: Optional[str]
         type: OverlayType
-        subtype: Optional[str]
         is_private: bool
         filters: Sequence[Filter]
-        value: int
 
     @classmethod
     def load_for_entity(cls, entity_uuid: str) -> List["Overlay"]:
@@ -246,8 +261,41 @@ class Overlay(StandardWrapper):
         )
 
 
+@data_subclass_of(
+    Overlay.Data,
+    [
+        OverlayType.INIT_TABLEAU_AGE,
+        OverlayType.INIT_TURNS,
+        OverlayType.MAX_HEALTH,
+        OverlayType.MAX_LUCK,
+        OverlayType.MAX_TABLEAU_SIZE,
+        OverlayType.INIT_SPEED,
+        OverlayType.MAX_RESOURCES,
+        OverlayType.INIT_REPUTATION,
+    ],
+)
+class AmountOverlay(Overlay.Data):
+    amount: int
+
+
+@data_subclass_of(
+    Overlay.Data,
+    [
+        OverlayType.SKILL_RANK,
+        OverlayType.RELIABLE_SKILL,
+    ],
+)
+class SkillAmountOverlay(AmountOverlay):
+    skill: Optional[str]
+
+
+@data_subclass_of(Overlay.Data, [OverlayType.TRADE_PRICE])
+class ResourceAmountOverlay(AmountOverlay):
+    resource: str
+
+
 class Trigger(StandardWrapper):
-    class Data(StorageBase["Trigger.Data"]):
+    class Data(StorageBase["Trigger.Data"], SubclassVariant):
         TABLE_NAME = "trigger"
 
         uuid: str
@@ -255,7 +303,6 @@ class Trigger(StandardWrapper):
         entity_uuid: str
         title: Optional[str]
         type: TriggerType
-        subtype: Optional[str]
         is_private: bool
         filters: Sequence[Filter]
         costs: Sequence[Effect]
@@ -273,6 +320,24 @@ class Trigger(StandardWrapper):
             ["entity_uuid = :entity_uuid or is_private = 0"],
             {"entity_uuid": entity_uuid},
         )
+
+
+@data_subclass_of(
+    Trigger.Data,
+    [
+        TriggerType.ACTION,
+        TriggerType.START_TURN,
+        TriggerType.END_TURN,
+    ],
+)
+class StandardTrigger(Trigger.Data):
+    # dataclass-construction code doesn't work well if empty subclass
+    dummy: int = 0
+
+
+@data_subclass_of(Trigger.Data, [TriggerType.ENTER_HEX])
+class HexTrigger(Trigger.Data):
+    hex: Optional[str]
 
 
 class Meter(StandardWrapper):
@@ -351,33 +416,75 @@ class Character(StandardWrapper):
 
 
 class Record(StandardWrapper):
-    class Data(StorageBase["Record.Data"]):
+    class Data(StorageBase["Record.Data"], SubclassVariant):
         TABLE_NAME = "record"
 
         uuid: str
-        entity_uuid: str
+        target_uuid: str
         type: EffectType
-        subtype: Optional[str]
-        old_value: Optional[Any]
-        new_value: Optional[Any]
         comments: Sequence[str]
 
-        @classmethod
-        def type_field(cls) -> str:
-            return "type"
 
-        @classmethod
-        def any_type(cls, type_val: EffectType) -> type:
-            if type_val == EffectType.ADD_ENTITY:
-                return external_Entity
-            elif type_val == EffectType.ADD_TITLE:
-                return Title
-            elif type_val == EffectType.QUEUE_ENCOUNTER:
-                return Optional[TemplateCard]
-            elif type_val in (
-                EffectType.MODIFY_JOB,
-                EffectType.MODIFY_LOCATION,
-            ):
-                return str
-            else:
-                return int
+@data_subclass_of(
+    Record.Data,
+    [
+        EffectType.MODIFY_COINS,
+        EffectType.MODIFY_REPUTATION,
+        EffectType.MODIFY_HEALTH,
+        EffectType.MODIFY_TURNS,
+        EffectType.MODIFY_SPEED,
+        EffectType.MODIFY_LUCK,
+        EffectType.LEADERSHIP,
+        EffectType.TRANSPORT,
+    ],
+)
+class AmountRecord(Record.Data):
+    old_amount: int
+    new_amount: int
+
+
+@data_subclass_of(Record.Data, [EffectType.MODIFY_XP])
+class SkillAmountRecord(AmountRecord):
+    skill: Optional[str]
+
+
+@data_subclass_of(Record.Data, [EffectType.MODIFY_RESOURCES])
+class ResourceAmountRecord(AmountRecord):
+    resource: Optional[str]
+
+
+@data_subclass_of(Record.Data, [EffectType.TICK_METER])
+class EntityAmountRecord(AmountRecord):
+    entity_uuid: str
+
+
+@data_subclass_of(Record.Data, [EffectType.MODIFY_ACTIVITY])
+class EnableRecord(Record.Data):
+    enabled: bool
+
+
+@data_subclass_of(Record.Data, [EffectType.ADD_ENTITY])
+class AddEntityRecord(Record.Data):
+    entity: external_Entity
+
+
+@data_subclass_of(Record.Data, [EffectType.QUEUE_ENCOUNTER])
+class EncounterRecord(Record.Data):
+    encounter: TemplateCard
+
+
+@data_subclass_of(Record.Data, [EffectType.ADD_TITLE])
+class AddTitleRecord(Record.Data):
+    title: Title
+
+
+@data_subclass_of(Record.Data, [EffectType.MODIFY_LOCATION])
+class LocationRecord(Record.Data):
+    old_hex: str
+    new_hex: str
+
+
+@data_subclass_of(Record.Data, [EffectType.MODIFY_JOB])
+class JobRecord(Record.Data):
+    old_job_name: str
+    new_job_name: str

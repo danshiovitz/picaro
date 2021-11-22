@@ -186,22 +186,22 @@ class EncounterTest(FlatworldTestBase):
     def _make_skill_boost(self, ch: Character) -> None:
         self.add_overlay(
             type=OverlayType.SKILL_RANK,
-            subtype="Skill 2",
-            value=2,
+            skill="Skill 2",
+            amount=2,
             is_private=True,
             filters=[],
         )
         self.add_overlay(
             type=OverlayType.SKILL_RANK,
-            subtype="Skill 3",
-            value=2,
+            skill="Skill 3",
+            amount=2,
             is_private=True,
             filters=[],
         )
         self.add_overlay(
             type=OverlayType.RELIABLE_SKILL,
-            subtype="Skill 3",
-            value=2,
+            skill="Skill 3",
+            amount=2,
             is_private=True,
             filters=[],
         )
@@ -243,9 +243,9 @@ class EncounterTest(FlatworldTestBase):
             self.assertEqual(choice.costs[0].type, EffectType.MODIFY_RESOURCES)
             self.assertEqual(len(choice.effects), 1)
             self.assertEqual(choice.effects[0].type, EffectType.MODIFY_COINS)
-            cmbs[choice.costs[0].subtype] = (
+            cmbs[choice.costs[0].resource] = (
                 choice.max_choices,
-                choice.effects[0].value,
+                choice.effects[0].amount,
             )
         self.assertEqual(
             cmbs, {"Resource A1": (3, 5), "Resource B1": (2, 7), "Resource C": (1, 2)}
@@ -254,15 +254,15 @@ class EncounterTest(FlatworldTestBase):
     def _make_trade_price(self, ch: Character) -> None:
         self.add_overlay(
             type=OverlayType.TRADE_PRICE,
-            subtype="Resource B1",
-            value=2,
+            resource="Resource B1",
+            amount=2,
             is_private=True,
             filters=[],
         )
         self.add_overlay(
             type=OverlayType.TRADE_PRICE,
-            subtype="Resource C",
-            value=-3,
+            resource="Resource C",
+            amount=-3,
             is_private=True,
             filters=[],
         )

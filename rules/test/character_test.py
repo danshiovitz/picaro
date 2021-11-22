@@ -13,15 +13,21 @@ from picaro.rules.board import BoardRules
 from picaro.rules.character import CharacterRules
 from picaro.rules.test.test_base import FlatworldTestBase
 from picaro.rules.types.internal import (
+    AmountEffect,
     Character,
+    CountryFilter,
     Effect,
     EffectType,
+    Entity,
     Filter,
     FilterType,
+    HexFilter,
     Overlay,
     OverlayType,
     Route,
     RouteType,
+    SkillFilter,
+    TokenFilter,
     Trigger,
     TriggerType,
 )
@@ -72,10 +78,9 @@ class CharacterTest(FlatworldTestBase):
 
         self._overlay_helper(
             filters=[
-                Filter(
+                CountryFilter(
                     type=FilterType.IN_COUNTRY,
-                    subtype="Bravo",
-                    value=None,
+                    country="Bravo",
                 ),
             ]
         )
@@ -87,10 +92,13 @@ class CharacterTest(FlatworldTestBase):
         self.assertEqual(2, CharacterRules.get_skill_rank(ch, "Skill 3"))
 
     def test_check_filters(self) -> None:
-        skill_f = Filter(type=FilterType.SKILL_GTE, subtype="Skill 3", value=1)
-        hex_f = Filter(type=FilterType.NEAR_HEX, subtype="AA04", value=2)
-        token_f = Filter(type=FilterType.NEAR_TOKEN, subtype="Alpha City", value=2)
-        cty_f = Filter(type=FilterType.IN_COUNTRY, subtype="Alpha", value=None)
+        skill_f = SkillFilter(type=FilterType.SKILL_GTE, skill="Skill 3", value=1)
+        hex_f = HexFilter(type=FilterType.NEAR_HEX, hex="AA04", distance=2)
+        alpha_entity = Entity.load_by_name("Alpha City")
+        token_f = TokenFilter(
+            type=FilterType.NEAR_TOKEN, entity_uuid=alpha_entity.uuid, distance=2
+        )
+        cty_f = CountryFilter(type=FilterType.IN_COUNTRY, country="Alpha")
 
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
             self._check_both(ch, False, skill_f)
@@ -153,7 +161,9 @@ class CharacterTest(FlatworldTestBase):
         for i in range(num_overlays):
             self._overlay_helper(
                 value=1,
-                filters=[Filter(type=FilterType.SKILL_GTE, subtype="Skill 3", value=i)]
+                filters=[
+                    SkillFilter(type=FilterType.SKILL_GTE, skill="Skill 3", value=i)
+                ]
                 if i > 0
                 else [],
             )
@@ -162,6 +172,8 @@ class CharacterTest(FlatworldTestBase):
         self.assertEqual(1, CharacterRules.get_skill_rank(ch, "Skill 3"))
 
     def test_get_relevant_actions(self) -> None:
+        bravo_entity = Entity.load_by_name("Central Bravo")
+
         ch = Character.load_by_name(self.CHARACTER)
         BoardRules.move_token_for_entity(ch.uuid, "AE06", adjacent=False)
 
@@ -176,73 +188,76 @@ class CharacterTest(FlatworldTestBase):
 
         filters_list = [
             ([], [r_global]),
-            ([Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=0)], [r_global]),
-            ([Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=1)], [r_unavail]),
+            ([SkillFilter(FilterType.SKILL_GTE, skill="Skill 3", value=0)], [r_global]),
+            (
+                [SkillFilter(FilterType.SKILL_GTE, skill="Skill 3", value=1)],
+                [r_unavail],
+            ),
             (
                 [
-                    Filter(
-                        FilterType.SKILL_GTE, subtype="Skill 3", value=0, reverse=True
+                    SkillFilter(
+                        FilterType.SKILL_GTE, skill="Skill 3", value=0, reverse=True
                     )
                 ],
                 [r_unavail],
             ),
-            ([Filter(FilterType.NEAR_HEX, subtype="AE06", value=1)], [r_AE06]),
+            ([HexFilter(FilterType.NEAR_HEX, hex="AE06", distance=1)], [r_AE06]),
             (
-                [Filter(FilterType.NEAR_HEX, subtype="AE06", value=0, reverse=True)],
+                [HexFilter(FilterType.NEAR_HEX, hex="AE06", distance=0, reverse=True)],
                 [r_AE05],
             ),
             (
-                [Filter(FilterType.NEAR_TOKEN, subtype="Central Bravo", value=2)],
+                [
+                    TokenFilter(
+                        FilterType.NEAR_TOKEN, entity_uuid=bravo_entity.uuid, distance=2
+                    )
+                ],
                 [r_AE07],
             ),
             (
                 [
-                    Filter(
+                    TokenFilter(
                         FilterType.NEAR_TOKEN,
-                        subtype="Central Bravo",
-                        value=2,
+                        entity_uuid=bravo_entity.uuid,
+                        distance=2,
                         reverse=True,
                     )
                 ],
                 [r_AE06],
             ),
             (
-                [Filter(FilterType.IN_COUNTRY, subtype="Alpha", value=None)],
+                [CountryFilter(FilterType.IN_COUNTRY, country="Alpha")],
                 [r_AD05, r_AE05],
             ),
             (
-                [
-                    Filter(
-                        FilterType.IN_COUNTRY, subtype="Alpha", value=None, reverse=True
-                    )
-                ],
+                [CountryFilter(FilterType.IN_COUNTRY, country="Alpha", reverse=True)],
                 [r_AE06],
             ),
             (
                 [
-                    Filter(FilterType.IN_COUNTRY, subtype="Bravo", value=None),
-                    Filter(FilterType.NEAR_HEX, subtype="AE06", value=1),
+                    CountryFilter(FilterType.IN_COUNTRY, country="Bravo"),
+                    HexFilter(FilterType.NEAR_HEX, hex="AE06", distance=1),
                 ],
                 [r_AD07, r_AE07],
             ),
             (
                 [
-                    Filter(FilterType.IN_COUNTRY, subtype="Bravo", value=None),
-                    Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=0),
+                    CountryFilter(FilterType.IN_COUNTRY, country="Bravo"),
+                    SkillFilter(FilterType.SKILL_GTE, skill="Skill 3", value=0),
                 ],
                 [r_AD07, r_AE07],
             ),
             (
                 [
-                    Filter(FilterType.IN_COUNTRY, subtype="Bravo", value=None),
-                    Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=1),
+                    CountryFilter(FilterType.IN_COUNTRY, country="Bravo"),
+                    SkillFilter(FilterType.SKILL_GTE, skill="Skill 3", value=1),
                 ],
                 [r_unavail],
             ),
             (
                 [
-                    Filter(FilterType.NEAR_HEX, subtype="AD08", value=1),
-                    Filter(FilterType.NEAR_HEX, subtype="AE09", value=1),
+                    HexFilter(FilterType.NEAR_HEX, hex="AD08", distance=1),
+                    HexFilter(FilterType.NEAR_HEX, hex="AE09", distance=1),
                 ],
                 [r_AE08],
             ),
@@ -266,17 +281,17 @@ class CharacterTest(FlatworldTestBase):
         self.assertEqual(len(effects), 0)
 
         self._trigger_helper(EffectType.MODIFY_COINS)
-        self._trigger_helper(EffectType.MODIFY_SPEED, subtype="AA08")
-        self._trigger_helper(EffectType.MODIFY_REPUTATION, subtype="AB10")
+        self._trigger_helper(EffectType.MODIFY_SPEED, hex="AA08")
+        self._trigger_helper(EffectType.MODIFY_REPUTATION, hex="AB10")
         self._trigger_helper(
             EffectType.MODIFY_LUCK,
-            subtype="AC05",
-            filters=[Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=1)],
+            hex="AC05",
+            filters=[SkillFilter(FilterType.SKILL_GTE, skill="Skill 3", value=1)],
         )
         self._trigger_helper(
             EffectType.MODIFY_HEALTH,
-            subtype=None,
-            filters=[Filter(FilterType.SKILL_GTE, subtype="Skill 3", value=1)],
+            hex=None,
+            filters=[SkillFilter(FilterType.SKILL_GTE, skill="Skill 3", value=1)],
         )
 
         effects = CharacterRules.run_triggers(ch, TriggerType.ENTER_HEX, None)
@@ -334,8 +349,8 @@ class CharacterTest(FlatworldTestBase):
     def _overlay_helper(self, value=1, filters: List[Filter] = []) -> None:
         self.add_overlay(
             type=OverlayType.SKILL_RANK,
-            subtype="Skill 3",
-            value=value,
+            skill="Skill 3",
+            amount=value,
             is_private=True,
             filters=filters,
         )
@@ -343,15 +358,15 @@ class CharacterTest(FlatworldTestBase):
     def _trigger_helper(
         self,
         effect_type: EffectType,
-        subtype: Optional[str] = None,
+        hex: Optional[str] = None,
         filters: List[Filter] = [],
     ) -> None:
         self.add_trigger(
             name=None,
             type=TriggerType.ENTER_HEX,
-            subtype=subtype,
+            hex=hex,
             costs=[],
-            effects=[Effect(type=effect_type, subtype=None, value=1)],
+            effects=[AmountEffect(type=effect_type, amount=1)],
             is_private=True,
             filters=filters,
         )
@@ -360,7 +375,6 @@ class CharacterTest(FlatworldTestBase):
         self.add_trigger(
             name=name,
             type=TriggerType.ACTION,
-            subtype=None,
             costs=[],
             effects=[],
             is_private=True,

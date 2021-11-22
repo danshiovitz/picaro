@@ -50,7 +50,6 @@ class SearchTest(FlatworldTestBase):
         self.add_trigger(
             name="Thingo",
             type=TriggerType.ACTION,
-            subtype=None,
             costs=[],
             effects=[],
             is_private=False,
@@ -77,7 +76,6 @@ class SearchTest(FlatworldTestBase):
         self.add_trigger(
             name="Thingo",
             type=TriggerType.ACTION,
-            subtype=None,
             costs=[],
             effects=[],
             is_private=False,

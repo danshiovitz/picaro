@@ -9,19 +9,20 @@ from .board import BoardRules
 from .character import CharacterRules
 from .encounter import EncounterRules
 from .include import translate
-from .include.apply import SimpleIntField, SimpleDictIntField, apply_effects
-from .include.fields import (
-    LeadershipMetaField,
-    ModifyJobField,
-    ResourceDrawMetaField,
-    TransportField,
-    ModifyLocationField,
-    ModifyActivityField,
-    AddEntityField,
-    AddTitleField,
-    QueueEncounterField,
-    ModifyFreeXpField,
-    TickMeterField,
+from .include.apply import (
+    ActivityApplier,
+    AddEntityApplier,
+    AddTitleApplier,
+    AmountApplier,
+    LeadershipApplier,
+    ModifyJobApplier,
+    ModifyLocationApplier,
+    QueueEncounterApplier,
+    ResourceApplier,
+    TickMeterApplier,
+    TransportApplier,
+    XpApplier,
+    apply_effects,
 )
 from .include.special_cards import (
     actualize_special_card,
@@ -275,61 +276,49 @@ class GameRules:
         default_list: List[Effect] = []
         others_dict: Dict[str, List[Effect]] = defaultdict(list)
         for eff in effects:
-            if eff.entity_uuid is None or eff.entity_uuid == ch.uuid:
+            if eff.ch_uuid is None or eff.ch_uuid == ch.uuid:
                 default_list.append(eff)
             else:
-                others_dict[eff.entity_uuid].append(eff)
+                others_dict[eff.ch_uuid].append(eff)
         others = list(others_dict.items())
 
         if default_list:
             apply_effects(
-                default_list, ch, cls.APPLY_FIELDS, records, enforce_costs=enforce_costs
+                default_list, ch, cls.APPLIERS, records, enforce_costs=enforce_costs
             )
         for other_uuid, other_list in others:
             with Character.load_for_write(other_uuid) as other_ch:
                 apply_effects(
                     other_list,
                     other_ch,
-                    cls.APPLY_FIELDS,
+                    cls.APPLIERS,
                     records,
                     enforce_costs=enforce_costs,
                 )
 
-    APPLY_FIELDS = [
-        lambda _vs: [LeadershipMetaField()],
-        lambda _vs: [ModifyJobField()],
-        lambda _vs: [ResourceDrawMetaField()],
-        lambda recs: SimpleDictIntField.make_fields(
-            recs, "resources", "resources", EffectType.MODIFY_RESOURCES
+    APPLIERS = [
+        LeadershipApplier(),
+        ModifyJobApplier(),
+        ResourceApplier(),
+        TransportApplier(),
+        ModifyLocationApplier(),
+        ActivityApplier(),
+        AmountApplier(EffectType.MODIFY_COINS, "coins", "coins"),
+        AddEntityApplier(),
+        AddTitleApplier(),
+        QueueEncounterApplier(),
+        AmountApplier(EffectType.MODIFY_LUCK, "luck", "luck"),
+        AmountApplier(EffectType.MODIFY_REPUTATION, "reputation", "reputation"),
+        AmountApplier(
+            EffectType.MODIFY_HEALTH,
+            "health",
+            "health",
+            max_value=lambda e: CharacterRules.get_max_health(e),
         ),
-        lambda _vs: [TransportField()],
-        lambda _vs: [ModifyLocationField()],
-        lambda _vs: [ModifyActivityField()],
-        lambda _vs: [SimpleIntField("coins", "coins", EffectType.MODIFY_COINS)],
-        lambda _vs: [AddEntityField()],
-        lambda _vs: [AddTitleField()],
-        lambda _vs: [QueueEncounterField()],
-        lambda _vs: [SimpleIntField("luck", "luck", EffectType.MODIFY_LUCK)],
-        lambda _vs: [
-            SimpleIntField("reputation", "reputation", EffectType.MODIFY_REPUTATION)
-        ],
-        lambda _vs: [
-            SimpleIntField(
-                "health",
-                "health",
-                EffectType.MODIFY_HEALTH,
-                max_value=lambda e: CharacterRules.get_max_health(e),
-            )
-        ],
-        lambda _vs: [
-            SimpleIntField("turns", "remaining_turns", EffectType.MODIFY_TURNS)
-        ],
+        AmountApplier(EffectType.MODIFY_TURNS, "turns", "remaining_turns"),
         # speed gets reset to its max each turn, but we allow it to go over
         # within a turn
-        lambda _vs: [SimpleIntField("speed", "speed", EffectType.MODIFY_SPEED)],
-        lambda recs: SimpleDictIntField.make_fields(
-            recs, "xp", "skill_xp", EffectType.MODIFY_XP
-        ),
-        lambda _vs: [ModifyFreeXpField()],
-        lambda recs: TickMeterField.make_fields(recs),
+        AmountApplier(EffectType.MODIFY_SPEED, "speed", "speed"),
+        XpApplier(),
+        TickMeterApplier(),
     ]

@@ -73,105 +73,101 @@ class Server:
                 title = Title(
                     name="Cloak of Elvenkind",
                     overlays=[
-                        Overlay(
+                        SkillAmountOverlay(
                             uuid="123.456",
                             type=OverlayType.SKILL_RANK,
-                            subtype="Stealth",
-                            value=1,
+                            skill="Stealth",
+                            amount=1,
                             is_private=True,
                             filters=(),
                         ),
-                        Overlay(
+                        SkillAmountOverlay(
                             uuid="123.457",
                             type=OverlayType.SKILL_RANK,
-                            subtype="Stealth",
-                            value=1,
+                            skill="Stealth",
+                            amount=1,
                             is_private=True,
                             filters=(
-                                Filter(
+                                SkillFilter(
                                     type=FilterType.SKILL_GTE,
-                                    subtype="Stealth",
+                                    skill="Stealth",
                                     value=2,
                                 ),
                             ),
                         ),
-                        Overlay(
+                        SkillAmountOverlay(
                             uuid="123.458",
                             type=OverlayType.RELIABLE_SKILL,
-                            subtype="Stealth",
-                            value=3,
+                            skill="Stealth",
+                            amount=3,
                             is_private=True,
                             filters=(),
                         ),
                     ],
-                    triggers=[],
-                    actions=[],
                 )
 
                 zeta_loc = [c for c in data.countries if c.name == "Zeta"][
                     0
                 ].capitol_hex
                 sword_overlays = [
-                    Overlay(
+                    ResourceAmountOverlay(
                         uuid="",
                         type=OverlayType.TRADE_PRICE,
-                        subtype="Steel",
-                        value=-1,
+                        resource="Steel",
+                        amount=-1,
                         is_private=False,
                         filters=[
-                            Filter(
+                            CountryFilter(
                                 type=FilterType.IN_COUNTRY,
-                                subtype="Zeta",
-                                value=None,
+                                country="Zeta",
                             ),
                         ],
                     ),
-                    Overlay(
+                    ResourceAmountOverlay(
                         uuid="",
                         type=OverlayType.TRADE_PRICE,
-                        subtype="Wine",
-                        value=1,
+                        resource="Wine",
+                        amount=1,
                         is_private=False,
                         filters=[
-                            Filter(
+                            CountryFilter(
                                 type=FilterType.IN_COUNTRY,
-                                subtype="Zeta",
-                                value=None,
+                                country="Zeta",
                             ),
                         ],
                     ),
-                    Overlay(
+                    ResourceAmountOverlay(
                         uuid="",
                         type=OverlayType.TRADE_PRICE,
-                        subtype="Steel",
-                        value=1,
+                        resource="Steel",
+                        amount=1,
                         is_private=False,
                         filters=[
-                            Filter(
+                            CountryFilter(
                                 type=FilterType.IN_COUNTRY,
-                                subtype="Zeta",
-                                value=None,
+                                country="Zeta",
                                 reverse=True,
                             ),
                         ],
                     ),
                 ]
                 sword_triggers = [
-                    Trigger(
+                    HexTrigger(
                         uuid="",
                         type=TriggerType.ENTER_HEX,
-                        subtype=None,
+                        hex=None,
                         is_private=False,
                         filters=[
-                            Filter(
+                            HexFilter(
                                 type=FilterType.NEAR_HEX,
-                                subtype=zeta_loc,
-                                value=3,
+                                hex=zeta_loc,
+                                distance=3,
                             ),
                         ],
                         effects=[
-                            Effect(
-                                type=EffectType.MODIFY_HEALTH, subtype=None, value=-1
+                            AmountEffect(
+                                type=EffectType.MODIFY_HEALTH,
+                                amount=-1,
                             ),
                         ],
                     ),
@@ -193,20 +189,19 @@ class Server:
                         is_private=False,
                         filters=[],
                         costs=[
-                            Effect(
-                                type=EffectType.MODIFY_HEALTH, subtype=None, value=-5
+                            AmountEffect(
+                                type=EffectType.MODIFY_HEALTH,
+                                amount=-5,
                             ),
                         ],
                         effects=[
-                            Effect(
+                            LocationEffect(
                                 type=EffectType.MODIFY_LOCATION,
-                                subtype=None,
-                                value=zeta_loc,
+                                hex=zeta_loc,
                             ),
-                            Effect(
+                            AmountEffect(
                                 type=EffectType.MODIFY_SPEED,
-                                subtype=None,
-                                value=0,
+                                amount=0,
                                 is_absolute=True,
                             ),
                         ],
@@ -217,22 +212,22 @@ class Server:
                         name="Fight a Sword",
                         is_private=False,
                         filters=[
-                            Filter(
+                            HexFilter(
                                 type=FilterType.NEAR_HEX,
-                                subtype=zeta_loc,
-                                value=5,
+                                hex=zeta_loc,
+                                distance=5,
                             ),
                         ],
                         costs=[
-                            Effect(
-                                type=EffectType.MODIFY_ACTIVITY, subtype=None, value=-1
+                            EnableEffect(
+                                type=EffectType.MODIFY_ACTIVITY,
+                                enable=False,
                             ),
                         ],
                         effects=[
-                            Effect(
+                            EncounterEffect(
                                 type=EffectType.QUEUE_ENCOUNTER,
-                                subtype=None,
-                                value=fight_template,
+                                encounter=fight_template,
                             ),
                         ],
                         route=None,
@@ -262,25 +257,29 @@ class Server:
                         ch,
                         [],
                         [
-                            Effect(type=EffectType.MODIFY_COINS, value=50),
-                            Effect(type=EffectType.MODIFY_RESOURCES, value=10),
-                            Effect(
-                                type=EffectType.MODIFY_XP, subtype="Stealth", value=20
+                            AmountEffect(type=EffectType.MODIFY_COINS, amount=50),
+                            ResourceAmountEffect(
+                                type=EffectType.MODIFY_RESOURCES,
+                                resource=None,
+                                amount=10,
                             ),
-                            Effect(
+                            SkillAmountEffect(
                                 type=EffectType.MODIFY_XP,
-                                subtype="Brutal Fighting",
-                                value=25,
+                                skill="Stealth",
+                                amount=20,
                             ),
-                            Effect(
+                            SkillAmountEffect(
+                                type=EffectType.MODIFY_XP,
+                                skill="Brutal Fighting",
+                                amount=25,
+                            ),
+                            AddTitleEffect(
                                 type=EffectType.ADD_TITLE,
-                                subtype=None,
-                                value=title,
+                                title=title,
                             ),
-                            Effect(
+                            AddEntityEffect(
                                 type=EffectType.ADD_ENTITY,
-                                subtype=None,
-                                value=entity,
+                                entity=entity,
                             ),
                         ],
                         [],
@@ -314,15 +313,21 @@ class Server:
                         ch,
                         [],
                         [
-                            Effect(type=EffectType.MODIFY_COINS, value=50),
-                            Effect(type=EffectType.MODIFY_RESOURCES, value=10),
-                            Effect(
-                                type=EffectType.MODIFY_XP, subtype="Skill 3", value=20
+                            AmountEffect(type=EffectType.MODIFY_COINS, amount=50),
+                            ResourceAmountEffect(
+                                type=EffectType.MODIFY_RESOURCES,
+                                resource=None,
+                                amount=10,
                             ),
-                            Effect(
+                            SkillAmountEffect(
                                 type=EffectType.MODIFY_XP,
-                                subtype="Skill 5",
-                                value=25,
+                                resource="Skill 3",
+                                amount=20,
+                            ),
+                            SkillAmountEffect(
+                                type=EffectType.MODIFY_XP,
+                                resource="Skill 5",
+                                amount=25,
                             ),
                         ],
                         [],

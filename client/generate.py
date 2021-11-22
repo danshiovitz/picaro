@@ -17,12 +17,16 @@ from picaro.server.api_types import (
     CreateGameRequest,
     Effect,
     EffectType,
+    EnableEffect,
+    EncounterEffect,
     EntityType,
     Entity,
     Filter,
     FilterType,
     Hex,
+    HexFilter,
     Job,
+    ResourceAmountEffect,
     TemplateCard,
     TemplateCardType,
     TemplateDeck,
@@ -271,27 +275,29 @@ def generate_map_v2() -> Tuple[List[Hex], List[Country], List[Entity]]:
 
     entities = []
 
+    trade_card = TemplateCard(
+        name="Trade",
+        desc="...",
+        type=TemplateCardType.SPECIAL,
+        data="trade",
+    )
+
     for hx in hexes:
         if hx.terrain == "City":
             actions = [
                 Action(
                     name="Trade",
                     effects=[
-                        Effect(
+                        EncounterEffect(
                             type=EffectType.QUEUE_ENCOUNTER,
-                            value=TemplateCard(
-                                name="Trade",
-                                desc="...",
-                                type=TemplateCardType.SPECIAL,
-                                data="trade",
-                            ),
+                            encounter=trade_card,
                         ),
                     ],
                     costs=[],
                     uuid="",
                     is_private=False,
                     filters=[
-                        Filter(type=FilterType.NEAR_HEX, subtype=hx.name, value=0),
+                        HexFilter(type=FilterType.NEAR_HEX, hex=hx.name, distance=0),
                     ],
                     route=[],
                 ),
@@ -307,6 +313,7 @@ def generate_map_v2() -> Tuple[List[Hex], List[Country], List[Entity]]:
                         overlays=[],
                         triggers=[],
                         actions=actions,
+                        meters=[],
                     ),
                 ],
                 locations=[hx.name],
@@ -318,17 +325,17 @@ def generate_map_v2() -> Tuple[List[Hex], List[Country], List[Entity]]:
             actions = [
                 Action(
                     name=f"Gather {mine_rs[hx.country]}",
-                    costs=(Effect(type=EffectType.MODIFY_ACTIVITY, value=-1),),
-                    effects=(
-                        Effect(
+                    costs=[EnableEffect(type=EffectType.MODIFY_ACTIVITY, enable=False)],
+                    effects=[
+                        ResourceAmountEffect(
                             type=EffectType.MODIFY_RESOURCES,
-                            subtype=mine_rs[hx.country],
-                            value=1,
+                            resource=mine_rs[hx.country],
+                            amount=1,
                         ),
-                    ),
+                    ],
                     is_private=False,
                     filters=[
-                        Filter(type=FilterType.NEAR_HEX, subtype=hx.name, value=0),
+                        HexFilter(type=FilterType.NEAR_HEX, hex=hx.name, distance=0),
                     ],
                     uuid="",
                     route=[],
@@ -345,6 +352,7 @@ def generate_map_v2() -> Tuple[List[Hex], List[Country], List[Entity]]:
                         overlays=[],
                         triggers=[],
                         actions=actions,
+                        meters=[],
                     ),
                 ],
                 locations=[hx.name],

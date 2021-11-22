@@ -13,6 +13,7 @@ from .include.deck import shuffle_discard
 from .include.special_cards import make_promo_card
 from .types.external import EncounterCommands, Record as external_Record
 from .types.internal import (
+    AmountEffect,
     Character,
     Choice,
     Choices,
@@ -26,8 +27,10 @@ from .types.internal import (
     Game,
     Hex,
     HexDeck,
+    JobEffect,
     Outcome,
     Record,
+    SkillAmountEffect,
     Token,
     TravelCard,
     TravelCardType,
@@ -246,8 +249,10 @@ class ActivityRules:
 
         if luck_spent > 0:
             costs.append(
-                Effect(
-                    EffectType.MODIFY_LUCK, -luck_spent, comment="encounter commands"
+                AmountEffect(
+                    EffectType.MODIFY_LUCK,
+                    amount=-luck_spent,
+                    comment="encounter commands",
                 )
             )
         if commands.flee:
@@ -274,10 +279,10 @@ class ActivityRules:
         all_skills = set(Game.load().skills)
         if failures > 0 and checks[0].skill in all_skills:
             effects.append(
-                Effect(
+                SkillAmountEffect(
                     type=EffectType.MODIFY_XP,
-                    subtype=checks[0].skill,
-                    value=failures,
+                    skill=checks[0].skill,
+                    amount=failures,
                 )
             )
 
@@ -320,36 +325,47 @@ class ActivityRules:
                 new_job = CharacterRules.find_bad_job(ch)
             if new_job:
                 effects.append(
-                    Effect(
-                        EffectType.MODIFY_JOB, new_job, comment="leadership challenge"
+                    JobEffect(
+                        EffectType.MODIFY_JOB,
+                        job_name=new_job,
+                        comment="leadership challenge",
                     )
                 )
             else:
                 # TODO: log some error, we should always be able to find a bad job
                 effects.append(
-                    Effect(
+                    AmountEffect(
                         EffectType.MODIFY_REPUTATION,
-                        -20,
+                        amount=1,
+                        is_absolute=True,
                         comment="leadership challenge",
                     )
                 )
         elif victory_points == 2:
             effects.append(
-                Effect(EffectType.MODIFY_REPUTATION, -2, comment="leadership challenge")
+                AmountEffect(
+                    EffectType.MODIFY_REPUTATION,
+                    amount=-2,
+                    comment="leadership challenge",
+                )
             )
         else:
             new_job = CharacterRules.find_promote_job(ch)
             if new_job:
                 effects.append(
-                    Effect(
-                        EffectType.MODIFY_JOB, new_job, comment="leadership challenge"
+                    JobEffect(
+                        EffectType.MODIFY_JOB,
+                        job_name=new_job,
+                        comment="leadership challenge",
                     )
                 )
                 ch.queued.append(make_promo_card(ch, ch.job_name))
             else:
                 effects.append(
-                    Effect(
-                        EffectType.MODIFY_REPUTATION, 3, comment="leadership challenge"
+                    AmountEffect(
+                        EffectType.MODIFY_REPUTATION,
+                        amount=3,
+                        comment="leadership challenge",
                     )
                 )
         return costs, effects

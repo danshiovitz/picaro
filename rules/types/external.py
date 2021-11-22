@@ -1,9 +1,16 @@
+from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum, auto as enum_auto
 from types import MappingProxyType
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from picaro.common.hexmap.types import OffsetCoordinate
+from picaro.common.serializer import (
+    HasAnyType,
+    SubclassVariant,
+    external_fields_for,
+    subclass_of,
+)
 
 
 class Outcome(Enum):
@@ -54,31 +61,11 @@ class EntityType(Enum):
 
 
 @dataclass(frozen=True)
-class Effect:
+class Effect(SubclassVariant):
     type: EffectType
-    value: Optional[Any]
-    is_absolute: bool = False
-    subtype: Optional[str] = None
     comment: Optional[str] = None
-    # if the entity isn't provided, it defaults to "the current character"
-    entity_uuid: Optional[str] = None
-
-    @classmethod
-    def type_field(cls) -> str:
-        return "type"
-
-    @classmethod
-    def any_type(cls, type_val: EffectType) -> type:
-        if type_val == EffectType.ADD_ENTITY:
-            return Entity
-        elif type_val == EffectType.ADD_TITLE:
-            return Title
-        elif type_val == EffectType.QUEUE_ENCOUNTER:
-            return TemplateCard
-        elif type_val in (EffectType.MODIFY_LOCATION, EffectType.MODIFY_JOB):
-            return str
-        else:
-            return int
+    # if the character isn't provided, it defaults to the current character
+    ch_uuid: Optional[str] = None
 
 
 class JobType(Enum):
@@ -133,25 +120,18 @@ class TemplateCardType(Enum):
 
 
 @dataclass(frozen=True)
-class TemplateCard:
+class TemplateCard(HasAnyType):
+    ANY_TYPE_MAP = {
+        TemplateCardType.CHALLENGE: Challenge,
+        TemplateCardType.CHOICE: Choices,
+        TemplateCardType.SPECIAL: str,
+    }
+
     name: str
     desc: str
     type: TemplateCardType
     data: Any
     annotations: Dict[str, str] = MappingProxyType({})
-
-    @classmethod
-    def type_field(cls) -> str:
-        return "type"
-
-    @classmethod
-    def any_type(cls, type_val: TemplateCardType) -> type:
-        if type_val == TemplateCardType.CHALLENGE:
-            return Challenge
-        elif type_val == TemplateCardType.CHOICE:
-            return Choices
-        else:
-            return str
 
 
 class FullCardType(Enum):
@@ -168,7 +148,13 @@ class EncounterContextType(Enum):
 
 
 @dataclass(frozen=True)
-class FullCard:
+class FullCard(HasAnyType):
+    ANY_TYPE_MAP = {
+        FullCardType.CHALLENGE: Sequence[EncounterCheck],
+        FullCardType.CHOICE: Choices,
+        FullCardType.SPECIAL: str,
+    }
+
     uuid: str
     name: str
     desc: str
@@ -176,21 +162,6 @@ class FullCard:
     data: Any
     signs: Sequence[str]
     annotations: Dict[str, str] = MappingProxyType({})
-
-    @classmethod
-    def type_field(cls) -> str:
-        return "type"
-
-    @classmethod
-    def any_type(cls, type_val: FullCardType) -> type:
-        if type_val == FullCardType.CHALLENGE:
-            return Sequence[EncounterCheck]
-        elif type_val == FullCardType.CHOICE:
-            return Choices
-        elif type_val == FullCardType.SPECIAL:
-            return str
-        else:
-            raise Exception(f"Unknown full card type: {type_val.name}")
 
 
 class RouteType(Enum):
@@ -230,10 +201,8 @@ class FilterType(Enum):
 
 
 @dataclass(frozen=True)
-class Filter:
+class Filter(SubclassVariant):
     type: FilterType
-    subtype: Optional[str]
-    value: Optional[int]
     reverse: bool = False
 
 
@@ -252,13 +221,11 @@ class OverlayType(Enum):
 
 
 @dataclass(frozen=True)
-class Overlay:
+class Overlay(SubclassVariant):
     uuid: str
     type: OverlayType
-    subtype: Optional[str]
     is_private: bool
     filters: Sequence[Filter]
-    value: int
 
 
 class TriggerType(Enum):
@@ -269,10 +236,9 @@ class TriggerType(Enum):
 
 
 @dataclass(frozen=True)
-class Trigger:
+class Trigger(SubclassVariant):
     uuid: str
     type: TriggerType
-    subtype: Optional[str]
     is_private: bool
     filters: Sequence[Filter]
     effects: Sequence[Effect]
@@ -303,10 +269,10 @@ class Meter:
 @dataclass(frozen=True)
 class Title:
     name: Optional[str]
-    overlays: Sequence[Overlay]
-    triggers: Sequence[Trigger]
-    actions: Sequence[Action]
-    meters: Sequence[Meter]
+    overlays: Sequence[Overlay] = ()
+    triggers: Sequence[Trigger] = ()
+    actions: Sequence[Action] = ()
+    meters: Sequence[Meter] = ()
 
 
 @dataclass(frozen=True)
@@ -338,7 +304,13 @@ class EncounterType(Enum):
 
 
 @dataclass(frozen=True)
-class TableauCard:
+class TableauCard(HasAnyType):
+    ANY_TYPE_MAP = {
+        FullCardType.CHALLENGE: Sequence[EncounterCheck],
+        FullCardType.CHOICE: str,
+        FullCardType.SPECIAL: str,
+    }
+
     uuid: str
     name: str
     type: FullCardType
@@ -347,22 +319,14 @@ class TableauCard:
     location: str
     route: Route
 
-    @classmethod
-    def type_field(cls) -> str:
-        return "type"
-
-    @classmethod
-    def any_type(cls, type_val: FullCardType) -> type:
-        if type_val == FullCardType.CHALLENGE:
-            return Sequence[EncounterCheck]
-        elif type_val in (FullCardType.CHOICE, FullCardType.SPECIAL):
-            return str
-        else:
-            raise Exception(f"Unknown encounter type: {type_val.name}")
-
 
 @dataclass(frozen=True)
-class Encounter:
+class Encounter(HasAnyType):
+    ANY_TYPE_MAP = {
+        EncounterType.CHALLENGE: Sequence[EncounterCheck],
+        EncounterType.CHOICE: Choices,
+    }
+
     uuid: str
     name: str
     desc: str
@@ -370,19 +334,6 @@ class Encounter:
     data: Any
     signs: Sequence[str]
     rolls: Sequence[Sequence[int]]
-
-    @classmethod
-    def type_field(cls) -> str:
-        return "type"
-
-    @classmethod
-    def any_type(cls, type_val: EncounterType) -> type:
-        if type_val == EncounterType.CHALLENGE:
-            return Sequence[EncounterCheck]
-        elif type_val == EncounterType.CHOICE:
-            return Choices
-        else:
-            raise Exception(f"Unexpected encounter type: {type_val.name}")
 
 
 @dataclass(frozen=True)
@@ -419,34 +370,11 @@ class TemplateDeck:
 
 
 @dataclass(frozen=True)
-class Record:
+class Record(SubclassVariant):
     uuid: str
-    entity_uuid: str
+    target_uuid: str
     type: EffectType
-    subtype: Optional[str]
-    old_value: Optional[Any]
-    new_value: Optional[Any]
     comments: Sequence[str]
-
-    @classmethod
-    def type_field(cls) -> str:
-        return "type"
-
-    @classmethod
-    def any_type(cls, type_val: EffectType) -> type:
-        if type_val == EffectType.ADD_ENTITY:
-            return Entity
-        elif type_val == EffectType.ADD_TITLE:
-            return Title
-        elif type_val == EffectType.QUEUE_ENCOUNTER:
-            return TemplateCard
-        elif type_val in (
-            EffectType.MODIFY_JOB,
-            EffectType.MODIFY_LOCATION,
-        ):
-            return str
-        else:
-            return int
 
 
 @dataclass(frozen=True)
@@ -456,6 +384,202 @@ class Game:
     skills: Sequence[str]
     resources: Sequence[str]
     zodiacs: Sequence[str]
+
+
+@subclass_of(
+    Effect,
+    [
+        EffectType.MODIFY_COINS,
+        EffectType.MODIFY_REPUTATION,
+        EffectType.MODIFY_HEALTH,
+        EffectType.MODIFY_TURNS,
+        EffectType.MODIFY_SPEED,
+        EffectType.MODIFY_LUCK,
+        EffectType.LEADERSHIP,
+        EffectType.TRANSPORT,
+    ],
+)
+class AmountEffect(Effect):
+    amount: int
+    is_absolute: bool = False
+
+
+@subclass_of(Effect, [EffectType.MODIFY_XP])
+class SkillAmountEffect(AmountEffect):
+    skill: Optional[str]
+
+
+@subclass_of(Effect, [EffectType.MODIFY_RESOURCES])
+class ResourceAmountEffect(AmountEffect):
+    resource: Optional[str]
+
+
+@subclass_of(Effect, [EffectType.TICK_METER])
+class EntityAmountEffect(AmountEffect):
+    entity_uuid: str
+
+
+@subclass_of(Effect, [EffectType.MODIFY_ACTIVITY])
+class EnableEffect(Effect):
+    enable: bool
+
+
+@subclass_of(Effect, [EffectType.ADD_ENTITY])
+class AddEntityEffect(Effect):
+    entity: Entity
+
+
+@subclass_of(Effect, [EffectType.QUEUE_ENCOUNTER])
+class EncounterEffect(Effect):
+    encounter: TemplateCard
+
+
+@subclass_of(Effect, [EffectType.ADD_TITLE])
+class AddTitleEffect(Effect):
+    title: Title
+
+
+@subclass_of(Effect, [EffectType.MODIFY_LOCATION])
+class LocationEffect(Effect):
+    hex: str
+
+
+@subclass_of(Effect, [EffectType.MODIFY_JOB])
+class JobEffect(Effect):
+    job_name: str
+
+
+@subclass_of(Filter, [FilterType.SKILL_GTE])
+class SkillFilter(Filter):
+    skill: str
+    value: int
+
+
+@subclass_of(Filter, [FilterType.NEAR_HEX])
+class HexFilter(Filter):
+    hex: str
+    distance: int
+
+
+@subclass_of(Filter, [FilterType.NEAR_TOKEN])
+class TokenFilter(Filter):
+    entity_uuid: str
+    distance: int
+
+
+@subclass_of(Filter, [FilterType.IN_COUNTRY])
+class CountryFilter(Filter):
+    country: str
+
+
+@subclass_of(
+    Overlay,
+    [
+        OverlayType.INIT_TABLEAU_AGE,
+        OverlayType.INIT_TURNS,
+        OverlayType.MAX_HEALTH,
+        OverlayType.MAX_LUCK,
+        OverlayType.MAX_TABLEAU_SIZE,
+        OverlayType.INIT_SPEED,
+        OverlayType.MAX_RESOURCES,
+        OverlayType.INIT_REPUTATION,
+    ],
+)
+class AmountOverlay(Overlay):
+    amount: int
+
+
+@subclass_of(Overlay, [OverlayType.SKILL_RANK, OverlayType.RELIABLE_SKILL])
+class SkillAmountOverlay(AmountOverlay):
+    skill: str
+
+
+@subclass_of(Overlay, [OverlayType.TRADE_PRICE])
+class ResourceAmountOverlay(AmountOverlay):
+    resource: str
+
+
+@subclass_of(
+    Trigger,
+    [
+        TriggerType.ACTION,
+        TriggerType.START_TURN,
+        TriggerType.END_TURN,
+    ],
+)
+class StandardTrigger(Trigger):
+    # dataclass-construction code doesn't work well if empty subclass
+    dummy: int = 0
+
+
+@subclass_of(
+    Record,
+    [
+        EffectType.MODIFY_COINS,
+        EffectType.MODIFY_REPUTATION,
+        EffectType.MODIFY_HEALTH,
+        EffectType.MODIFY_TURNS,
+        EffectType.MODIFY_SPEED,
+        EffectType.MODIFY_LUCK,
+        EffectType.LEADERSHIP,
+        EffectType.TRANSPORT,
+    ],
+)
+class AmountRecord(Record):
+    old_amount: int
+    new_amount: int
+
+
+@subclass_of(Record, [EffectType.MODIFY_XP])
+class SkillAmountRecord(AmountRecord):
+    skill: Optional[str]
+
+
+@subclass_of(Record, [EffectType.MODIFY_RESOURCES])
+class ResourceAmountRecord(AmountRecord):
+    resource: Optional[str]
+
+
+@subclass_of(Record, [EffectType.TICK_METER])
+class EntityAmountRecord(AmountRecord):
+    entity_uuid: str
+
+
+@subclass_of(Record, [EffectType.MODIFY_ACTIVITY])
+class EnableRecord(Record):
+    enabled: bool
+
+
+@subclass_of(Record, [EffectType.ADD_ENTITY])
+class AddEntityRecord(Record):
+    entity: Entity
+
+
+@subclass_of(Record, [EffectType.QUEUE_ENCOUNTER])
+class EncounterRecord(Record):
+    encounter: TemplateCard
+
+
+@subclass_of(Record, [EffectType.ADD_TITLE])
+class AddTitleRecord(Record):
+    title: Title
+
+
+@subclass_of(Record, [EffectType.MODIFY_LOCATION])
+class LocationRecord(Record):
+    old_hex: str
+    new_hex: str
+
+
+@subclass_of(Record, [EffectType.MODIFY_JOB])
+class JobRecord(Record):
+    old_job_name: str
+    new_job_name: str
+
+
+@subclass_of(Trigger, [TriggerType.ENTER_HEX])
+class HexTrigger(Trigger):
+    hex: Optional[str]
 
 
 @dataclass(frozen=True)

@@ -6,11 +6,13 @@ from picaro.common.storage import make_uuid
 from picaro.rules.character import CharacterRules
 from picaro.rules.types.external import Title
 from picaro.rules.types.internal import (
+    AmountEffect,
     Character,
     Choice,
     Choices,
     Effect,
     EffectType,
+    EnableEffect,
     EncounterCheck,
     FullCard,
     FullCardType,
@@ -18,8 +20,11 @@ from picaro.rules.types.internal import (
     Job,
     Meter,
     Outcome,
-    Overlay,
     OverlayType,
+    ResourceAmountEffect,
+    SkillAmountEffect,
+    SkillAmountOverlay,
+    AddTitleEffect,
     TurnFlags,
 )
 
@@ -32,7 +37,7 @@ def queue_bad_reputation_check(ch: Character) -> None:
         return
 
     choice_list = [
-        Choice(effects=(Effect(type=EffectType.LEADERSHIP, subtype=None, value=-1),)),
+        Choice(effects=[AmountEffect(type=EffectType.LEADERSHIP, amount=-1)]),
     ]
 
     card = FullCard(
@@ -58,7 +63,11 @@ def queue_discard_resources(ch: Character) -> None:
 
     choice_list = [
         Choice(
-            costs=(Effect(type=EffectType.MODIFY_RESOURCES, subtype=rs, value=-1),),
+            costs=(
+                ResourceAmountEffect(
+                    type=EffectType.MODIFY_RESOURCES, resource=rs, amount=-1
+                ),
+            ),
             max_choices=cnt,
         )
         for rs, cnt in ch.resources.items()
@@ -88,11 +97,11 @@ def make_promo_card(ch: Character, job_name: str) -> FullCard:
     for sk in job.base_skills:
         title_effects.append(
             [
-                Overlay(
+                SkillAmountOverlay(
                     uuid="",
                     type=OverlayType.RELIABLE_SKILL,
-                    subtype=sk,
-                    value=1,
+                    skill=sk,
+                    amount=1,
                     is_private=True,
                     filters=[],
                 )
@@ -108,9 +117,9 @@ def make_promo_card(ch: Character, job_name: str) -> FullCard:
         for ee in title_effects
     ]
     extra = [[] for ee in titles]
-    extra[0].append(Effect(type=EffectType.MODIFY_XP, subtype=None, value=10))
+    extra[0].append(SkillAmountEffect(type=EffectType.MODIFY_XP, skill=None, amount=10))
     choice_list = [
-        Choice(effects=tuple([Effect(type=EffectType.ADD_TITLE, value=e)] + xt))
+        Choice(effects=tuple([AddTitleEffect(type=EffectType.ADD_TITLE, title=e)] + xt))
         for e, xt in zip(titles, extra)
     ]
 
@@ -141,7 +150,9 @@ def make_assign_xp_card(ch: Character, amount: int) -> FullCard:
             choice_list=[
                 Choice(
                     effects=(
-                        Effect(type=EffectType.MODIFY_XP, subtype=sk, value=amount),
+                        SkillAmountEffect(
+                            type=EffectType.MODIFY_XP, skill=sk, amount=amount
+                        ),
                     )
                 )
                 for sk in Game.load().skills
@@ -190,11 +201,15 @@ def _actualize_trade_card(
         max_choices=sum(ch.resources.values()),
         choice_list=[
             Choice(
-                costs=[Effect(type=EffectType.MODIFY_RESOURCES, subtype=rs, value=-1)],
+                costs=[
+                    ResourceAmountEffect(
+                        type=EffectType.MODIFY_RESOURCES, resource=rs, amount=-1
+                    )
+                ],
                 effects=[
-                    Effect(
+                    AmountEffect(
                         type=EffectType.MODIFY_COINS,
-                        value=CharacterRules.get_trade_price(ch, rs),
+                        amount=CharacterRules.get_trade_price(ch, rs),
                     )
                 ],
                 max_choices=ch.resources[rs],
@@ -202,7 +217,7 @@ def _actualize_trade_card(
             for rs in all_resources
             if ch.resources.get(rs, 0) > 0
         ],
-        costs=[Effect(type=EffectType.MODIFY_ACTIVITY, value=-1)],
+        costs=[EnableEffect(type=EffectType.MODIFY_ACTIVITY, enable=False)],
     )
     return dataclasses.replace(card, type=FullCardType.CHOICE, data=data)
 

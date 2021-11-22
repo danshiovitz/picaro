@@ -256,40 +256,40 @@ class CharacterRules:
     ) -> bool:
         ns = "not " if filter.reverse else ""
         if filter.type == FilterType.SKILL_GTE:
-            rank = cls.get_skill_rank(ch, filter.subtype, skip_overlays=skip_overlays)
+            rank = cls.get_skill_rank(ch, filter.skill, skip_overlays=skip_overlays)
             if (rank >= filter.value) == filter.reverse:
                 if not do_raise:
                     return False
                 raise IllegalMoveException(
-                    f"{filter.subtype} is {rank} and must be {'less than' if filter.reverse else 'at least'} {filter.value}"
+                    f"{filter.skill} is {rank} and must be {'less than' if filter.reverse else 'at least'} {filter.value}"
                 )
             return True
         elif filter.type == FilterType.NEAR_HEX:
-            dist = BoardRules.min_distance_from_entity_to_hex(ch.uuid, filter.subtype)
-            if (dist <= filter.value) == filter.reverse:
+            dist = BoardRules.min_distance_from_entity_to_hex(ch.uuid, filter.hex)
+            if (dist <= filter.distance) == filter.reverse:
                 if not do_raise:
                     return False
                 raise IllegalMoveException(
-                    f"Distance from {filter.subtype} is {dist} and must {ns}be within {filter.value}"
+                    f"Distance from {filter.hex} is {dist} and must {ns}be within {filter.distance}"
                 )
             return True
         elif filter.type == FilterType.NEAR_TOKEN:
-            entity = Entity.load_by_name(filter.subtype)
+            entity = Entity.load(filter.entity_uuid)
             dist = BoardRules.min_distance_from_entity_to_entity(ch.uuid, entity.uuid)
-            if (dist <= filter.value) == filter.reverse:
+            if (dist <= filter.distance) == filter.reverse:
                 if not do_raise:
                     return False
                 raise IllegalMoveException(
-                    f"Distance from {filter.subtype} is {dist} and must {ns}be within {filter.value}"
+                    f"Distance from {entity.name} is {dist} and must {ns}be within {filter.distance}"
                 )
             return True
         elif filter.type == FilterType.IN_COUNTRY:
             hx = BoardRules.get_single_token_hex(ch.uuid)
-            if (hx.country == filter.subtype) == filter.reverse:
+            if (hx.country == filter.country) == filter.reverse:
                 if not do_raise:
                     return False
                 raise IllegalMoveException(
-                    f"Country is {hx.country} and must {ns}be {filter.subtype}"
+                    f"Country is {hx.country} and must {ns}be {filter.country}"
                 )
             return True
         else:
@@ -304,30 +304,28 @@ class CharacterRules:
         skip_overlays=False,
     ) -> Optional[Set[str]]:
         if filter.type == FilterType.SKILL_GTE:
-            rank = cls.get_skill_rank(ch, filter.subtype, skip_overlays=skip_overlays)
+            rank = cls.get_skill_rank(ch, filter.skill, skip_overlays=skip_overlays)
             if (rank >= filter.value) == filter.reverse:
                 return set()  # impossible to ever pass this by moving around
             return None
         elif filter.type == FilterType.NEAR_HEX:
             chk = (
-                lambda hx: (
-                    BoardRules.distance(hx.name, filter.subtype) <= filter.value
-                )
+                lambda hx: (BoardRules.distance(hx.name, filter.hex) <= filter.distance)
                 != filter.reverse
             )
             return {hx.name for hx in hexes if chk(hx)}
         elif filter.type == FilterType.NEAR_TOKEN:
-            entity = Entity.load_by_name(filter.subtype)
+            entity = Entity.load(filter.entity_uuid)
             chk = (
                 lambda hx: (
                     BoardRules.min_distance_from_entity_to_hex(entity.uuid, hx.name)
-                    <= filter.value
+                    <= filter.distance
                 )
                 != filter.reverse
             )
             return {hx.name for hx in hexes if chk(hx)}
         elif filter.type == FilterType.IN_COUNTRY:
-            chk = lambda hx: (hx.country == filter.subtype) != filter.reverse
+            chk = lambda hx: (hx.country == filter.country) != filter.reverse
             return {hx.name for hx in hexes if chk(hx)}
         else:
             raise Exception(f"Unknown filter type: {filter.type.name}")

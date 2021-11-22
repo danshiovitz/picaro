@@ -3,44 +3,9 @@ from enum import Enum
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from picaro.common.hexmap.types import OffsetCoordinate
-from picaro.rules.types.external import (
-    Action,
-    Challenge,
-    Character,
-    Choice,
-    Choices,
-    Country,
-    CreateGameData as CreateGameRequest,
-    Effect,
-    EffectType,
-    Encounter,
-    EncounterCheck,
-    EncounterCommands,
-    EncounterType,
-    Entity,
-    EntityType,
-    Filter,
-    FilterType,
-    FullCardType,
-    Game,
-    Hex,
-    Job,
-    JobType,
-    Meter,
-    Outcome,
-    Overlay,
-    OverlayType,
-    Record,
-    Route,
-    RouteType,
-    TableauCard,
-    TemplateCard,
-    TemplateCardType,
-    TemplateDeck,
-    Title,
-    Trigger,
-    TriggerType,
-)
+from picaro.rules.types.external import *
+
+CreateGameRequest = CreateGameData
 
 
 @dataclass(frozen=True)
