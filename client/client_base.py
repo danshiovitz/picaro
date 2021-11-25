@@ -105,7 +105,7 @@ class ClientBase:
         self.entities = SingleCache[Entity](
             lambda: sorted(
                 self._get(f"/entities?details=true", SearchEntitiesResponse).entities,
-                key=lambda e: (e.type.value, e.subtype, e.name, e.uuid),
+                key=lambda e: (e.type.value, e.subtype or "", e.name, e.uuid),
             )
         )
         self.hexes = SingleCache[Hex](

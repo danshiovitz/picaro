@@ -1,6 +1,7 @@
 import random
 from collections import defaultdict
-from dataclasses import dataclass
+from contextlib import nullcontext
+from dataclasses import dataclass, replace as dataclasses_replace
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from picaro.common.exceptions import BadStateException, IllegalMoveException
@@ -38,7 +39,7 @@ from .special_cards import make_assign_xp_card, make_meter_card
 @dataclass
 class State:
     all_effects: Dict[EffectType, List[Effect]]
-    ch: Character
+    ch: Optional[Character]
     enforce_costs: bool
     records: List[Record]
 
@@ -49,6 +50,26 @@ class ApplierBase:
         self._name = name
 
     def apply(self, effects: List[Effect], state: State) -> None:
+        if state.ch is None:
+            raise Exception("ch may not be None for default apply impl")
+
+        by_ch: Dict[Optional[str], List[Effect]] = defaultdict(list)
+        for eff in effects:
+            if eff.entity_uuid is None or eff.ch_uuid == state.ch.uuid:
+                by_ch[None].append(eff)
+            else:
+                by_ch[eff.entity_uuid].append(eff)
+
+        for ch_uuid, effs in by_ch.items():
+            if ch_uuid is None:
+                ctx = nullcontext(state.ch)
+            else:
+                ctx = Character.load_for_write(entity_uuid)
+            with ctx as cur_ch:
+                cur_state = dataclasses_replace(state, ch=cur_ch)
+                self.apply_for_ch(effects, cur_state)
+
+    def apply_for_ch(self, effects: List[Effect], state: State) -> None:
         raise NotImplemented("Need to implement apply")
 
     def _add_effect(self, effect: Effect, state: State) -> None:
@@ -87,7 +108,7 @@ class ApplierBase:
 
 def apply_effects(
     effects: List[Effect],
-    ch: Character,
+    ch: Optional[Character],
     appliers: List[ApplierBase],
     records: List[Record],
     enforce_costs: bool,
@@ -127,7 +148,7 @@ class AmountApplier(ApplierBase):
         self._min_value = min_value
         self._max_value = max_value
 
-    def apply(self, effects: List[Effect], state: State) -> None:
+    def apply_for_ch(self, effects: List[Effect], state: State) -> None:
         init_value = getattr(state.ch, self._field_name, 0)
         new_value, comments = self._amount_helper(
             self._name,
@@ -140,7 +161,7 @@ class AmountApplier(ApplierBase):
         setattr(state.ch, self._field_name, new_value)
         state.records.append(
             Record.create_detached(
-                target_uuid=state.ch.uuid,
+                entity_uuid=state.ch.uuid,
                 type=self._type,
                 old_amount=init_value,
                 new_amount=new_value,
@@ -165,7 +186,7 @@ class SubtypeAmountApplierBase(ApplierBase):
         self._min_value = min_value
         self._max_value = max_value
 
-    def apply(self, effects: List[Effect], state: State) -> None:
+    def apply_for_ch(self, effects: List[Effect], state: State) -> None:
         grouped = defaultdict(list)
         for eff in effects:
             grouped[getattr(eff, self._subtype)].append(eff)
@@ -189,7 +210,7 @@ class SubtypeAmountApplierBase(ApplierBase):
             getattr(state.ch, self._field_name)[grp_name] = new_value
             state.records.append(
                 Record.create_detached(
-                    target_uuid=state.ch.uuid,
+                    entity_uuid=state.ch.uuid,
                     type=self._type,
                     old_amount=init_value,
                     new_amount=new_value,
@@ -211,7 +232,7 @@ class XpApplier(SubtypeAmountApplierBase):
         state.ch.queued.append(make_assign_xp_card(state.ch, new_value))
         state.records.append(
             Record.create_detached(
-                target_uuid=state.ch.uuid,
+                entity_uuid=state.ch.uuid,
                 type=self._type,
                 skill=None,
                 old_amount=0,
@@ -255,7 +276,7 @@ class ResourceApplier(SubtypeAmountApplierBase):
             self._add_effect(effect, state)
         state.records.append(
             Record.create_detached(
-                target_uuid=state.ch.uuid,
+                entity_uuid=state.ch.uuid,
                 type=self._type,
                 resource=None,
                 old_amount=0,
@@ -279,7 +300,7 @@ class ResourceApplier(SubtypeAmountApplierBase):
             comments.append(draw.name)
         state.records.append(
             Record.create_detached(
-                target_uuid=state.ch.uuid,
+                entity_uuid=state.ch.uuid,
                 type=self._type,
                 resource=None,
                 old_amount=0,
@@ -295,7 +316,7 @@ class SeparateApplierBase(ApplierBase):
         self._name = name
         self._last_only = last_only
 
-    def apply(self, effects: List[Effect], state: State) -> None:
+    def apply_for_ch(self, effects: List[Effect], state: State) -> None:
         if self._last_only:
             self._apply_single(effects[-1], state)
         else:
@@ -317,62 +338,10 @@ class ActivityApplier(SeparateApplierBase):
             state.ch.turn_flags.add(TurnFlags.ACTED)
         state.records.append(
             Record.create_detached(
-                target_uuid=state.ch.uuid,
+                entity_uuid=state.ch.uuid,
                 type=self._type,
                 enabled=effect.enable,
                 comments=[],
-            )
-        )
-
-
-class AddEntityApplier(SeparateApplierBase):
-    def __init__(self) -> None:
-        super().__init__(EffectType.ADD_ENTITY, "add entity")
-
-    def _apply_single(self, effect: Effect, state: State) -> None:
-        entity, tokens, overlays, triggers, meters = translate.from_external_entity(
-            effect.entity
-        )
-        Entity.insert([entity])
-        Token.insert(tokens)
-        Overlay.insert(overlays)
-        Trigger.insert(triggers)
-        Meter.insert(meters)
-
-        get_rules_cache().overlays.pop(state.ch.uuid, None)
-        get_rules_cache().triggers.pop(state.ch.uuid, None)
-
-        state.records.append(
-            Record.create_detached(
-                target_uuid=state.ch.uuid,
-                type=self._type,
-                entity=effect.entity,
-                comments=[effect.comment] if effect.comment else [],
-            )
-        )
-
-
-class AddTitleApplier(SeparateApplierBase):
-    def __init__(self) -> None:
-        super().__init__(EffectType.ADD_TITLE, "add title")
-
-    def _apply_single(self, effect: Effect, state: State) -> None:
-        overlays, triggers, meters = translate.from_external_titles(
-            [effect.title], state.ch.uuid
-        )
-        Overlay.insert(overlays)
-        Trigger.insert(triggers)
-        Meter.insert(meters)
-
-        get_rules_cache().overlays.pop(state.ch.uuid, None)
-        get_rules_cache().triggers.pop(state.ch.uuid, None)
-
-        state.records.append(
-            Record.create_detached(
-                target_uuid=state.ch.uuid,
-                type=self._type,
-                title=effect.title,
-                comments=[effect.comment] if effect.comment else [],
             )
         )
 
@@ -389,7 +358,7 @@ class QueueEncounterApplier(SeparateApplierBase):
 
         state.records.append(
             Record.create_detached(
-                target_uuid=state.ch.uuid,
+                entity_uuid=state.ch.uuid,
                 type=self._type,
                 encounter=effect.encounter,
                 comments=[effect.comment] if effect.comment else [],
@@ -406,7 +375,7 @@ class ModifyJobApplier(SeparateApplierBase):
         CharacterRules.switch_job(state.ch, effect.job_name)
         state.records.append(
             Record.create_detached(
-                target_uuid=state.ch.uuid,
+                entity_uuid=state.ch.uuid,
                 type=self._type,
                 old_job_name=old_job,
                 new_job_name=state.ch.job_name,
@@ -425,7 +394,7 @@ class ModifyLocationApplier(SeparateApplierBase):
         new_loc = BoardRules.get_single_token_hex(state.ch.uuid).name
         state.records.append(
             Record.create_detached(
-                target_uuid=state.ch.uuid,
+                entity_uuid=state.ch.uuid,
                 type=self._type,
                 old_hex=old_loc,
                 new_hex=new_loc,
@@ -438,12 +407,14 @@ class TickMeterApplier(ApplierBase):
     def __init__(self) -> None:
         super().__init__(EffectType.TICK_METER, "meter")
 
+    # override base apply, since we don't use a character
     def apply(self, effects: List[Effect], state: State) -> None:
         grouped = defaultdict(list)
         for eff in effects:
-            grouped[eff.entity_uuid].append(eff)
-        for entity_uuid, grp_vals in grouped.items():
-            with Meter.load_for_write(entity_uuid) as meter:
+            grouped[(eff.entity_uuid, eff.meter_uuid)].append(eff)
+        for uuids, grp_vals in grouped.items():
+            entity_uuid, meter_uuid = uuids
+            with Meter.load_for_write(meter_uuid) as meter:
                 old_value = meter.cur_value
                 new_value, comments = self._amount_helper(
                     meter.name + " value",
@@ -462,9 +433,9 @@ class TickMeterApplier(ApplierBase):
 
             state.records.append(
                 Record.create_detached(
-                    target_uuid=state.ch.uuid,
                     type=self._type,
                     entity_uuid=entity_uuid,
+                    meter_uuid=meter_uuid,
                     old_amount=old_value,
                     new_amount=new_value,
                     comments=comments,
@@ -472,11 +443,72 @@ class TickMeterApplier(ApplierBase):
             )
 
 
+class AddEntityApplier(ApplierBase):
+    def __init__(self) -> None:
+        super().__init__(EffectType.ADD_ENTITY, "add entity")
+
+    # override base apply, since we don't use a character
+    def apply(self, effects: List[Effect], state: State) -> None:
+        for eff in effects:
+            self._apply_single(eff, state)
+
+    def _apply_single(self, effect: Effect, state: State) -> None:
+        entity, tokens, overlays, triggers, meters = translate.from_external_entity(
+            effect.entity
+        )
+        Entity.insert([entity])
+        Token.insert(tokens)
+        Overlay.insert(overlays)
+        Trigger.insert(triggers)
+        Meter.insert(meters)
+
+        get_rules_cache().overlays.pop(state.ch.uuid, None)
+        get_rules_cache().triggers.pop(state.ch.uuid, None)
+
+        state.records.append(
+            Record.create_detached(
+                type=self._type,
+                entity=effect.entity,
+                comments=[effect.comment] if effect.comment else [],
+            )
+        )
+
+
+class AddTitleApplier(ApplierBase):
+    def __init__(self) -> None:
+        super().__init__(EffectType.ADD_TITLE, "add title")
+
+    # override base apply, since we don't use a character
+    def apply(self, effects: List[Effect], state: State) -> None:
+        for eff in effects:
+            self._apply_single(eff, state)
+
+    def _apply_single(self, effect: Effect, state: State) -> None:
+        overlays, triggers, meters = translate.from_external_titles(
+            [effect.title], state.ch.uuid
+        )
+        Overlay.insert(overlays)
+        Trigger.insert(triggers)
+        Meter.insert(meters)
+
+        get_rules_cache().overlays.pop(state.ch.uuid, None)
+        get_rules_cache().triggers.pop(state.ch.uuid, None)
+
+        state.records.append(
+            Record.create_detached(
+                entity_uuid=effect.entity_uuid,
+                type=self._type,
+                title=effect.title,
+                comments=[effect.comment] if effect.comment else [],
+            )
+        )
+
+
 class LeadershipApplier(ApplierBase):
     def __init__(self) -> None:
         super().__init__(EffectType.LEADERSHIP, "leadership challenge")
 
-    def apply(self, effects: List[Effect], state: State) -> None:
+    def apply_for_ch(self, effects: List[Effect], state: State) -> None:
         new_value, comments = self._amount_helper(
             self._name, effects, 0, -20, 20, state.enforce_costs
         )
@@ -494,7 +526,7 @@ class LeadershipApplier(ApplierBase):
 
         state.records.append(
             Record.create_detached(
-                target_uuid=state.ch.uuid,
+                entity_uuid=state.ch.uuid,
                 type=self._type,
                 old_amount=0,
                 new_amount=new_value,
@@ -507,7 +539,7 @@ class TransportApplier(ApplierBase):
     def __init__(self) -> None:
         super().__init__(EffectType.TRANSPORT, "random transport")
 
-    def apply(self, effects: List[Effect], state: State) -> None:
+    def apply_for_ch(self, effects: List[Effect], state: State) -> None:
         new_value, comments = self._amount_helper(
             self._name, effects, 0, 0, None, state.enforce_costs
         )

@@ -6,7 +6,6 @@ from picaro.common.storage import make_uuid
 from picaro.rules.character import CharacterRules
 from picaro.rules.types.external import Title
 from picaro.rules.types.internal import (
-    AmountEffect,
     Character,
     Choice,
     Choices,
@@ -14,6 +13,7 @@ from picaro.rules.types.internal import (
     EffectType,
     EnableEffect,
     EncounterCheck,
+    EntityAmountEffect,
     FullCard,
     FullCardType,
     Game,
@@ -37,7 +37,7 @@ def queue_bad_reputation_check(ch: Character) -> None:
         return
 
     choice_list = [
-        Choice(effects=[AmountEffect(type=EffectType.LEADERSHIP, amount=-1)]),
+        Choice(effects=[EntityAmountEffect(type=EffectType.LEADERSHIP, amount=-1)]),
     ]
 
     card = FullCard(
@@ -207,7 +207,7 @@ def _actualize_trade_card(
                     )
                 ],
                 effects=[
-                    AmountEffect(
+                    EntityAmountEffect(
                         type=EffectType.MODIFY_COINS,
                         amount=CharacterRules.get_trade_price(ch, rs),
                     )

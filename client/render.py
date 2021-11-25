@@ -38,76 +38,92 @@ class RenderClientBase(ClientBase):
             else:
                 return f"remained at {record.new_amount}"
 
-        line = "* "
-        subj = self.entities.get_by_uuid(record.target_uuid).name
-        if record.target_uuid == ch.uuid:
-            line += "Your "
-            subj = "You"
+        is_you = False
+        if record.type == EffectType.ADD_ENTITY:
+            subj = record.entity.name
+            poss = record.entity.name + "'s"
+        elif record.type == EffectType.TICK_METER:
+            entity = self.entities.get_by_uuid(record.entity_uuid)
+            meter = [
+                m
+                for t in entity.titles
+                for m in t.meters
+                if m.uuid == record.meter_uuid
+            ][0]
+            subj = f"{entity.name}'s {meter.name}"
+            poss = subj + "'s"
         else:
-            line += subj + "'s "
+            if record.entity_uuid == ch.uuid:
+                is_you = True
+                subj = "You"
+                poss = "Your"
+            else:
+                entity = self.entities.get_by_uuid(record.entity_uuid)
+                subj = entity.name
+                poss = subj + "'s"
 
+        line = ""
         if record.type == EffectType.MODIFY_ACTIVITY:
             if not record.enabled:
-                line += "activity was used"
+                line = f"{poss} activity was used"
             else:
-                line += "activity was refreshed"
+                line = f"{poss} activity was refreshed"
         elif record.type == EffectType.MODIFY_HEALTH:
-            line += "health has " + render_single_int(record)
+            line = f"{poss} health has " + render_single_int(record)
         elif record.type == EffectType.MODIFY_COINS:
-            line += "coins have " + render_single_int(record)
+            line = f"{poss} coins have " + render_single_int(record)
         elif record.type == EffectType.MODIFY_REPUTATION:
-            line += "reputation has " + render_single_int(record)
+            line = f"{poss} reputation has " + render_single_int(record)
         elif record.type == EffectType.MODIFY_XP:
-            line += f"{record.skill or 'unassigned'} xp has " + render_single_int(
+            line = f"{poss} {record.skill or 'unassigned'} xp has " + render_single_int(
                 record
             )
         elif record.type == EffectType.MODIFY_RESOURCES:
             if record.resource is None:
-                line = f"* {subj} gained {record.new_value} resource draws"
+                line = f"{subj} gained {record.new_value} resource draws"
             else:
-                line += f"{record.resource} resources have " + render_single_int(record)
+                line = f"{poss} {record.resource} resources have " + render_single_int(
+                    record
+                )
         elif record.type == EffectType.MODIFY_TURNS:
-            line += "remaining turns have " + render_single_int(record)
+            line = f"{poss} remaining turns have " + render_single_int(record)
         elif record.type == EffectType.MODIFY_SPEED:
-            line += "speed has " + render_single_int(record)
+            line = f"{poss} speed has " + render_single_int(record)
         elif record.type == EffectType.MODIFY_LUCK:
-            line += "luck has " + render_single_int(record)
+            line = f"{poss} luck has " + render_single_int(record)
         elif record.type == EffectType.ADD_TITLE:
-            line = f"* {subj} gained the title {self.render_title(record.title)}"
+            line = f"{subj} gained the title {self.render_title(record.title)}"
         elif record.type == EffectType.ADD_ENTITY:
-            line = f"* {subj} added the entity {self.render_entity(record.entity)}"
+            line = f"{subj} has been created: {self.render_entity(record.entity)}"
         elif record.type == EffectType.QUEUE_ENCOUNTER:
-            line = f"* {subj} had the encounter {self.render_template_card(record.encounter)}"
+            line = f"{subj} had the encounter {self.render_template_card(record.encounter)}"
         elif record.type == EffectType.MODIFY_LOCATION:
-            if subj == "You":
-                line = f"* {subj} are "
+            if is_you:
+                line = f"{subj} are "
             else:
-                line = f"* {subj} is "
+                line = f"{subj} is "
             line += f"now in hex {record.new_hex}"
         elif record.type == EffectType.MODIFY_JOB:
-            if subj == "You":
-                line = f"* {subj} have "
+            if is_you:
+                line = f"{subj} have "
             else:
-                line = f"* {subj} has "
+                line = f"{subj} has "
             line += f"become a {record.new_job_name}"
         elif record.type == EffectType.LEADERSHIP:
-            if subj == "You":
-                line = f"* {subj} have "
+            if is_you:
+                line = f"{subj} have "
             else:
-                line = f"* {subj} has "
+                line = f"{subj} has "
             line += f"entered into a leadership challenge"
         elif record.type == EffectType.TICK_METER:
-            name = self.entities.get_by_uuid(record.entity_uuid).name
-            line = (
-                f"* {subj} set {name} from {record.old_amount} to {record.new_amount}"
-            )
+            line = f"{subj} has " + render_single_int(record)
         else:
             line += f"UNKNOWN EVENT TYPE: {record}"
 
         if record.comments:
             line += " (" + ", ".join(record.comments) + ")"
         line += "."
-        return line
+        return "* " + line
 
     def render_outcome(self, val: Outcome) -> str:
         names = {
@@ -146,8 +162,8 @@ class RenderClientBase(ClientBase):
             return ln
 
         entity = ""
-        if eff.ch_uuid:
-            entity = f" for {self.entities.get_by_uuid(eff.ch_uuid).name}"
+        if hasattr(eff, "entity_uuid") and eff.entity_uuid != self.character.uuid:
+            entity = f" for {self.entities.get_by_uuid(eff.entity_uuid).name}"
 
         if eff.type == EffectType.MODIFY_COINS:
             return _std_mod("coin") + entity

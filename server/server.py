@@ -165,7 +165,7 @@ class Server:
                             ),
                         ],
                         effects=[
-                            AmountEffect(
+                            EntityAmountEffect(
                                 type=EffectType.MODIFY_HEALTH,
                                 amount=-1,
                             ),
@@ -189,7 +189,7 @@ class Server:
                         is_private=False,
                         filters=[],
                         costs=[
-                            AmountEffect(
+                            EntityAmountEffect(
                                 type=EffectType.MODIFY_HEALTH,
                                 amount=-5,
                             ),
@@ -199,7 +199,7 @@ class Server:
                                 type=EffectType.MODIFY_LOCATION,
                                 hex=zeta_loc,
                             ),
-                            AmountEffect(
+                            EntityAmountEffect(
                                 type=EffectType.MODIFY_SPEED,
                                 amount=0,
                                 is_absolute=True,
@@ -250,6 +250,31 @@ class Server:
                     locations=[],
                     uuid="",
                 )
+
+                ch = SearchRules.search_characters("Conan")[0]
+                pig_entity = Entity(
+                    type=EntityType.LANDMARK,
+                    subtype=None,
+                    name="Piggy Bank",
+                    desc="...",
+                    titles=[
+                        Title(
+                            name=None,
+                            meters=[
+                                Meter(
+                                    uuid="",
+                                    name="Piggy Coins",
+                                    min_value=0,
+                                    max_value=100,
+                                    cur_value=0,
+                                ),
+                            ],
+                        ),
+                    ],
+                    locations=[ch.location],
+                    uuid="",
+                )
+
                 from picaro.rules.types.internal import Character as internal_Character
 
                 with internal_Character.load_by_name_for_write("Conan") as ch:
@@ -257,7 +282,7 @@ class Server:
                         ch,
                         [],
                         [
-                            AmountEffect(type=EffectType.MODIFY_COINS, amount=50),
+                            EntityAmountEffect(type=EffectType.MODIFY_COINS, amount=50),
                             ResourceAmountEffect(
                                 type=EffectType.MODIFY_RESOURCES,
                                 resource=None,
@@ -280,6 +305,88 @@ class Server:
                             AddEntityEffect(
                                 type=EffectType.ADD_ENTITY,
                                 entity=entity,
+                            ),
+                            AddEntityEffect(
+                                type=EffectType.ADD_ENTITY,
+                                entity=pig_entity,
+                            ),
+                        ],
+                        [],
+                    )
+
+                entities = SearchRules.search_entities(details=True)
+                pig_entity = [e for e in entities if e.name == "Piggy Bank"][0]
+                pig_entity_uuid = pig_entity.uuid
+                pig_meter_uuid = pig_entity.titles[0].meters[0].uuid
+
+                pig_actions = [
+                    Action(
+                        uuid="",
+                        name="Feed the Pig",
+                        is_private=False,
+                        filters=[
+                            TokenFilter(
+                                type=FilterType.NEAR_TOKEN,
+                                entity_uuid=pig_entity_uuid,
+                                distance=0,
+                            ),
+                        ],
+                        costs=[
+                            EntityAmountEffect(
+                                type=EffectType.MODIFY_COINS,
+                                amount=-1,
+                            ),
+                        ],
+                        effects=[
+                            MeterAmountEffect(
+                                type=EffectType.TICK_METER,
+                                entity_uuid=pig_entity_uuid,
+                                meter_uuid=pig_meter_uuid,
+                                amount=1,
+                            ),
+                        ],
+                        route=None,
+                    ),
+                    Action(
+                        uuid="",
+                        name="Smash the Pig",
+                        is_private=False,
+                        filters=[
+                            TokenFilter(
+                                type=FilterType.NEAR_TOKEN,
+                                entity_uuid=pig_entity_uuid,
+                                distance=0,
+                            ),
+                        ],
+                        costs=[
+                            MeterAmountEffect(
+                                type=EffectType.TICK_METER,
+                                entity_uuid=pig_entity_uuid,
+                                meter_uuid=pig_meter_uuid,
+                                amount=-10,
+                            ),
+                        ],
+                        effects=[
+                            EntityAmountEffect(
+                                type=EffectType.MODIFY_COINS,
+                                amount=10,
+                            ),
+                        ],
+                        route=None,
+                    ),
+                ]
+
+                with internal_Character.load_by_name_for_write("Conan") as ch:
+                    GameRules.apply_effects(
+                        ch,
+                        [],
+                        [
+                            AddTitleEffect(
+                                type=EffectType.ADD_TITLE,
+                                title=Title(
+                                    name=None,
+                                    actions=pig_actions,
+                                ),
                             ),
                         ],
                         [],
@@ -313,7 +420,7 @@ class Server:
                         ch,
                         [],
                         [
-                            AmountEffect(type=EffectType.MODIFY_COINS, amount=50),
+                            EntityAmountEffect(type=EffectType.MODIFY_COINS, amount=50),
                             ResourceAmountEffect(
                                 type=EffectType.MODIFY_RESOURCES,
                                 resource=None,

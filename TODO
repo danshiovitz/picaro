@@ -31,6 +31,7 @@
   - natures: hive queen (nature is to reproduce, ie create tokens, which have some effect on the area surrounding their tokens); warlord (nature is to approach, beseige, and conquer cities); blighter (nature is to blight hexes and disable mines); wolfpack (nature is to hunt and harass characters)
 - archvillain entities (do they have the same natures as regular enemeies?)
 - artifact enties (not sure they're a thing, but it seems likely - what do they have that's different?)
+- could we have effects apply to multiple people? like effects could have a selector instead of a target?
 
 - fill in stuff:
   - more feat hooks

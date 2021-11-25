@@ -19,26 +19,26 @@ from picaro.rules.types.external import (
     Title,
 )
 from picaro.rules.types.internal import (
-    AmountEffect,
+    AddEntityEffect,
+    AddTitleEffect,
     Character,
     Effect,
     EffectType,
     EnableEffect,
     EncounterEffect,
     EntityAmountEffect,
-    AddEntityEffect,
     EntityType,
     FullCard,
     FullCardType,
     JobEffect,
     LocationEffect,
     Meter,
+    MeterAmountEffect,
     OverlayType,
     ResourceAmountEffect,
     SkillAmountEffect,
     TemplateCard,
     TemplateCardType,
-    AddTitleEffect,
     TurnFlags,
 )
 
@@ -129,7 +129,7 @@ class GameTest(FlatworldTestBase):
         self.assertEqual(len(EffectType), 17)
 
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
-            effects = [AmountEffect(type=EffectType.MODIFY_COINS, amount=5)]
+            effects = [EntityAmountEffect(type=EffectType.MODIFY_COINS, amount=5)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(ch.coins, 5)
@@ -152,25 +152,25 @@ class GameTest(FlatworldTestBase):
             self.assertEqual(ch.queued[0].name, "Assign XP")
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
-            effects = [AmountEffect(type=EffectType.MODIFY_REPUTATION, amount=5)]
+            effects = [EntityAmountEffect(type=EffectType.MODIFY_REPUTATION, amount=5)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(ch.reputation, 8)  # because initial value was 3
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
-            effects = [AmountEffect(type=EffectType.MODIFY_HEALTH, amount=-5)]
+            effects = [EntityAmountEffect(type=EffectType.MODIFY_HEALTH, amount=-5)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(ch.health, 15)
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
-            effects = [AmountEffect(type=EffectType.MODIFY_TURNS, amount=5)]
+            effects = [EntityAmountEffect(type=EffectType.MODIFY_TURNS, amount=5)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(ch.remaining_turns, 25)
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
-            effects = [AmountEffect(type=EffectType.MODIFY_SPEED, amount=2)]
+            effects = [EntityAmountEffect(type=EffectType.MODIFY_SPEED, amount=2)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(ch.speed, 5)
@@ -189,7 +189,7 @@ class GameTest(FlatworldTestBase):
             self.assertNotIn(TurnFlags.ACTED, ch.turn_flags)
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
-            effects = [AmountEffect(type=EffectType.MODIFY_LUCK, amount=2)]
+            effects = [EntityAmountEffect(type=EffectType.MODIFY_LUCK, amount=2)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(ch.luck, 7)
@@ -312,7 +312,7 @@ class GameTest(FlatworldTestBase):
 
     def test_apply_effects_leadership(self) -> None:
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
-            effects = [AmountEffect(type=EffectType.LEADERSHIP, amount=-1)]
+            effects = [EntityAmountEffect(type=EffectType.LEADERSHIP, amount=-1)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(len(ch.queued), 1)
@@ -321,7 +321,7 @@ class GameTest(FlatworldTestBase):
 
     def test_apply_effects_transport(self) -> None:
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
-            effects = [AmountEffect(type=EffectType.TRANSPORT, amount=5)]
+            effects = [EntityAmountEffect(type=EffectType.TRANSPORT, amount=5)]
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
@@ -332,14 +332,17 @@ class GameTest(FlatworldTestBase):
             min_value=0,
             max_value=10,
             cur_value=5,
-            empty_effects=[AmountEffect(type=EffectType.MODIFY_COINS, amount=3)],
-            full_effects=[AmountEffect(type=EffectType.MODIFY_LUCK, amount=4)],
+            empty_effects=[EntityAmountEffect(type=EffectType.MODIFY_COINS, amount=3)],
+            full_effects=[EntityAmountEffect(type=EffectType.MODIFY_LUCK, amount=4)],
         )
 
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
             effects = [
-                EntityAmountEffect(
-                    type=EffectType.TICK_METER, entity_uuid=muuid, amount=3
+                MeterAmountEffect(
+                    type=EffectType.TICK_METER,
+                    entity_uuid=self.CH_UUID,
+                    meter_uuid=muuid,
+                    amount=3,
                 )
             ]
 
@@ -361,8 +364,11 @@ class GameTest(FlatworldTestBase):
             ch.queued = []
 
             effects = [
-                EntityAmountEffect(
-                    type=EffectType.TICK_METER, entity_uuid=muuid, amount=-10
+                MeterAmountEffect(
+                    type=EffectType.TICK_METER,
+                    entity_uuid=self.CH_UUID,
+                    meter_uuid=muuid,
+                    amount=-10,
                 )
             ]
             records = []
@@ -378,8 +384,8 @@ class GameTest(FlatworldTestBase):
 
     def test_apply_effects_costs(self) -> None:
         costs = [
-            AmountEffect(type=EffectType.MODIFY_COINS, amount=-5),
-            AmountEffect(type=EffectType.MODIFY_REPUTATION, amount=3),
+            EntityAmountEffect(type=EffectType.MODIFY_COINS, amount=-5),
+            EntityAmountEffect(type=EffectType.MODIFY_REPUTATION, amount=3),
         ]
 
         with Character.load_by_name_for_write(self.CHARACTER) as ch:

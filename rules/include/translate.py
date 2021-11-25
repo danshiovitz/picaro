@@ -190,7 +190,9 @@ def to_external_titles(
         Tuple[List[external_Overlay], List[external_Trigger], List[external_Action]],
     ] = {
         tt: ([], [], [], [])
-        for tt in {o.title for o in overlays} | {t.title for t in triggers}
+        for tt in {o.title for o in overlays}
+        | {t.title for t in triggers}
+        | {t.title for t in meters}
     }
     for overlay in overlays:
         title_map[overlay.title][0].append(to_external_overlay(overlay))

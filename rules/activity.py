@@ -13,7 +13,6 @@ from .include.deck import shuffle_discard
 from .include.special_cards import make_promo_card
 from .types.external import EncounterCommands, Record as external_Record
 from .types.internal import (
-    AmountEffect,
     Character,
     Choice,
     Choices,
@@ -22,6 +21,7 @@ from .types.internal import (
     Encounter,
     EncounterCheck,
     EncounterContextType,
+    EntityAmountEffect,
     FullCard,
     FullCardType,
     Game,
@@ -249,7 +249,7 @@ class ActivityRules:
 
         if luck_spent > 0:
             costs.append(
-                AmountEffect(
+                EntityAmountEffect(
                     EffectType.MODIFY_LUCK,
                     amount=-luck_spent,
                     comment="encounter commands",
@@ -334,7 +334,7 @@ class ActivityRules:
             else:
                 # TODO: log some error, we should always be able to find a bad job
                 effects.append(
-                    AmountEffect(
+                    EntityAmountEffect(
                         EffectType.MODIFY_REPUTATION,
                         amount=1,
                         is_absolute=True,
@@ -343,7 +343,7 @@ class ActivityRules:
                 )
         elif victory_points == 2:
             effects.append(
-                AmountEffect(
+                EntityAmountEffect(
                     EffectType.MODIFY_REPUTATION,
                     amount=-2,
                     comment="leadership challenge",
@@ -362,7 +362,7 @@ class ActivityRules:
                 ch.queued.append(make_promo_card(ch, ch.job_name))
             else:
                 effects.append(
-                    AmountEffect(
+                    EntityAmountEffect(
                         EffectType.MODIFY_REPUTATION,
                         amount=3,
                         comment="leadership challenge",

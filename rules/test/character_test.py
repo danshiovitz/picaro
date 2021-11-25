@@ -13,12 +13,12 @@ from picaro.rules.board import BoardRules
 from picaro.rules.character import CharacterRules
 from picaro.rules.test.test_base import FlatworldTestBase
 from picaro.rules.types.internal import (
-    AmountEffect,
     Character,
     CountryFilter,
     Effect,
     EffectType,
     Entity,
+    EntityAmountEffect,
     Filter,
     FilterType,
     HexFilter,
@@ -366,7 +366,7 @@ class CharacterTest(FlatworldTestBase):
             type=TriggerType.ENTER_HEX,
             hex=hex,
             costs=[],
-            effects=[AmountEffect(type=effect_type, amount=1)],
+            effects=[EntityAmountEffect(type=effect_type, amount=1)],
             is_private=True,
             filters=filters,
         )

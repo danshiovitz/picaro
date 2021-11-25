@@ -64,8 +64,6 @@ class EntityType(Enum):
 class Effect(SubclassVariant):
     type: EffectType
     comment: Optional[str] = None
-    # if the character isn't provided, it defaults to the current character
-    ch_uuid: Optional[str] = None
 
 
 class JobType(Enum):
@@ -262,8 +260,8 @@ class Meter:
     min_value: int
     max_value: int
     cur_value: int
-    empty_effects: Sequence[Effect]
-    full_effects: Sequence[Effect]
+    empty_effects: Sequence[Effect] = ()
+    full_effects: Sequence[Effect] = ()
 
 
 @dataclass(frozen=True)
@@ -372,7 +370,6 @@ class TemplateDeck:
 @dataclass(frozen=True)
 class Record(SubclassVariant):
     uuid: str
-    target_uuid: str
     type: EffectType
     comments: Sequence[str]
 
@@ -384,6 +381,12 @@ class Game:
     skills: Sequence[str]
     resources: Sequence[str]
     zodiacs: Sequence[str]
+
+
+@subclass_of(Effect, [])
+class AmountEffect(Effect):
+    amount: int
+    is_absolute: bool = False
 
 
 @subclass_of(
@@ -399,29 +402,30 @@ class Game:
         EffectType.TRANSPORT,
     ],
 )
-class AmountEffect(Effect):
-    amount: int
-    is_absolute: bool = False
+class EntityAmountEffect(AmountEffect):
+    entity_uuid: Optional[str] = None
 
 
 @subclass_of(Effect, [EffectType.MODIFY_XP])
-class SkillAmountEffect(AmountEffect):
+class SkillAmountEffect(EntityAmountEffect):
     skill: Optional[str]
 
 
 @subclass_of(Effect, [EffectType.MODIFY_RESOURCES])
-class ResourceAmountEffect(AmountEffect):
+class ResourceAmountEffect(EntityAmountEffect):
     resource: Optional[str]
 
 
 @subclass_of(Effect, [EffectType.TICK_METER])
-class EntityAmountEffect(AmountEffect):
+class MeterAmountEffect(AmountEffect):
     entity_uuid: str
+    meter_uuid: str
 
 
 @subclass_of(Effect, [EffectType.MODIFY_ACTIVITY])
 class EnableEffect(Effect):
     enable: bool
+    entity_uuid: Optional[str] = None
 
 
 @subclass_of(Effect, [EffectType.ADD_ENTITY])
@@ -432,21 +436,25 @@ class AddEntityEffect(Effect):
 @subclass_of(Effect, [EffectType.QUEUE_ENCOUNTER])
 class EncounterEffect(Effect):
     encounter: TemplateCard
+    entity_uuid: Optional[str] = None
 
 
 @subclass_of(Effect, [EffectType.ADD_TITLE])
 class AddTitleEffect(Effect):
     title: Title
+    entity_uuid: Optional[str] = None
 
 
 @subclass_of(Effect, [EffectType.MODIFY_LOCATION])
 class LocationEffect(Effect):
     hex: str
+    entity_uuid: Optional[str] = None
 
 
 @subclass_of(Effect, [EffectType.MODIFY_JOB])
 class JobEffect(Effect):
     job_name: str
+    entity_uuid: Optional[str] = None
 
 
 @subclass_of(Filter, [FilterType.SKILL_GTE])
@@ -512,6 +520,12 @@ class StandardTrigger(Trigger):
     dummy: int = 0
 
 
+@subclass_of(Record, [])
+class AmountRecord(Record):
+    old_amount: int
+    new_amount: int
+
+
 @subclass_of(
     Record,
     [
@@ -525,28 +539,29 @@ class StandardTrigger(Trigger):
         EffectType.TRANSPORT,
     ],
 )
-class AmountRecord(Record):
-    old_amount: int
-    new_amount: int
+class EntityAmountRecord(Record):
+    entity_uuid: Optional[str]
 
 
 @subclass_of(Record, [EffectType.MODIFY_XP])
-class SkillAmountRecord(AmountRecord):
+class SkillAmountRecord(EntityAmountRecord):
     skill: Optional[str]
 
 
 @subclass_of(Record, [EffectType.MODIFY_RESOURCES])
-class ResourceAmountRecord(AmountRecord):
+class ResourceAmountRecord(EntityAmountRecord):
     resource: Optional[str]
 
 
 @subclass_of(Record, [EffectType.TICK_METER])
-class EntityAmountRecord(AmountRecord):
+class MeterAmountRecord(AmountRecord):
     entity_uuid: str
+    meter_uuid: str
 
 
 @subclass_of(Record, [EffectType.MODIFY_ACTIVITY])
 class EnableRecord(Record):
+    entity_uuid: str
     enabled: bool
 
 
@@ -557,22 +572,26 @@ class AddEntityRecord(Record):
 
 @subclass_of(Record, [EffectType.QUEUE_ENCOUNTER])
 class EncounterRecord(Record):
+    entity_uuid: str
     encounter: TemplateCard
 
 
 @subclass_of(Record, [EffectType.ADD_TITLE])
 class AddTitleRecord(Record):
+    entity_uuid: str
     title: Title
 
 
 @subclass_of(Record, [EffectType.MODIFY_LOCATION])
 class LocationRecord(Record):
+    entity_uuid: str
     old_hex: str
     new_hex: str
 
 
 @subclass_of(Record, [EffectType.MODIFY_JOB])
 class JobRecord(Record):
+    entity_uuid: str
     old_job_name: str
     new_job_name: str
 

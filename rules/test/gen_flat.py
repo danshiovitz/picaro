@@ -4,7 +4,6 @@ from typing import Callable, Dict, List, Set, Tuple, Type, TypeVar
 from picaro.common.hexmap.types import OffsetCoordinate
 from picaro.server.api_types import (
     Action,
-    AmountEffect,
     Challenge,
     Choice,
     Choices,
@@ -12,8 +11,9 @@ from picaro.server.api_types import (
     CreateGameRequest,
     Effect,
     EffectType,
-    EntityType,
     Entity,
+    EntityAmountEffect,
+    EntityType,
     Filter,
     FilterType,
     Hex,
@@ -152,7 +152,7 @@ def generate_decks() -> List[TemplateDeck]:
             Choice(
                 costs=[],
                 effects=[
-                    AmountEffect(
+                    EntityAmountEffect(
                         type=EffectType.MODIFY_COINS,
                         amount=5,
                     )
@@ -161,7 +161,7 @@ def generate_decks() -> List[TemplateDeck]:
             Choice(
                 costs=[],
                 effects=[
-                    AmountEffect(
+                    EntityAmountEffect(
                         type=EffectType.MODIFY_HEALTH,
                         amount=5,
                     )

@@ -38,6 +38,7 @@ from .external import (
     JobEffect,
     JobType,
     LocationEffect,
+    MeterAmountEffect,
     Outcome,
     Overlay,
     OverlayType,
@@ -420,9 +421,14 @@ class Record(StandardWrapper):
         TABLE_NAME = "record"
 
         uuid: str
-        target_uuid: str
         type: EffectType
         comments: Sequence[str]
+
+
+@data_subclass_of(Record.Data, [])
+class AmountRecord(Record.Data):
+    old_amount: int
+    new_amount: int
 
 
 @data_subclass_of(
@@ -438,28 +444,29 @@ class Record(StandardWrapper):
         EffectType.TRANSPORT,
     ],
 )
-class AmountRecord(Record.Data):
-    old_amount: int
-    new_amount: int
-
-
-@data_subclass_of(Record.Data, [EffectType.MODIFY_XP])
-class SkillAmountRecord(AmountRecord):
-    skill: Optional[str]
-
-
-@data_subclass_of(Record.Data, [EffectType.MODIFY_RESOURCES])
-class ResourceAmountRecord(AmountRecord):
-    resource: Optional[str]
-
-
-@data_subclass_of(Record.Data, [EffectType.TICK_METER])
 class EntityAmountRecord(AmountRecord):
     entity_uuid: str
 
 
+@data_subclass_of(Record.Data, [EffectType.MODIFY_XP])
+class SkillAmountRecord(EntityAmountRecord):
+    skill: Optional[str]
+
+
+@data_subclass_of(Record.Data, [EffectType.MODIFY_RESOURCES])
+class ResourceAmountRecord(EntityAmountRecord):
+    resource: Optional[str]
+
+
+@data_subclass_of(Record.Data, [EffectType.TICK_METER])
+class MeterAmountRecord(AmountRecord):
+    entity_uuid: str
+    meter_uuid: str
+
+
 @data_subclass_of(Record.Data, [EffectType.MODIFY_ACTIVITY])
 class EnableRecord(Record.Data):
+    entity_uuid: str
     enabled: bool
 
 
@@ -470,21 +477,25 @@ class AddEntityRecord(Record.Data):
 
 @data_subclass_of(Record.Data, [EffectType.QUEUE_ENCOUNTER])
 class EncounterRecord(Record.Data):
+    entity_uuid: str
     encounter: TemplateCard
 
 
 @data_subclass_of(Record.Data, [EffectType.ADD_TITLE])
 class AddTitleRecord(Record.Data):
+    entity_uuid: str
     title: Title
 
 
 @data_subclass_of(Record.Data, [EffectType.MODIFY_LOCATION])
 class LocationRecord(Record.Data):
+    entity_uuid: str
     old_hex: str
     new_hex: str
 
 
 @data_subclass_of(Record.Data, [EffectType.MODIFY_JOB])
 class JobRecord(Record.Data):
+    entity_uuid: str
     old_job_name: str
     new_job_name: str

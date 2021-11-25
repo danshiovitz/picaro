@@ -15,7 +15,6 @@ from picaro.rules.board import BoardRules
 from picaro.rules.test.test_base import FlatworldTestBase
 from picaro.rules.types.external import EncounterCommands
 from picaro.rules.types.internal import (
-    AmountEffect,
     Character,
     Choice,
     Choices,
@@ -23,6 +22,7 @@ from picaro.rules.types.internal import (
     EffectType,
     Encounter,
     EncounterCheck,
+    EntityAmountEffect,
     Filter,
     FilterType,
     FullCard,
@@ -110,7 +110,7 @@ class ActivityTest(FlatworldTestBase):
             name="Thingo",
             type=TriggerType.ACTION,
             costs=[],
-            effects=[AmountEffect(type=EffectType.MODIFY_COINS, amount=6)],
+            effects=[EntityAmountEffect(type=EffectType.MODIFY_COINS, amount=6)],
             is_private=False,
             filters=[HexFilter(type=FilterType.NEAR_HEX, hex="AF08", distance=1)],
         )
@@ -190,7 +190,7 @@ class ActivityTest(FlatworldTestBase):
             type=TriggerType.ENTER_HEX,
             hex=hex,
             costs=[],
-            effects=[AmountEffect(type=EffectType.MODIFY_COINS, amount=5)],
+            effects=[EntityAmountEffect(type=EffectType.MODIFY_COINS, amount=5)],
             is_private=False,
             filters=[],
         )
@@ -375,12 +375,12 @@ class ActivityTest(FlatworldTestBase):
                 data=Choices(
                     min_choices=overall_mm[0],
                     max_choices=overall_mm[1],
-                    effects=[AmountEffect(type=types.pop(0), amount=1)],
+                    effects=[EntityAmountEffect(type=types.pop(0), amount=1)],
                     choice_list=[
                         Choice(
                             min_choices=mm[0],
                             max_choices=mm[1],
-                            effects=[AmountEffect(type=types.pop(0), amount=1)],
+                            effects=[EntityAmountEffect(type=types.pop(0), amount=1)],
                         )
                         for mm in item_mms
                     ],

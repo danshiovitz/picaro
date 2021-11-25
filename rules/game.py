@@ -273,28 +273,7 @@ class GameRules:
         records: List[Record],
         enforce_costs: bool,
     ) -> None:
-        default_list: List[Effect] = []
-        others_dict: Dict[str, List[Effect]] = defaultdict(list)
-        for eff in effects:
-            if eff.ch_uuid is None or eff.ch_uuid == ch.uuid:
-                default_list.append(eff)
-            else:
-                others_dict[eff.ch_uuid].append(eff)
-        others = list(others_dict.items())
-
-        if default_list:
-            apply_effects(
-                default_list, ch, cls.APPLIERS, records, enforce_costs=enforce_costs
-            )
-        for other_uuid, other_list in others:
-            with Character.load_for_write(other_uuid) as other_ch:
-                apply_effects(
-                    other_list,
-                    other_ch,
-                    cls.APPLIERS,
-                    records,
-                    enforce_costs=enforce_costs,
-                )
+        apply_effects(effects, ch, cls.APPLIERS, records, enforce_costs=enforce_costs)
 
     APPLIERS = [
         LeadershipApplier(),
