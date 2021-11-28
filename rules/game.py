@@ -75,24 +75,9 @@ class GameRules:
         Job.insert(translate.from_external_job(j) for j in data.jobs)
         Country.insert(translate.from_external_country(c) for c in data.countries)
         Hex.insert(translate.from_external_hex(h) for h in data.hexes)
-        entities: List[Entity] = []
-        tokens: List[Token] = []
-        overlays: List[Overlay] = []
-        triggers: List[Trigger] = []
-        meters: List[Meter] = []
-        for external_entity in data.entities:
-            (
-                cur_entity,
-                cur_tokens,
-                cur_overlays,
-                cur_triggers,
-                cur_meters,
-            ) = translate.from_external_entity(external_entity)
-            entities.append(cur_entity)
-            tokens.extend(cur_tokens)
-            overlays.extend(cur_overlays)
-            triggers.extend(cur_triggers)
-            meters.extend(cur_meters)
+        entities, tokens, overlays, triggers, meters = translate.from_external_entities(
+            data.entities
+        )
         Entity.insert(entities)
         Token.insert(tokens)
         Overlay.insert(overlays)

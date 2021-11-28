@@ -539,7 +539,7 @@ class AmountRecord(Record):
         EffectType.TRANSPORT,
     ],
 )
-class EntityAmountRecord(Record):
+class EntityAmountRecord(AmountRecord):
     entity_uuid: Optional[str]
 
 

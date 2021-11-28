@@ -1,7 +1,13 @@
-from dataclasses import fields as dataclass_fields, is_dataclass
+import re
+from dataclasses import (
+    fields as dataclass_fields,
+    is_dataclass,
+    replace as dataclasses_replace,
+)
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, TypeVar
 
 from picaro.common.hexmap.types import CubeCoordinate, OffsetCoordinate
+from picaro.common.storage import make_uuid
 from picaro.rules.board import BoardRules
 from picaro.rules.character import CharacterRules
 from picaro.rules.types.external import (
@@ -25,9 +31,11 @@ from picaro.rules.types.external import (
 from picaro.rules.types.internal import (
     Character,
     Country,
+    Effect,
     EffectType,
     Encounter,
     Entity,
+    Filter,
     FullCardType,
     Game,
     Hex,
@@ -45,18 +53,46 @@ from picaro.rules.types.internal import (
 )
 
 
-def from_external_entity(
-    external_entity: external_Entity,
-) -> Tuple[Entity, List[Token], List[Overlay], List[Trigger], List[Meter]]:
-    entity = from_external_helper(external_entity, Entity)
-    tokens = [
-        Token.create_detached(entity=entity.uuid, location=loc)
-        for loc in external_entity.locations
-    ]
-    overlays, triggers, meters = from_external_titles(
-        external_entity.titles, entity.uuid
-    )
-    return entity, tokens, overlays, triggers, meters
+def from_external_entities(
+    external_entities: List[external_Entity],
+    id_map: Optional[Dict[str, str]] = None,
+) -> Tuple[List[Entity], List[Token], List[Overlay], List[Trigger], List[Meter]]:
+    if id_map is None:
+        id_map = {}
+    entities: List[Entity] = []
+    tokens: List[Token] = []
+    overlays: List[Overlay] = []
+    triggers: List[Trigger] = []
+    meters: List[Meter] = []
+
+    def modify(field_map: Dict[str, Any], extra: Dict[str, Any]) -> None:
+        field_map["uuid"] = collect_placeholder(field_map["uuid"], id_map)
+
+    for external_entity in external_entities:
+        cur_entity = from_external_helper(external_entity, Entity, modify)
+        cur_tokens = [
+            Token.create_detached(entity=cur_entity.uuid, location=loc)
+            for loc in external_entity.locations
+        ]
+        cur_overlays, cur_triggers, cur_meters = from_external_titles(
+            external_entity.titles,
+            cur_entity.uuid,
+            id_map=id_map,
+        )
+        entities.append(cur_entity)
+        tokens.extend(cur_tokens)
+        overlays.extend(cur_overlays)
+        triggers.extend(cur_triggers)
+        meters.extend(cur_meters)
+
+    for overlay in overlays:
+        apply_placeholders_overlay(overlay, id_map)
+    for trigger in triggers:
+        apply_placeholders_trigger(trigger, id_map)
+    for meter in meters:
+        apply_placeholders_meter(meter, id_map)
+
+    return entities, tokens, overlays, triggers, meters
 
 
 def to_external_entity(entity: Entity, details: bool) -> external_Entity:
@@ -109,12 +145,17 @@ def from_external_country(country: external_Country) -> Country:
 
 
 def from_external_overlay(
-    overlay: external_Overlay, entity_uuid: str, title: Optional[str]
+    overlay: external_Overlay,
+    entity_uuid: str,
+    title: Optional[str],
+    id_map: Dict[str, str],
 ) -> Overlay:
     def modify(field_map: Dict[str, Any], extra: Dict[str, Any]) -> None:
+        field_map["uuid"] = collect_placeholder(field_map["uuid"], id_map)
         field_map["name"] = None
         field_map["entity_uuid"] = entity_uuid
         field_map["title"] = title
+        field_map["filters"] = list(field_map["filters"])
 
     return from_external_helper(overlay, Overlay, modify)
 
@@ -124,13 +165,19 @@ def to_external_overlay(overlay: Overlay) -> external_Overlay:
 
 
 def from_external_trigger(
-    trigger: external_Trigger, entity_uuid: str, title: Optional[str]
+    trigger: external_Trigger,
+    entity_uuid: str,
+    title: Optional[str],
+    id_map: Dict[str, str],
 ) -> Trigger:
     def modify(field_map: Dict[str, Any], extra: Dict[str, Any]) -> None:
+        field_map["uuid"] = collect_placeholder(field_map["uuid"], id_map)
         field_map["name"] = None
-        field_map["costs"] = ()
+        field_map["costs"] = []
+        field_map["effects"] = list(field_map["effects"])
         field_map["entity_uuid"] = entity_uuid
         field_map["title"] = title
+        field_map["filters"] = list(field_map["filters"])
 
     return from_external_helper(trigger, Trigger, modify)
 
@@ -140,12 +187,19 @@ def to_external_trigger(trigger: Trigger) -> external_Trigger:
 
 
 def from_external_action(
-    action: external_Action, entity_uuid: str, title: Optional[str]
+    action: external_Action,
+    entity_uuid: str,
+    title: Optional[str],
+    id_map: Dict[str, str],
 ) -> Trigger:
     def modify(field_map: Dict[str, Any], extra: Dict[str, Any]) -> None:
+        field_map["uuid"] = collect_placeholder(field_map["uuid"], id_map)
         field_map["type"] = TriggerType.ACTION
         field_map["entity_uuid"] = entity_uuid
         field_map["title"] = title
+        field_map["costs"] = list(field_map["costs"])
+        field_map["effects"] = list(field_map["effects"])
+        field_map["filters"] = list(field_map["filters"])
 
     return from_external_helper(
         action, Trigger, modify, indicator_val=TriggerType.ACTION
@@ -166,11 +220,17 @@ def to_external_action(
 
 
 def from_external_meter(
-    meter: external_Meter, entity_uuid: str, title: Optional[str]
+    meter: external_Meter,
+    entity_uuid: str,
+    title: Optional[str],
+    id_map: Dict[str, str],
 ) -> Meter:
     def modify(field_map: Dict[str, Any], extra: Dict[str, Any]) -> None:
+        field_map["uuid"] = collect_placeholder(field_map["uuid"], id_map)
         field_map["entity_uuid"] = entity_uuid
         field_map["title"] = title
+        field_map["empty_effects"] = list(field_map["empty_effects"])
+        field_map["full_effects"] = list(field_map["full_effects"])
 
     return from_external_helper(meter, Meter, modify)
 
@@ -210,21 +270,44 @@ def to_external_titles(
 
 
 def from_external_titles(
-    titles: List[external_Title], entity_uuid: str
+    titles: List[external_Title],
+    entity_uuid: str,
+    id_map: Optional[Dict[str, str]] = None,
 ) -> Tuple[List[Overlay], List[Trigger], List[Meter]]:
+    apply_placeholders = False
+    # only do placeholders if we're not called from from_external_entities
+    if id_map is None:
+        id_map = {}
+        apply_placeholders = True
+
     overlays = []
     triggers = []
     meters = []
 
     for title in titles:
         for overlay in title.overlays:
-            overlays.append(from_external_overlay(overlay, entity_uuid, title.name))
+            overlays.append(
+                from_external_overlay(overlay, entity_uuid, title.name, id_map)
+            )
         for trigger in title.triggers:
-            triggers.append(from_external_trigger(trigger, entity_uuid, title.name))
+            triggers.append(
+                from_external_trigger(trigger, entity_uuid, title.name, id_map)
+            )
         for action in title.actions:
-            triggers.append(from_external_action(action, entity_uuid, title.name))
+            triggers.append(
+                from_external_action(action, entity_uuid, title.name, id_map)
+            )
         for meter in title.meters:
-            meters.append(from_external_meter(meter, entity_uuid, title.name))
+            meters.append(from_external_meter(meter, entity_uuid, title.name, id_map))
+
+    if apply_placeholders:
+        for overlay in overlays:
+            apply_placeholders_overlay(overlay, id_map)
+        for trigger in triggers:
+            apply_placeholders_trigger(trigger, id_map)
+        for meter in meters:
+            apply_placeholders_meter(meter, id_map)
+
     return overlays, triggers, meters
 
 
@@ -321,6 +404,74 @@ def to_external_encounter(encounter: Encounter) -> Sequence[external_Encounter]:
 
 T = TypeVar("T")
 S = TypeVar("S")
+
+
+def collect_placeholder(uuid: str, id_map: Dict[str, str]) -> str:
+    m = re.match(r"##ph:([A-Za-z0-9_]+)##", uuid)
+    if m:
+        ret = make_uuid()
+        id_map["ph:" + m.group(1)] = ret
+        return ret
+    return uuid
+
+
+def apply_placeholders_overlay(overlay: Overlay, id_map: Dict[str, str]) -> None:
+    id_map["entity:uuid"] = overlay.entity_uuid
+    for idx in range(len(overlay.filters)):
+        overlay.filters[idx] = apply_placeholders_obj(overlay.filters[idx], id_map)
+
+
+def apply_placeholders_trigger(trigger: Trigger, id_map: Dict[str, str]) -> None:
+    id_map["entity:uuid"] = trigger.entity_uuid
+    for idx in range(len(trigger.filters)):
+        trigger.filters[idx] = apply_placeholders_obj(trigger.filters[idx], id_map)
+    for idx in range(len(trigger.costs)):
+        trigger.costs[idx] = apply_placeholders_obj(trigger.costs[idx], id_map)
+    for idx in range(len(trigger.effects)):
+        trigger.effects[idx] = apply_placeholders_obj(trigger.effects[idx], id_map)
+
+
+def apply_placeholders_meter(meter: Meter, id_map: Dict[str, str]) -> None:
+    id_map["entity:uuid"] = meter.entity_uuid
+    for idx in range(len(meter.empty_effects)):
+        meter.empty_effects[idx] = apply_placeholders_obj(
+            meter.empty_effects[idx], id_map
+        )
+    for idx in range(len(meter.full_effects)):
+        meter.full_effects[idx] = apply_placeholders_obj(
+            meter.full_effects[idx], id_map
+        )
+
+
+def apply_placeholders_obj(obj: T, id_map: Dict[str, str]) -> T:
+    ret = obj
+
+    if is_dataclass(obj):
+        val_subcls = cls_to_subcls(obj.__class__, obj)
+        val_fields = {f.name for f in dataclass_fields(val_subcls)}
+    else:
+        val_subcls = cls_to_subcls(obj.Data, obj)
+        val_fields = obj.Data.SUBCLASS_FIELDS.get(
+            val_subcls, obj.Data.BASE_FIELDS
+        ).keys()
+    val_fields = [f for f in val_fields if f.endswith("uuid")]
+
+    repls = {}
+    for f in val_fields:
+        v = getattr(obj, f, None)
+        if v is not None and v.startswith("##"):
+            m = re.match(r"##(.*?)##", v)
+            if m:
+                k = m.group(1)
+                if k in id_map:
+                    repls[f] = id_map[k]
+                    continue
+            raise BadStateException(f"Bad placeholder: {v}")
+
+    if repls:
+        ret = dataclasses_replace(ret, **repls)
+
+    return ret
 
 
 def to_external_helper(

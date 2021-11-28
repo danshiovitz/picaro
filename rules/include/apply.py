@@ -453,10 +453,10 @@ class AddEntityApplier(ApplierBase):
             self._apply_single(eff, state)
 
     def _apply_single(self, effect: Effect, state: State) -> None:
-        entity, tokens, overlays, triggers, meters = translate.from_external_entity(
-            effect.entity
+        entities, tokens, overlays, triggers, meters = translate.from_external_entities(
+            [effect.entity]
         )
-        Entity.insert([entity])
+        Entity.insert(entities)
         Token.insert(tokens)
         Overlay.insert(overlays)
         Trigger.insert(triggers)

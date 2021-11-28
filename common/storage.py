@@ -473,7 +473,8 @@ class StandardWrapper:
     @classmethod
     def create_detached(cls, **kwargs) -> Any:  # should be type(self)
         if cls.HAS_UUID and not cls.Data.SECONDARY_TABLE:
-            kwargs["uuid"] = make_uuid()
+            if "uuid" not in kwargs or not kwargs["uuid"]:
+                kwargs["uuid"] = make_uuid()
         eff_data = cls.Data
         if hasattr(cls.Data, "SUBCLASS_MAP"):
             indicator = cls.Data.SUBCLASS_INDICATOR

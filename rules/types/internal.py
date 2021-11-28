@@ -246,7 +246,7 @@ class Overlay(StandardWrapper):
         title: Optional[str]
         type: OverlayType
         is_private: bool
-        filters: Sequence[Filter]
+        filters: List[Filter]
 
     @classmethod
     def load_for_entity(cls, entity_uuid: str) -> List["Overlay"]:
@@ -305,9 +305,9 @@ class Trigger(StandardWrapper):
         title: Optional[str]
         type: TriggerType
         is_private: bool
-        filters: Sequence[Filter]
-        costs: Sequence[Effect]
-        effects: Sequence[Effect]
+        filters: List[Filter]
+        costs: List[Effect]
+        effects: List[Effect]
 
     @classmethod
     def load_for_entity(cls, entity_uuid: str) -> List["Trigger"]:
@@ -352,8 +352,8 @@ class Meter(StandardWrapper):
         min_value: int
         max_value: int
         cur_value: int
-        empty_effects: Sequence[Effect]
-        full_effects: Sequence[Effect]
+        empty_effects: List[Effect]
+        full_effects: List[Effect]
 
     @classmethod
     def load_for_entity(cls, entity_uuid: str) -> List["Meter"]:
@@ -422,7 +422,7 @@ class Record(StandardWrapper):
 
         uuid: str
         type: EffectType
-        comments: Sequence[str]
+        comments: List[str]
 
 
 @data_subclass_of(Record.Data, [])
