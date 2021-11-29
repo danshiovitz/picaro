@@ -241,7 +241,7 @@ class EncounterRules:
                 if roll_vals[0] <= reliable_min:
                     roll_vals.append(random.randint(1, 8))
                 rolls.append([rv + bonus for rv in roll_vals])
-        elif card.type == FullCardType.CHOICE:
+        elif card.type in (FullCardType.CHOICE, FullCardType.MESSAGE):
             pass
         else:
             raise Exception(f"Unknown card type: {card.type.name}")

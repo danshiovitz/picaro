@@ -33,7 +33,7 @@ from picaro.rules.types.internal import (
 )
 
 from . import translate
-from .special_cards import make_assign_xp_card, make_meter_card
+from .special_cards import make_assign_xp_card, make_message_card, make_meter_card
 
 
 @dataclass
@@ -286,7 +286,7 @@ class ResourceApplier(SubtypeAmountApplierBase):
         )
 
     def _do_draw(self, new_value: int, comments: List[str], state: State) -> None:
-        loc = Token.load_single_by_entity(state.ch.uuid).location
+        loc = Token.load_single_for_entity(state.ch.uuid).location
         comments: List[str] = []
         for _ in range(new_value):
             draw = BoardRules.draw_resource_card(loc)
@@ -474,6 +474,38 @@ class AddEntityApplier(ApplierBase):
         )
 
 
+class RemoveEntityApplier(ApplierBase):
+    def __init__(self) -> None:
+        super().__init__(EffectType.REMOVE_ENTITY, "remove entity")
+
+    # override base apply, since we don't use a character
+    def apply(self, effects: List[Effect], state: State) -> None:
+        for eff in effects:
+            self._apply_single(eff, state)
+
+    def _apply_single(self, effect: Effect, state: State) -> None:
+        # load just to confirm it exists before deleting
+        entity = Entity.load(effect.entity_uuid)
+
+        Meter.delete_for_entity(effect.entity_uuid)
+        Trigger.delete_for_entity(effect.entity_uuid)
+        Overlay.delete_for_entity(effect.entity_uuid)
+        Token.delete_for_entity(effect.entity_uuid)
+        Entity.delete(effect.entity_uuid)
+
+        get_rules_cache().overlays.pop(state.ch.uuid, None)
+        get_rules_cache().triggers.pop(state.ch.uuid, None)
+
+        state.records.append(
+            Record.create_detached(
+                type=self._type,
+                entity_uuid=entity.uuid,
+                name=entity.name,
+                comments=[effect.comment] if effect.comment else [],
+            )
+        )
+
+
 class AddTitleApplier(ApplierBase):
     def __init__(self) -> None:
         super().__init__(EffectType.ADD_TITLE, "add title")
@@ -502,6 +534,64 @@ class AddTitleApplier(ApplierBase):
                 comments=[effect.comment] if effect.comment else [],
             )
         )
+
+
+class RemoveTitleApplier(ApplierBase):
+    def __init__(self) -> None:
+        super().__init__(EffectType.REMOVE_TITLE, "remove title")
+
+    # override base apply, since we don't use a character (we do default
+    # to the character, but not in the same way as the base apply)
+    def apply(self, effects: List[Effect], state: State) -> None:
+        for eff in effects:
+            self._apply_single(eff, state)
+
+    def _apply_single(self, effect: Effect, state: State) -> None:
+        entity_uuid = effect.entity_uuid or state.ch.uuid
+
+        Meter.delete_for_entity(entity_uuid, title=effect.title)
+        Trigger.delete_for_entity(entity_uuid, title=effect.title)
+        Overlay.delete_for_entity(entity_uuid, title=effect.title)
+
+        get_rules_cache().overlays.pop(state.ch.uuid, None)
+        get_rules_cache().triggers.pop(state.ch.uuid, None)
+
+        state.records.append(
+            Record.create_detached(
+                type=self._type,
+                entity_uuid=entity_uuid,
+                name=effect.title,
+                comments=[effect.comment] if effect.comment else [],
+            )
+        )
+
+
+class EndGameApplier(ApplierBase):
+    def __init__(self) -> None:
+        super().__init__(EffectType.END_GAME, "end game")
+
+    # override base apply, since we don't use a character
+    def apply(self, effects: List[Effect], state: State) -> None:
+        for eff in effects:
+            self._apply_single(eff, state)
+
+    def _apply_single(self, effect: Effect, state: State) -> None:
+        chs = Character.load_all()
+        for cur_ch in chs:
+            card = make_message_card(cur_ch, effect.message)
+            if state.ch and state.ch.uuid == cur_ch.uuid:
+                state.ch.queued.append(card)
+                state.records.append(
+                    Record.create_detached(
+                        type=self._type,
+                        entity_uuid=state.ch.uuid,
+                        message=effect.message,
+                        comments=[effect.comment] if effect.comment else [],
+                    )
+                )
+            else:
+                with Character.load_for_write(cur_ch.uuid) as ch:
+                    ch.queued.append(card)
 
 
 class LeadershipApplier(ApplierBase):

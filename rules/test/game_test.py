@@ -26,15 +26,19 @@ from picaro.rules.types.internal import (
     EffectType,
     EnableEffect,
     EncounterEffect,
+    Entity,
     EntityAmountEffect,
     EntityType,
     FullCard,
     FullCardType,
     JobEffect,
     LocationEffect,
+    MessageEffect,
     Meter,
     MeterAmountEffect,
     OverlayType,
+    RemoveEntityEffect,
+    RemoveTitleEffect,
     ResourceAmountEffect,
     SkillAmountEffect,
     TemplateCard,
@@ -126,7 +130,7 @@ class GameTest(FlatworldTestBase):
 
     def test_apply_effects(self) -> None:
         # not sure how to force we have total coverage other than this:
-        self.assertEqual(len(EffectType), 17)
+        self.assertEqual(len(EffectType), 20)
 
         with Character.load_by_name_for_write(self.CHARACTER) as ch:
             effects = [EntityAmountEffect(type=EffectType.MODIFY_COINS, amount=5)]
@@ -219,7 +223,7 @@ class GameTest(FlatworldTestBase):
             self.assertEqual(len(ch.resources), 5)
             self.assertEqual(len(records), 6, msg=str([r._data for r in records]))
 
-    def test_apply_effects_add_entity(self) -> None:
+    def test_apply_effects_add_remove_entity(self) -> None:
         overlay = external_AmountOverlay(
             uuid="",
             type=OverlayType.MAX_LUCK,
@@ -250,7 +254,19 @@ class GameTest(FlatworldTestBase):
             self.assertEqual(CharacterRules.get_max_luck(ch), 6)
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
-    def test_apply_effects_add_title(self) -> None:
+        entity_uuid = Entity.load_by_name(entity.name).uuid
+        with Character.load_by_name_for_write(self.CHARACTER) as ch:
+            effects = [
+                RemoveEntityEffect(
+                    type=EffectType.REMOVE_ENTITY, entity_uuid=entity_uuid
+                )
+            ]
+            records = []
+            GameRules.apply_effects(ch, [], effects, records)
+            self.assertEqual(CharacterRules.get_max_luck(ch), 5)
+            self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
+
+    def test_apply_effects_add_remove_title(self) -> None:
         overlay = external_AmountOverlay(
             uuid="",
             type=OverlayType.INIT_SPEED,
@@ -270,6 +286,15 @@ class GameTest(FlatworldTestBase):
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(CharacterRules.get_init_speed(ch), 5)
+            self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
+
+        with Character.load_by_name_for_write(self.CHARACTER) as ch:
+            effects = [
+                RemoveTitleEffect(type=EffectType.REMOVE_TITLE, title=title.name)
+            ]
+            records = []
+            GameRules.apply_effects(ch, [], effects, records)
+            self.assertEqual(CharacterRules.get_init_speed(ch), 3)
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
     def test_apply_effects_queue_encounter(self) -> None:
@@ -308,6 +333,15 @@ class GameTest(FlatworldTestBase):
             records = []
             GameRules.apply_effects(ch, [], effects, records)
             self.assertEqual(ch.job_name, "Blue Job")
+            self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
+
+    def test_apply_effects_end_game(self) -> None:
+        with Character.load_by_name_for_write(self.CHARACTER) as ch:
+            effects = [MessageEffect(type=EffectType.END_GAME, message="Game over!")]
+            records = []
+            GameRules.apply_effects(ch, [], effects, records)
+            self.assertEqual(len(ch.queued), 1)
+            self.assertEqual(ch.queued[0].data, "Game over!")
             self.assertEqual(len(records), 1, msg=str([r._data for r in records]))
 
     def test_apply_effects_leadership(self) -> None:

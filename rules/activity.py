@@ -54,7 +54,7 @@ class ActivityRules:
                 card = pop_func(ch.tableau, lambda c: c.card.uuid == card_uuid)
             except IndexError:
                 raise BadStateException(f"No such card in tableau: {card_uuid}")
-            location = Token.load_single_by_entity(ch.uuid).location
+            location = Token.load_single_for_entity(ch.uuid).location
             if card.location != location:
                 raise IllegalMoveException(
                     f"You must be in hex {card.location} for that encounter."
@@ -203,6 +203,8 @@ class ActivityRules:
                 encounter,
                 commands.choices,
             )
+        elif encounter.card.type == FullCardType.MESSAGE:
+            return [], []
         else:
             raise Exception(f"Bad card type: {encounter.card.type.name}")
 

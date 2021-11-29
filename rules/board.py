@@ -33,7 +33,7 @@ class BoardRules:
         cls, entity_uuid: str, end: str
     ) -> Optional[int]:
         vals = []
-        for token in Token.load_all_by_entity(entity_uuid):
+        for token in Token.load_all_for_entity(entity_uuid):
             vals.append(cls.distance(token.location, end))
         if not vals or any(v is None for v in vals):
             return None
@@ -44,8 +44,8 @@ class BoardRules:
         cls, entity_uuid: str, other_uuid: str
     ) -> Optional[int]:
         vals = []
-        for token in Token.load_all_by_entity(entity_uuid):
-            for other_token in Token.load_all_by_entity(other_uuid):
+        for token in Token.load_all_for_entity(entity_uuid):
+            for other_token in Token.load_all_for_entity(other_uuid):
                 vals.append(cls.distance(token.location, other_token.location))
         if not vals or any(v is None for v in vals):
             return None
@@ -61,7 +61,7 @@ class BoardRules:
 
     @classmethod
     def get_single_token_hex(cls, uuid: str) -> Hex:
-        token = Token.load_single_by_entity(uuid)
+        token = Token.load_single_for_entity(uuid)
         return Hex.load(token.location)
 
     @classmethod
@@ -76,7 +76,7 @@ class BoardRules:
         cls, entity_uuid: str, min_distance: int, max_distance: int
     ) -> List[Hex]:
         neighbors: List[Tuple[int, Hex]] = []
-        for token in Token.load_all_by_entity(entity_uuid):
+        for token in Token.load_all_for_entity(entity_uuid):
             hx = Hex.load(token.location)
             start_cube = CubeCoordinate(x=hx.x, y=hx.y, z=hx.z)
             nghs = Hex.load_by_distance(start_cube, min_distance, max_distance)
@@ -91,7 +91,7 @@ class BoardRules:
     def move_token_for_entity(
         cls, entity_uuid: str, hex_name: str, adjacent: bool
     ) -> None:
-        with Token.load_single_by_entity_for_write(entity_uuid) as token:
+        with Token.load_single_for_entity_for_write(entity_uuid) as token:
             start_hex = Hex.load(token.location)
             end_hex = Hex.load(hex_name)
             if adjacent:

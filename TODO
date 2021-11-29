@@ -20,7 +20,6 @@
 - switch speed so max speed is independent of size, but cost to move is variable depending on size - this way bonuses to max speed are better for solos than for armies, which makes sense (we could say it costs 2/3/6 to move one hex, and initial max speed is 6, for instance - this also handles a thing a little more smoothly where hexes cost 1 more to enter, say)
 - engine should stop using hex names and just use CubeCoordinate objects
 - tableau cards should maybe have a filter rather than a location field?
-- FullCard shouldn't have entity_type/_name, but what should they have?
 - implement giving stuff to other players
 - put back oracle stuff as a more generalized proposal mechanism (?) with in-world oracles (?)
 - countries have some kind of economy meter and you can raise/lower it with an effect, which affects the quality of the resource deck
@@ -32,6 +31,7 @@
 - archvillain entities (do they have the same natures as regular enemeies?)
 - artifact enties (not sure they're a thing, but it seems likely - what do they have that's different?)
 - could we have effects apply to multiple people? like effects could have a selector instead of a target?
+- add end-of-season triggers that fire when all the players have ended their season (with no active player probably), ditto beginning-of-season - the latter might actually be better for most timers
 
 - fill in stuff:
   - more feat hooks
@@ -171,12 +171,8 @@ Note implicitly we only have two kinds of things now, "enemies" and "the empire"
 
 Entities have an influence, which is to say a list of like "radius 3, weight 2; radius 5, weight 1", which means within 5 hexes of one of the entity's tokens, you put 1 chance into the pool (and then pad the pool up to 8 if it's less than), and if you draw an entity out, then an encounter gets a randomly-selected trait of the entity, which has some effect on the encounter. and perhaps the archvillain just has a weight 1 on every encounter. this system encompasses what danger chips were being used for earlier in the plan but also other stuff, like there could be some trait like "rapacious: +2 to all difficulties, plus all +coins are replaced with nothing". this opens up some interesting other stuff, like having multiple positive or negative outcomes (what if every positive outcome gets -damage, or every negative outcome gets -damage, allowing for double damage in some cases), and also implies wanting to be able to like die rolls, be able to have a list of "overridden values" for outcomes and also for difficulties. allowing associated entities would also potentially allow for the previous stuff we had with having associated projects (admittedly this is the same implementation we had before, which I removed and am now putting back).
 
-Also of course we can allow for good entities to have influence too, like, I dunno, one that makes +healing heal 6 ponts instead of 4 or whatever.
+Also of course we can allow for good entities to have influence too, like, I dunno, one that makes +healing heal 6 points instead of 4 or whatever.
 
 ----
 
 There is still this stray thought that some of these entities are pretty complex and it's hard to write them but it's also hard to understand how they work (ie see that they are a standard thing).
-
-- implement: piggy bank gadget: one action that does -1 gold and tick this gadget's meter; another action that's "if this gadget's meter is at least 10, set it ot 0 and +10 gold"
-- implement: Gadgets should maybe also have timers + a thing that fires when the timer goes off, and a meter + things that fire when they hit zero or max, and then we can implement the tax levy: an event that goes off for the timer that loses the game, a meter with max 10 (say), an action that ticks the meter by 1 and costs 1 coin, and an event that goes off when the meter fills that destroys the gadget.
-- add_entity/add_title should support placeholders

@@ -49,6 +49,9 @@ class EffectType(Enum):
     MODIFY_LOCATION = enum_auto()
     MODIFY_JOB = enum_auto()
     TICK_METER = enum_auto()
+    REMOVE_ENTITY = enum_auto()
+    REMOVE_TITLE = enum_auto()
+    END_GAME = enum_auto()
     # "complex" effects that trigger others
     LEADERSHIP = enum_auto()
     TRANSPORT = enum_auto()
@@ -57,7 +60,7 @@ class EffectType(Enum):
 class EntityType(Enum):
     CHARACTER = enum_auto()
     LANDMARK = enum_auto()
-    EVENT = enum_auto()
+    ABSTRACT = enum_auto()
 
 
 @dataclass(frozen=True)
@@ -135,6 +138,7 @@ class TemplateCard(HasAnyType):
 class FullCardType(Enum):
     CHALLENGE = enum_auto()
     CHOICE = enum_auto()
+    MESSAGE = enum_auto()
     SPECIAL = enum_auto()
 
 
@@ -150,6 +154,7 @@ class FullCard(HasAnyType):
     ANY_TYPE_MAP = {
         FullCardType.CHALLENGE: Sequence[EncounterCheck],
         FullCardType.CHOICE: Choices,
+        FullCardType.MESSAGE: str,
         FullCardType.SPECIAL: str,
     }
 
@@ -299,6 +304,7 @@ class Job:
 class EncounterType(Enum):
     CHALLENGE = enum_auto()
     CHOICE = enum_auto()
+    MESSAGE = enum_auto()
 
 
 @dataclass(frozen=True)
@@ -306,6 +312,7 @@ class TableauCard(HasAnyType):
     ANY_TYPE_MAP = {
         FullCardType.CHALLENGE: Sequence[EncounterCheck],
         FullCardType.CHOICE: str,
+        FullCardType.MESSAGE: str,
         FullCardType.SPECIAL: str,
     }
 
@@ -323,6 +330,7 @@ class Encounter(HasAnyType):
     ANY_TYPE_MAP = {
         EncounterType.CHALLENGE: Sequence[EncounterCheck],
         EncounterType.CHOICE: Choices,
+        EncounterType.MESSAGE: str,
     }
 
     uuid: str
@@ -433,6 +441,11 @@ class AddEntityEffect(Effect):
     entity: Entity
 
 
+@subclass_of(Effect, [EffectType.REMOVE_ENTITY])
+class RemoveEntityEffect(Effect):
+    entity_uuid: str
+
+
 @subclass_of(Effect, [EffectType.QUEUE_ENCOUNTER])
 class EncounterEffect(Effect):
     encounter: TemplateCard
@@ -443,6 +456,17 @@ class EncounterEffect(Effect):
 class AddTitleEffect(Effect):
     title: Title
     entity_uuid: Optional[str] = None
+
+
+@subclass_of(Effect, [EffectType.REMOVE_TITLE])
+class RemoveTitleEffect(Effect):
+    title: str
+    entity_uuid: Optional[str] = None
+
+
+@subclass_of(Effect, [EffectType.END_GAME])
+class MessageEffect(Effect):
+    message: str
 
 
 @subclass_of(Effect, [EffectType.MODIFY_LOCATION])
@@ -516,8 +540,7 @@ class ResourceAmountOverlay(AmountOverlay):
     ],
 )
 class StandardTrigger(Trigger):
-    # dataclass-construction code doesn't work well if empty subclass
-    dummy: int = 0
+    pass
 
 
 @subclass_of(Record, [])
@@ -570,6 +593,18 @@ class AddEntityRecord(Record):
     entity: Entity
 
 
+@subclass_of(Record, [EffectType.REMOVE_ENTITY])
+class RemoveEntityRecord(Record):
+    entity_uuid: str
+    name: str  # for convenience, since now it's deleted
+
+
+@subclass_of(Record, [EffectType.END_GAME])
+class MessageRecord(Record):
+    entity_uuid: str
+    message: str
+
+
 @subclass_of(Record, [EffectType.QUEUE_ENCOUNTER])
 class EncounterRecord(Record):
     entity_uuid: str
@@ -580,6 +615,12 @@ class EncounterRecord(Record):
 class AddTitleRecord(Record):
     entity_uuid: str
     title: Title
+
+
+@subclass_of(Record, [EffectType.REMOVE_TITLE])
+class RemoveTitleRecord(Record):
+    entity_uuid: str
+    name: str  # for convenience, since now it's deleted
 
 
 @subclass_of(Record, [EffectType.MODIFY_LOCATION])

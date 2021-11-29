@@ -234,9 +234,9 @@ class Server:
                     ),
                 ]
 
-                entity = Entity(
-                    type=EntityType.EVENT,
-                    subtype=None,
+                sword_entity = Entity(
+                    type=EntityType.ABSTRACT,
+                    subtype="event",
                     name="Storm of Swords",
                     desc="Swords are just flying through the air, it's weird.",
                     titles=[
@@ -334,6 +334,93 @@ class Server:
                     uuid="",
                 )
 
+                tax_meters = [
+                    Meter(
+                        uuid="##ph:tax_payoff_meter##",
+                        name="Tax Payments",
+                        min_value=0,
+                        max_value=10,
+                        cur_value=0,
+                        full_effects=[
+                            RemoveEntityEffect(
+                                type=EffectType.REMOVE_ENTITY,
+                                entity_uuid="##entity:uuid##",
+                            ),
+                        ],
+                    ),
+                    Meter(
+                        uuid="##ph:tax_due_meter##",
+                        name="Tax Deadline",
+                        min_value=0,
+                        max_value=10,
+                        cur_value=10,
+                        empty_effects=[
+                            MessageEffect(
+                                type=EffectType.END_GAME,
+                                message="The empire is displeased by your effrontery and sends in an army to subdue the rebellious provinces.\n\n*** You have lost. ***",
+                            ),
+                        ],
+                    ),
+                ]
+
+                tax_actions = [
+                    Action(
+                        uuid="",
+                        name="Pay Some Tax",
+                        is_private=False,
+                        filters=[],
+                        costs=[
+                            EntityAmountEffect(
+                                type=EffectType.MODIFY_COINS,
+                                amount=-5,
+                            ),
+                        ],
+                        effects=[
+                            MeterAmountEffect(
+                                type=EffectType.TICK_METER,
+                                entity_uuid="##entity:uuid##",
+                                meter_uuid="##ph:tax_payoff_meter##",
+                                amount=1,
+                            ),
+                        ],
+                        route=None,
+                    ),
+                ]
+
+                tax_triggers = [
+                    Trigger(
+                        uuid="",
+                        type=TriggerType.END_TURN,
+                        is_private=False,
+                        filters=[],
+                        effects=[
+                            MeterAmountEffect(
+                                type=EffectType.TICK_METER,
+                                entity_uuid="##entity:uuid##",
+                                meter_uuid="##ph:tax_due_meter##",
+                                amount=-1,
+                            ),
+                        ],
+                    ),
+                ]
+
+                tax_entity = Entity(
+                    type=EntityType.ABSTRACT,
+                    subtype=None,
+                    name="Tax Levy",
+                    desc="...",
+                    titles=[
+                        Title(
+                            name=None,
+                            meters=tax_meters,
+                            triggers=tax_triggers,
+                            actions=tax_actions,
+                        ),
+                    ],
+                    locations=[],
+                    uuid="",
+                )
+
                 from picaro.rules.types.internal import Character as internal_Character
 
                 with internal_Character.load_by_name_for_write("Conan") as ch:
@@ -363,11 +450,15 @@ class Server:
                             ),
                             AddEntityEffect(
                                 type=EffectType.ADD_ENTITY,
-                                entity=entity,
+                                entity=sword_entity,
                             ),
                             AddEntityEffect(
                                 type=EffectType.ADD_ENTITY,
                                 entity=pig_entity,
+                            ),
+                            AddEntityEffect(
+                                type=EffectType.ADD_ENTITY,
+                                entity=tax_entity,
                             ),
                         ],
                         [],

@@ -305,14 +305,15 @@ def subclass_of(parent_cls, type_vals: List[Any]):
         while fields and fields[-1].default != MISSING:
             default_fields.insert(0, fields.pop())
         dc_fields = [(f.name, f.type, f) for f in fields]
-        for anno_name, anno_type in cls.__annotations__.items():
-            dc_fields.append(
-                (
-                    anno_name,
-                    anno_type,
-                    dataclass_field(default=getattr(cls, anno_name, MISSING)),
+        if cls.__annotations__ != parent_cls.__annotations__:
+            for anno_name, anno_type in cls.__annotations__.items():
+                dc_fields.append(
+                    (
+                        anno_name,
+                        anno_type,
+                        dataclass_field(default=getattr(cls, anno_name, MISSING)),
+                    )
                 )
-            )
         dc_fields.extend((f.name, f.type, f) for f in default_fields)
         cls = make_dataclass(
             cls.__name__, dc_fields, frozen=parent_cls.__dataclass_params__.frozen

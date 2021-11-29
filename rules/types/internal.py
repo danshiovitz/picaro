@@ -38,10 +38,13 @@ from .external import (
     JobEffect,
     JobType,
     LocationEffect,
+    MessageEffect,
     MeterAmountEffect,
     Outcome,
     Overlay,
     OverlayType,
+    RemoveEntityEffect,
+    RemoveTitleEffect,
     ResourceAmountEffect,
     Route,
     RouteType,
@@ -159,21 +162,31 @@ class Token(StandardWrapper):
         TABLE_NAME = "token"
 
         uuid: str
-        entity: str
+        entity_uuid: str
         location: str
 
     @classmethod
-    def load_all_by_entity(cls, entity: str) -> List["Token"]:
-        return cls._load_helper(["entity = :entity"], {"entity": entity})
+    def load_all_for_entity(cls, entity_uuid: str) -> List["Token"]:
+        return cls._load_helper(
+            ["entity_uuid = :entity_uuid"], {"entity_uuid": entity_uuid}
+        )
 
     @classmethod
-    def load_single_by_entity(cls, entity: str) -> "Token":
-        return cls._load_helper_single(["entity = :entity"], {"entity": entity})
-
-    @classmethod
-    def load_single_by_entity_for_write(cls, entity: str) -> "Token":
+    def load_single_for_entity(cls, entity_uuid: str) -> "Token":
         return cls._load_helper_single(
-            ["entity = :entity"], {"entity": entity}, can_write=True
+            ["entity_uuid = :entity_uuid"], {"entity_uuid": entity_uuid}
+        )
+
+    @classmethod
+    def load_single_for_entity_for_write(cls, entity_uuid: str) -> "Token":
+        return cls._load_helper_single(
+            ["entity_uuid = :entity_uuid"], {"entity_uuid": entity_uuid}, can_write=True
+        )
+
+    @classmethod
+    def delete_for_entity(cls, entity_uuid: str) -> None:
+        return cls.Data._delete_helper(
+            ["entity_uuid = :entity_uuid"], {"entity_uuid": entity_uuid}
         )
 
 
@@ -220,6 +233,10 @@ class Entity(StandardWrapper):
     def load_by_name(cls, name: str) -> "Entity":
         return cls._load_helper_single(["name = :name"], {"name": name})
 
+    @classmethod
+    def delete(cls, uuid: str) -> None:
+        return cls.Data._delete_helper(["uuid = :uuid"], {"uuid": uuid})
+
 
 class Job(StandardWrapper):
     class Data(StorageBase["Job.Data"]):
@@ -260,6 +277,15 @@ class Overlay(StandardWrapper):
             ["entity_uuid = :entity_uuid or is_private = 0"],
             {"entity_uuid": entity_uuid},
         )
+
+    @classmethod
+    def delete_for_entity(cls, entity_uuid: str, title: Optional[str] = None) -> None:
+        wheres = ["entity_uuid = :entity_uuid"]
+        params = {"entity_uuid": entity_uuid}
+        if title:
+            wheres.append("title = :title")
+            params["title"] = title
+        return cls.Data._delete_helper(wheres, params)
 
 
 @data_subclass_of(
@@ -322,6 +348,15 @@ class Trigger(StandardWrapper):
             {"entity_uuid": entity_uuid},
         )
 
+    @classmethod
+    def delete_for_entity(cls, entity_uuid: str, title: Optional[str] = None) -> None:
+        wheres = ["entity_uuid = :entity_uuid"]
+        params = {"entity_uuid": entity_uuid}
+        if title:
+            wheres.append("title = :title")
+            params["title"] = title
+        return cls.Data._delete_helper(wheres, params)
+
 
 @data_subclass_of(
     Trigger.Data,
@@ -332,8 +367,7 @@ class Trigger(StandardWrapper):
     ],
 )
 class StandardTrigger(Trigger.Data):
-    # dataclass-construction code doesn't work well if empty subclass
-    dummy: int = 0
+    pass
 
 
 @data_subclass_of(Trigger.Data, [TriggerType.ENTER_HEX])
@@ -360,6 +394,15 @@ class Meter(StandardWrapper):
         return cls._load_helper(
             ["entity_uuid = :entity_uuid"], {"entity_uuid": entity_uuid}
         )
+
+    @classmethod
+    def delete_for_entity(cls, entity_uuid: str, title: Optional[str] = None) -> None:
+        wheres = ["entity_uuid = :entity_uuid"]
+        params = {"entity_uuid": entity_uuid}
+        if title:
+            wheres.append("title = :title")
+            params["title"] = title
+        return cls.Data._delete_helper(wheres, params)
 
 
 class TurnFlags(Enum):
@@ -475,6 +518,18 @@ class AddEntityRecord(Record.Data):
     entity: external_Entity
 
 
+@data_subclass_of(Record.Data, [EffectType.REMOVE_ENTITY])
+class RemoveEntityRecord(Record.Data):
+    entity_uuid: str
+    name: str  # for convenience, since now it's deleted
+
+
+@data_subclass_of(Record.Data, [EffectType.END_GAME])
+class MessageRecord(Record.Data):
+    entity_uuid: str
+    message: str
+
+
 @data_subclass_of(Record.Data, [EffectType.QUEUE_ENCOUNTER])
 class EncounterRecord(Record.Data):
     entity_uuid: str
@@ -485,6 +540,12 @@ class EncounterRecord(Record.Data):
 class AddTitleRecord(Record.Data):
     entity_uuid: str
     title: Title
+
+
+@data_subclass_of(Record.Data, [EffectType.REMOVE_TITLE])
+class RemoveTitleRecord(Record.Data):
+    entity_uuid: str
+    name: str
 
 
 @data_subclass_of(Record.Data, [EffectType.MODIFY_LOCATION])

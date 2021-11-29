@@ -341,6 +341,13 @@ class PlayRunner:
             commands = self._input_encounter_choices(
                 ch, ch.encounter.uuid, ch.encounter.data, ch.encounter.rolls
             )
+        elif ch.encounter.type == EncounterType.MESSAGE:
+            commands = self._input_encounter_message(
+                ch,
+                ch.encounter.uuid,
+                ch.encounter.data,
+                ch.encounter.rolls,
+            )
         else:
             raise Exception("Encounter with no checks or choices?")
 
@@ -462,6 +469,24 @@ class PlayRunner:
             luck_spent=0,
             rolls=[r[-1] for r in rolls],
             choices={k: v for k, v in selections.items() if v > 0},
+        )
+
+    def _input_encounter_message(
+        self,
+        ch: Character,
+        enc_uuid: str,
+        message: str,
+        rolls: Sequence[Sequence[int]],
+    ) -> EncounterCommands:
+        print(message)
+        return EncounterCommands(
+            encounter_uuid=enc_uuid,
+            flee=False,
+            transfers=[],
+            adjusts=[],
+            luck_spent=0,
+            rolls=[r[-1] for r in rolls],
+            choices={},
         )
 
     def _display_records(self, ch: Character, records: List[Record]) -> None:

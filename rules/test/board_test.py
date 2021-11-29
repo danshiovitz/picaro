@@ -67,7 +67,7 @@ class BoardTest(FlatworldTestBase):
         entity = Entity.load_by_name("Alpha City")
         dist = BoardRules.min_distance_from_entity_to_hex(entity.uuid, "AA08")
         self.assertEqual(dist, 7)
-        Token.create(entity=entity.uuid, location="AA10")
+        Token.create(entity_uuid=entity.uuid, location="AA10")
         dist = BoardRules.min_distance_from_entity_to_hex(entity.uuid, "AA08")
         self.assertEqual(dist, 2)
 
@@ -76,7 +76,7 @@ class BoardTest(FlatworldTestBase):
         other = Entity.load_by_name("Alphaburbs")
         dist = BoardRules.min_distance_from_entity_to_entity(entity.uuid, other.uuid)
         self.assertEqual(dist, 10)
-        Token.create(entity=entity.uuid, location="AJ01")
+        Token.create(entity_uuid=entity.uuid, location="AJ01")
         dist = BoardRules.min_distance_from_entity_to_entity(entity.uuid, other.uuid)
         self.assertEqual(dist, 1)
 
@@ -167,11 +167,11 @@ class BoardTest(FlatworldTestBase):
 
     def test_move_token_for_entity(self) -> None:
         ch = Character.load_by_name(self.CHARACTER)
-        self.assertEqual("AG04", Token.load_single_by_entity(ch.uuid).location)
+        self.assertEqual("AG04", Token.load_single_for_entity(ch.uuid).location)
         BoardRules.move_token_for_entity(ch.uuid, "AD06", adjacent=False)
-        self.assertEqual("AD06", Token.load_single_by_entity(ch.uuid).location)
+        self.assertEqual("AD06", Token.load_single_for_entity(ch.uuid).location)
         BoardRules.move_token_for_entity(ch.uuid, "AD07", adjacent=True)
-        self.assertEqual("AD07", Token.load_single_by_entity(ch.uuid).location)
+        self.assertEqual("AD07", Token.load_single_for_entity(ch.uuid).location)
         with self.assertRaises(IllegalMoveException):
             BoardRules.move_token_for_entity(ch.uuid, "AA07", adjacent=True)
 

@@ -161,6 +161,17 @@ def make_assign_xp_card(ch: Character, amount: int) -> FullCard:
     )
 
 
+def make_message_card(ch: Character, message: str) -> FullCard:
+    return FullCard(
+        uuid=make_uuid(),
+        name=f"Message",
+        desc="...",
+        type=FullCardType.MESSAGE,
+        signs=[],
+        data=message,
+    )
+
+
 def make_meter_card(ch: Character, meter: Meter, is_full: bool) -> FullCard:
     return FullCard(
         uuid=make_uuid(),

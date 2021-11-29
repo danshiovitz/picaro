@@ -28,6 +28,10 @@ class Foo(StandardWrapper):
     def load_by_b(cls, b: int) -> List["Foo"]:
         return cls._load_helper(["b = :b"], {"b": b})
 
+    @classmethod
+    def delete(cls, uuid: str) -> None:
+        return cls.Data._delete_helper(["uuid = :uuid"], {"uuid": uuid})
+
 
 class Variant3(StandardWrapper):
     class Data(StorageBase["Variant3.Data"], SubclassVariant):
@@ -63,6 +67,14 @@ class StorageTest(TestCase):
             fs = Foo.load_by_b(3)
             self.assertEqual(fs[0].uuid, f.uuid)
             self.assertEqual(fs, [f])
+            fs = Foo.load_all()
+            self.assertEqual(set(f.uuid for f in fs), {f.uuid, f2.uuid})
+            Foo.delete(f.uuid)
+            fs = Foo.load_all()
+            self.assertEqual(set(f.uuid for f in fs), {f2.uuid})
+            Foo.delete(f2.uuid)
+            fs = Foo.load_all()
+            self.assertEqual(set(f.uuid for f in fs), set())
 
     def test_update(self):
         with ConnectionManager(game_uuid="abc", player_uuid="xyz"):

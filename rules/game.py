@@ -14,10 +14,13 @@ from .include.apply import (
     AddEntityApplier,
     AddTitleApplier,
     AmountApplier,
+    EndGameApplier,
     LeadershipApplier,
     ModifyJobApplier,
     ModifyLocationApplier,
     QueueEncounterApplier,
+    RemoveEntityApplier,
+    RemoveTitleApplier,
     ResourceApplier,
     TickMeterApplier,
     TransportApplier,
@@ -117,7 +120,7 @@ class GameRules:
         for location in locations:
             if location == "random":
                 location = BoardRules.get_random_hex().name
-            Token.create(entity=uuid, location=location)
+            Token.create(entity_uuid=uuid, location=location)
         return uuid
 
     @classmethod
@@ -269,7 +272,9 @@ class GameRules:
         ActivityApplier(),
         AmountApplier(EffectType.MODIFY_COINS, "coins", "coins"),
         AddEntityApplier(),
+        RemoveEntityApplier(),
         AddTitleApplier(),
+        RemoveTitleApplier(),
         QueueEncounterApplier(),
         AmountApplier(EffectType.MODIFY_LUCK, "luck", "luck"),
         AmountApplier(EffectType.MODIFY_REPUTATION, "reputation", "reputation"),
@@ -285,4 +290,5 @@ class GameRules:
         AmountApplier(EffectType.MODIFY_SPEED, "speed", "speed"),
         XpApplier(),
         TickMeterApplier(),
+        EndGameApplier(),
     ]

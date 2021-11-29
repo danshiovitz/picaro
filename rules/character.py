@@ -109,7 +109,7 @@ class CharacterRules:
                 break
 
         if len(actions) > len(routes):
-            token = Token.load_single_by_entity(ch.uuid)
+            token = Token.load_single_for_entity(ch.uuid)
             best_routes = BoardRules.best_routes(
                 token.location, {d for d in dests.values() if d is not None}
             )

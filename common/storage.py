@@ -47,8 +47,8 @@ T = TypeVar("T")
 class StorageBase(Generic[T]):
     TABLE_NAME = "unset"
     PRIMARY_KEYS: Set[str]
-    UNIQUE_KEYS: Set[str] = set()
     SECONDARY_TABLE: bool = False
+    SOFT_DELETE: bool = True
     LOAD_KEY: Optional[str] = None
 
     BASE_FIELDS: Dict[str, dataclass_Field]
@@ -84,9 +84,10 @@ class StorageBase(Generic[T]):
                 col_type = "integer" + nn
             else:
                 col_type = "text" + nn
-            if fname in cls.UNIQUE_KEYS:
-                col_type += " unique"
             cols.append((col_name, col_type, col_name in cls.PRIMARY_KEYS))
+
+        if cls.SOFT_DELETE:
+            cols.append(("deleted", "bool not null default 0", False))
 
         if cls.TABLE_NAME != "game":
             cols = [("game_uuid", "text not null", True)] + cols
@@ -158,6 +159,9 @@ class StorageBase(Generic[T]):
                 where_clauses.append("uuid = :game_uuid")
             params["game_uuid"] = session.game_uuid
 
+        if cls.SOFT_DELETE and not any("deleted" in c for c in where_clauses):
+            where_clauses.append("deleted = 0")
+
         sql = f"SELECT * FROM {cls.TABLE_NAME}"
         if where_clauses:
             sql += " WHERE (" + ") AND (".join(where_clauses) + ")"
@@ -202,8 +206,13 @@ class StorageBase(Generic[T]):
         if session.game_uuid is not None and cls.TABLE_NAME != "game":
             where_clauses.append("game_uuid = :game_uuid")
             params["game_uuid"] = session.game_uuid
-        sql = f"DELETE FROM {cls.TABLE_NAME}"
-        sql += " WHERE (" + ") AND (".join(where_clauses) + ")"
+
+        if cls.SOFT_DELETE:
+            sql = f"UPDATE {cls.TABLE_NAME} SET deleted = 1"
+            sql += " WHERE (" + ") AND (".join(where_clauses) + ")"
+        else:
+            sql = f"DELETE FROM {cls.TABLE_NAME}"
+            sql += " WHERE (" + ") AND (".join(where_clauses) + ")"
         session.connection.execute(sql, params)
 
 

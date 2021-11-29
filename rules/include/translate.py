@@ -6,6 +6,7 @@ from dataclasses import (
 )
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, TypeVar
 
+from picaro.common.exceptions import BadStateException
 from picaro.common.hexmap.types import CubeCoordinate, OffsetCoordinate
 from picaro.common.storage import make_uuid
 from picaro.rules.board import BoardRules
@@ -71,7 +72,7 @@ def from_external_entities(
     for external_entity in external_entities:
         cur_entity = from_external_helper(external_entity, Entity, modify)
         cur_tokens = [
-            Token.create_detached(entity=cur_entity.uuid, location=loc)
+            Token.create_detached(entity_uuid=cur_entity.uuid, location=loc)
             for loc in external_entity.locations
         ]
         cur_overlays, cur_triggers, cur_meters = from_external_titles(
@@ -96,7 +97,7 @@ def from_external_entities(
 
 
 def to_external_entity(entity: Entity, details: bool) -> external_Entity:
-    locations = [t.location for t in Token.load_all_by_entity(entity.uuid)]
+    locations = [t.location for t in Token.load_all_for_entity(entity.uuid)]
     titles: List[external_Title] = []
     if details:
         overlays = Overlay.load_for_entity(entity.uuid)
@@ -333,7 +334,7 @@ def from_external_record(record: external_Record) -> Record:
 
 def to_external_character(ch: Character) -> external_Character:
     entity = Entity.load(ch.uuid)
-    location = Token.load_single_by_entity(ch.uuid).location
+    location = Token.load_single_for_entity(ch.uuid).location
     routes = BoardRules.best_routes(location, {c.location for c in ch.tableau})
     all_skills = Game.load().skills
     overlays = Overlay.load_for_entity(ch.uuid)
@@ -375,6 +376,8 @@ def to_external_tableau_card(
         data = card.card.data[0:1]
     elif card.card.type == FullCardType.CHOICE:
         data = "choice"
+    elif card.card.type == FullCardType.MESSAGE:
+        data = "???"  # should never get here, really
     elif card.card.type == FullCardType.SPECIAL:
         data = card.card.data
 

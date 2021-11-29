@@ -42,6 +42,9 @@ class RenderClientBase(ClientBase):
         if record.type == EffectType.ADD_ENTITY:
             subj = record.entity.name
             poss = record.entity.name + "'s"
+        elif record.type == EffectType.REMOVE_ENTITY:
+            subj = record.name
+            poss = record.name + "'s"
         elif record.type == EffectType.TICK_METER:
             entity = self.entities.get_by_uuid(record.entity_uuid)
             meter = [
@@ -52,6 +55,9 @@ class RenderClientBase(ClientBase):
             ][0]
             subj = f"{entity.name}'s {meter.name}"
             poss = subj + "'s"
+        elif record.type == EffectType.END_GAME:
+            subj = "You"
+            poss = "Your"
         else:
             if record.entity_uuid == ch.uuid:
                 is_you = True
@@ -75,16 +81,14 @@ class RenderClientBase(ClientBase):
         elif record.type == EffectType.MODIFY_REPUTATION:
             line = f"{poss} reputation has " + render_single_int(record)
         elif record.type == EffectType.MODIFY_XP:
-            line = f"{poss} {record.skill or 'unassigned'} xp has " + render_single_int(
-                record
-            )
+            ren = render_single_int(record)
+            line = f"{poss} {record.skill or 'unassigned'} xp has {ren}"
         elif record.type == EffectType.MODIFY_RESOURCES:
             if record.resource is None:
-                line = f"{subj} gained {record.new_value} resource draws"
+                line = f"{subj} gained {record.new_amount} resource draws"
             else:
-                line = f"{poss} {record.resource} resources have " + render_single_int(
-                    record
-                )
+                ren = render_single_int(record)
+                line = f"{poss} {record.resource} resources have {ren}"
         elif record.type == EffectType.MODIFY_TURNS:
             line = f"{poss} remaining turns have " + render_single_int(record)
         elif record.type == EffectType.MODIFY_SPEED:
@@ -93,10 +97,15 @@ class RenderClientBase(ClientBase):
             line = f"{poss} luck has " + render_single_int(record)
         elif record.type == EffectType.ADD_TITLE:
             line = f"{subj} gained the title {self.render_title(record.title)}"
+        elif record.type == EffectType.REMOVE_TITLE:
+            line = f"{subj} no longer has the title {record.title}"
         elif record.type == EffectType.ADD_ENTITY:
             line = f"{subj} has been created: {self.render_entity(record.entity)}"
+        elif record.type == EffectType.REMOVE_ENTITY:
+            line = f"{subj} was removed"
         elif record.type == EffectType.QUEUE_ENCOUNTER:
-            line = f"{subj} had the encounter {self.render_template_card(record.encounter)}"
+            ren = self.render_template_card(record.encounter)
+            line = f"{subj} had the encounter {ren}"
         elif record.type == EffectType.MODIFY_LOCATION:
             if is_you:
                 line = f"{subj} are "
@@ -117,8 +126,10 @@ class RenderClientBase(ClientBase):
             line += f"entered into a leadership challenge"
         elif record.type == EffectType.TICK_METER:
             line = f"{subj} has " + render_single_int(record)
+        elif record.type == EffectType.END_GAME:
+            line = "The game has ended"
         else:
-            line += f"UNKNOWN EVENT TYPE: {record}"
+            line += f"UNKNOWN EFFECT TYPE: {record}"
 
         if record.comments:
             line += " (" + ", ".join(record.comments) + ")"
@@ -162,7 +173,11 @@ class RenderClientBase(ClientBase):
             return ln
 
         entity = ""
-        if hasattr(eff, "entity_uuid") and eff.entity_uuid != self.character.uuid:
+        if (
+            hasattr(eff, "entity_uuid")
+            and eff.entity_uuid is not None
+            and eff.entity_uuid != self.character.uuid
+        ):
             entity = f" for {self.entities.get_by_uuid(eff.entity_uuid).name}"
 
         if eff.type == EffectType.MODIFY_COINS:
@@ -190,11 +205,15 @@ class RenderClientBase(ClientBase):
         elif eff.type == EffectType.TRANSPORT:
             return f"random transport ({eff.amount:+}){entity}"
         elif eff.type == EffectType.MODIFY_ACTIVITY:
-            return ("use activity" if not eff.enabled else "refresh activity") + entity
+            return ("use activity" if not eff.enable else "refresh activity") + entity
         elif eff.type == EffectType.ADD_TITLE:
             return "add a title (" + self.render_title(eff.title) + ")" + entity
+        elif eff.type == EffectType.REMOVE_TITLE:
+            return "remove a title (" + eff.title + ")" + entity
         elif eff.type == EffectType.ADD_ENTITY:
             return "add an entity (" + self.render_entity(eff.entity) + ")" + entity
+        elif eff.type == EffectType.REMOVE_ENTITY:
+            return "remove an entity" + entity
         elif eff.type == EffectType.QUEUE_ENCOUNTER:
             return (
                 "queue an encounter ("
@@ -203,11 +222,20 @@ class RenderClientBase(ClientBase):
                 + entity
             )
         elif eff.type == EffectType.MODIFY_LOCATION:
-            return f"move to {eff.location}{entity}"
+            return f"move to {eff.hex}{entity}"
         elif eff.type == EffectType.MODIFY_JOB:
             return f"change job to {eff.job_name}{entity}"
+        elif eff.type == EffectType.TICK_METER:
+            entity = self.entities.get_by_uuid(eff.entity_uuid)
+            meter = [
+                m for t in entity.titles for m in t.meters if m.uuid == eff.meter_uuid
+            ][0]
+            name = f"{entity.name}'s {meter.name} value"
+            return _std_mod(name, coll=True)
+        elif eff.type == EffectType.END_GAME:
+            return f'end the game with message "{eff.message}"'
         else:
-            return eff
+            return str(eff)
 
     def render_title(self, title: Title) -> str:
         ret = title.name or "<innate>"
@@ -253,7 +281,7 @@ class RenderClientBase(ClientBase):
             name = overlay.skill + " " + name
         elif isinstance(overlay, ResourceAmountOverlay):
             name = overlay.resource + " " + name
-        val = f"{overlay.value:+} {name}"
+        val = f"{overlay.amount:+} {name}"
         if overlay.filters:
             val += f" if {', '.join(self.render_filter(f) for f in overlay.filters)}"
         return val
@@ -265,7 +293,7 @@ class RenderClientBase(ClientBase):
             TriggerType.END_TURN: "end a turn",
         }
         name = names.get(trigger.type, trigger.type.name)
-        if isinstance(trigger, HexTrigger):
+        if isinstance(trigger, HexTrigger) and trigger.hex is not None:
             name = trigger.hex + " " + name
         val = f"when you {name}: "
         val += ", ".join(self.render_effect(e) for e in trigger.effects)
@@ -279,7 +307,7 @@ class RenderClientBase(ClientBase):
             val += "pay "
             val += ", ".join(self.render_effect(e) for e in action.costs)
         if action.costs and action.effects:
-            val += " to "
+            val += " to get "
         if action.effects:
             val += ", ".join(self.render_effect(e) for e in action.effects)
         if action.filters:
@@ -287,10 +315,19 @@ class RenderClientBase(ClientBase):
         return val
 
     def render_meter(self, meter: Meter) -> str:
-        return (
+        val = (
             f"meter {meter.name} @ {meter.cur_value} "
             f"({meter.min_value} - {meter.max_value})"
         )
+        if meter.empty_effects:
+            val += " on empty: " + ", ".join(
+                self.render_effect(e) for e in meter.empty_effects
+            )
+        if meter.full_effects:
+            val += " on full: " + ", ".join(
+                self.render_effect(e) for e in meter.full_effects
+            )
+        return val
 
     def render_filter(self, filter: Filter) -> str:
         ns = "not " if filter.reverse else ""
@@ -425,7 +462,7 @@ class RenderClientBase(ClientBase):
                 return f"{entity.name} (in {entity.locations[0]})"
             else:
                 return f"{entity.name} (nowhere)"
-        elif entity.type == EntityType.LANDMARK or entity.type == EntityType.EVENT:
+        elif entity.type in (EntityType.LANDMARK, EntityType.ABSTRACT):
             ret = entity.name
             if entity.subtype:
                 ret += f", a {entity.subtype}"
@@ -442,7 +479,7 @@ class RenderClientBase(ClientBase):
                 ret.append(f"{entity.name} (in {entity.locations[0]})")
             else:
                 ret.append(f"{entity.name} (nowhere)")
-        elif entity.type == EntityType.LANDMARK or entity.type == EntityType.EVENT:
+        elif entity.type in (EntityType.LANDMARK, EntityType.ABSTRACT):
             ln = entity.name
             if entity.subtype:
                 ln += f", a {entity.subtype}"
