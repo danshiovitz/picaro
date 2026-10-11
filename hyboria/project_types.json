@@ -1,8 +1,0 @@
-[
-  {
-    "name": "Monument",
-    "desc": "A building, statue, or other large piece of architecture.",
-    "skills": ["Might", "Climb", "Architecture"],
-    "resources": ["Stone", "Timber"]
-  }
-]
