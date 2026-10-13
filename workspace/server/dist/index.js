@@ -33,8 +33,16 @@ function moveToken(tokenId, to) {
         fromHex.tokens = fromHex.tokens.filter(id => id !== tokenId);
     hexByName.get(to)?.tokens.push(tokenId);
 }
+const encounters = [
+    { id: 'dungeon-raid', title: 'Dungeon Raid', location: 'B17', difficulty: 0, rewards: ['Gold'], penalties: ['Health'], skillChecks: [{ name: 'Stealth', target: 5 }, { name: 'Athletics', target: 4 }, { name: 'Blades', target: 6 }] },
+    { id: 'parley', title: 'Parley', location: 'H8', difficulty: 4, rewards: ['Gold'], penalties: ['Health'], skillChecks: [{ name: 'Persuasion', target: 6 }, { name: 'Deception', target: 5 }] },
+    { id: 'wandering-sage', title: 'Wandering Sage', location: 'M12', difficulty: 2, rewards: ['Gold'], penalties: ['Health'], skillChecks: [{ name: 'Lore', target: 4 }, { name: 'Insight', target: 7 }] },
+];
+const encounterById = new Map(encounters.map(encounter => [encounter.id, encounter]));
 const players = new Map();
-tokens.filter(t => t.icon.startsWith('player')).forEach((t, i) => players.set(t.entityName, { name: t.entityName, tokenId: t.id, curHealth: 6 + i, maxHealth: 10, curLuck: 1, maxLuck: 3, reputation: 10, turns: 20, location: locationForToken(t.id) }));
+tokens.filter(t => t.icon.startsWith('player')).forEach((t, i) => players.set(t.entityName, { name: t.entityName, tokenId: t.id, curHealth: 6 + i, maxHealth: 10, curLuck: 1, maxLuck: 3, gold: 0, reputation: 10, turns: 20, location: locationForToken(t.id) }));
+const activeEncounters = new Map();
+const tableau = encounters;
 function playerDto(player) { player.location = locationForToken(player.tokenId); return { ...player }; }
 function sendJson(res, status, data) {
     const body = JSON.stringify(data);
@@ -49,6 +57,24 @@ async function readJson(req) {
     if (!body)
         return undefined;
     return JSON.parse(body);
+}
+function activeEncounterFor(card) {
+    const skillChecks = {
+        'dungeon-raid': [
+            { name: 'Stealth', target: 5, roll: 4, modifier: 3, total: 7, success: true },
+            { name: 'Athletics', target: 4, roll: 1, modifier: 2, total: 3, success: false },
+            { name: 'Blades', target: 6, roll: 6, modifier: 0, total: 6, success: true },
+        ],
+        'parley': [
+            { name: 'Persuasion', target: 6, roll: 2, modifier: 1, total: 3, success: false },
+            { name: 'Deception', target: 5, roll: 5, modifier: 1, total: 6, success: true },
+        ],
+        'wandering-sage': [
+            { name: 'Lore', target: 4, roll: 7, modifier: 0, total: 7, success: true },
+            { name: 'Insight', target: 7, roll: 3, modifier: 2, total: 5, success: false },
+        ],
+    };
+    return { id: card.id, title: card.title, rewards: card.rewards, penalties: card.penalties, skillChecks: skillChecks[card.id] ?? card.skillChecks.map(check => ({ name: check.name, target: check.target, roll: 4, modifier: 0, total: 4, success: false })) };
 }
 const server = http.createServer(async (req, res) => {
     try {
@@ -72,9 +98,11 @@ const server = http.createServer(async (req, res) => {
             return sendJson(res, 200, claims);
         if (req.method === 'GET' && path === '/api/tokens')
             return sendJson(res, 200, tokens);
+        if (req.method === 'GET' && path === '/api/tableau')
+            return sendJson(res, 200, { encounters: tableau });
         if (req.method === 'GET' && path === '/api/game')
             return sendJson(res, 200, { hexes, terrains, regions, claims, tokens });
-        const entityMatch = path.match(/^\/api\/entities\/([^/]+)(?:\/actions\/(camp|travel))?$/);
+        const entityMatch = path.match(/^\/api\/entities\/([^/]+)(?:\/actions\/(camp|travel|run_encounter|finish_encounter))?$/);
         if (entityMatch) {
             const player = players.get(entityMatch[1]);
             if (!player)
@@ -109,6 +137,29 @@ const server = http.createServer(async (req, res) => {
                 player.location = destination;
                 player.turns = Math.max(0, player.turns - 1);
                 return sendJson(res, 200, { updates: { location: player.location, turns: player.turns } });
+            }
+            if (req.method === 'POST' && action === 'run_encounter') {
+                const body = await readJson(req);
+                const encounterId = String(body?.encounterId ?? '');
+                const encounter = encounterById.get(encounterId);
+                if (!encounter)
+                    return ruleViolation(res, 'Encounter not found');
+                activeEncounters.set(player.name, encounterId);
+                return sendJson(res, 200, { encounter: activeEncounterFor(encounter) });
+            }
+            if (req.method === 'POST' && action === 'finish_encounter') {
+                const body = await readJson(req);
+                const encounterId = String(body?.encounterId ?? '');
+                const activeEncounterId = activeEncounters.get(player.name);
+                if (!activeEncounterId || activeEncounterId !== encounterId)
+                    return ruleViolation(res, 'No active encounter to finish');
+                const encounter = encounterById.get(encounterId);
+                if (!encounter)
+                    return ruleViolation(res, 'Encounter not found');
+                player.gold += 1;
+                player.curHealth = Math.max(0, player.curHealth - 1);
+                activeEncounters.delete(player.name);
+                return sendJson(res, 200, { updates: { gold: player.gold, curHealth: player.curHealth }, card: { title: 'Encounter Results', lines: ['Gold +1', 'Health -1'] } });
             }
         }
         sendJson(res, 404, { error: 'Not found' });

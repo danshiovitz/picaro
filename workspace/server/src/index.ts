@@ -6,7 +6,11 @@ type Region={name:string};
 type Claim={name:string;icon:string};
 type Token={id:string;entityName:string;icon:string};
 type Hex={name:string;x:number;y:number;q:number;r:number;terrain:string;region:string;claims:string[];tokens:string[]};
-type PlayerEntity={name:string;tokenId:string;curHealth:number;maxHealth:number;curLuck:number;maxLuck:number;reputation:number;turns:number;location:string};
+type PlayerEntity={name:string;tokenId:string;curHealth:number;maxHealth:number;curLuck:number;maxLuck:number;gold:number;reputation:number;turns:number;location:string};
+type EncounterSkillCheck={name:string;target:number};
+type ActiveEncounterSkillCheck={name:string;target:number;roll:number;modifier:number;total:number;success:boolean};
+type TableauCard={id:string;title:string;location:string;difficulty:number;rewards:string[];penalties:string[];skillChecks:EncounterSkillCheck[]};
+type ActiveEncounter={id:string;title:string;rewards:string[];penalties:string[];skillChecks:ActiveEncounterSkillCheck[]};
 
 const terrains:Terrain[]=[['Forest','#3f8f45','forest'],['Deep Forest','#14552a','deep-forest'],['Desert','#d8b45f','desert'],['Water','#3182bd','water'],['Plains','#9fca62','plains'],['Mountain','#8a8178','mountain'],['Hills','#a68b55','hills'],['Swamp','#55775a','swamp'],['Tundra','#cbd5d9','tundra'],['Jungle','#247a3b','jungle'],['Badlands','#b86945','badlands'],['Marsh','#6c9272','marsh']].map(([name,color,icon])=>({name,color,icon}));
 const regionNames=['Valley of Aardia','Domain of the Elves','Iron Marches','Sunspire Coast','Gloaming Fens','Kingdom of Roses','Storm Peaks','Amber Wastes','Silverwood','Riverlands','Crown Basin','Ashen Reach','Sapphire Isles','Old Empire','Whispering Downs','Dragonmere','Golden Steppe','Umbral Vale','Free Cities'];
@@ -32,8 +36,17 @@ function moveToken(tokenId:string,to:string){
  if(fromHex)fromHex.tokens=fromHex.tokens.filter(id=>id!==tokenId);
  hexByName.get(to)?.tokens.push(tokenId);
 }
+
+const encounters:TableauCard[]=[
+ {id:'dungeon-raid',title:'Dungeon Raid',location:'B17',difficulty:0,rewards:['Gold'],penalties:['Health'],skillChecks:[{name:'Stealth',target:5},{name:'Athletics',target:4},{name:'Blades',target:6}]},
+ {id:'parley',title:'Parley',location:'H8',difficulty:4,rewards:['Gold'],penalties:['Health'],skillChecks:[{name:'Persuasion',target:6},{name:'Deception',target:5}]},
+ {id:'wandering-sage',title:'Wandering Sage',location:'M12',difficulty:2,rewards:['Gold'],penalties:['Health'],skillChecks:[{name:'Lore',target:4},{name:'Insight',target:7}]},
+];
+const encounterById=new Map(encounters.map(encounter=>[encounter.id, encounter]));
 const players=new Map<string,PlayerEntity>();
-tokens.filter(t=>t.icon.startsWith('player')).forEach((t,i)=>players.set(t.entityName,{name:t.entityName,tokenId:t.id,curHealth:6+i,maxHealth:10,curLuck:1,maxLuck:3,reputation:10,turns:20,location:locationForToken(t.id)}));
+tokens.filter(t=>t.icon.startsWith('player')).forEach((t,i)=>players.set(t.entityName,{name:t.entityName,tokenId:t.id,curHealth:6+i,maxHealth:10,curLuck:1,maxLuck:3,gold:0,reputation:10,turns:20,location:locationForToken(t.id)}));
+const activeEncounters=new Map<string,string>();
+const tableau=encounters;
 function playerDto(player:PlayerEntity){player.location=locationForToken(player.tokenId); return {...player}}
 
 function sendJson(res:http.ServerResponse,status:number,data:unknown){
@@ -49,6 +62,25 @@ async function readJson(req:http.IncomingMessage){
  return JSON.parse(body);
 }
 
+function activeEncounterFor(card:TableauCard):ActiveEncounter{
+ const skillChecks:Record<string,ActiveEncounterSkillCheck[]>= {
+  'dungeon-raid':[
+   {name:'Stealth',target:5,roll:4,modifier:3,total:7,success:true},
+   {name:'Athletics',target:4,roll:1,modifier:2,total:3,success:false},
+   {name:'Blades',target:6,roll:6,modifier:0,total:6,success:true},
+  ],
+  'parley':[
+   {name:'Persuasion',target:6,roll:2,modifier:1,total:3,success:false},
+   {name:'Deception',target:5,roll:5,modifier:1,total:6,success:true},
+  ],
+  'wandering-sage':[
+   {name:'Lore',target:4,roll:7,modifier:0,total:7,success:true},
+   {name:'Insight',target:7,roll:3,modifier:2,total:5,success:false},
+  ],
+ };
+ return {id:card.id,title:card.title,rewards:card.rewards,penalties:card.penalties,skillChecks:skillChecks[card.id]??card.skillChecks.map(check=>({name:check.name,target:check.target,roll:4,modifier:0,total:4,success:false}))};
+}
+
 const server=http.createServer(async(req,res)=>{
  try{
   res.setHeader('Access-Control-Allow-Origin','*');
@@ -62,8 +94,9 @@ const server=http.createServer(async(req,res)=>{
   if(req.method==='GET'&&path==='/api/regions')return sendJson(res,200,regions);
   if(req.method==='GET'&&path==='/api/claims')return sendJson(res,200,claims);
   if(req.method==='GET'&&path==='/api/tokens')return sendJson(res,200,tokens);
+  if(req.method==='GET'&&path==='/api/tableau')return sendJson(res,200,{encounters:tableau});
   if(req.method==='GET'&&path==='/api/game')return sendJson(res,200,{hexes,terrains,regions,claims,tokens});
-  const entityMatch=path.match(/^\/api\/entities\/([^/]+)(?:\/actions\/(camp|travel))?$/);
+  const entityMatch=path.match(/^\/api\/entities\/([^/]+)(?:\/actions\/(camp|travel|run_encounter|finish_encounter))?$/);
   if(entityMatch){
    const player=players.get(entityMatch[1]);
    if(!player)return sendJson(res,404,{error:'Entity not found'});
@@ -91,6 +124,26 @@ const server=http.createServer(async(req,res)=>{
     player.location=destination;
     player.turns=Math.max(0,player.turns-1);
     return sendJson(res,200,{updates:{location:player.location,turns:player.turns}});
+   }
+   if(req.method==='POST'&&action==='run_encounter'){
+    const body=await readJson(req);
+    const encounterId=String(body?.encounterId??'');
+    const encounter=encounterById.get(encounterId);
+    if(!encounter)return ruleViolation(res,'Encounter not found');
+    activeEncounters.set(player.name,encounterId);
+    return sendJson(res,200,{encounter:activeEncounterFor(encounter)});
+   }
+   if(req.method==='POST'&&action==='finish_encounter'){
+    const body=await readJson(req);
+    const encounterId=String(body?.encounterId??'');
+    const activeEncounterId=activeEncounters.get(player.name);
+    if(!activeEncounterId||activeEncounterId!==encounterId)return ruleViolation(res,'No active encounter to finish');
+    const encounter=encounterById.get(encounterId);
+    if(!encounter)return ruleViolation(res,'Encounter not found');
+    player.gold+=1;
+    player.curHealth=Math.max(0,player.curHealth-1);
+    activeEncounters.delete(player.name);
+    return sendJson(res,200,{updates:{gold:player.gold,curHealth:player.curHealth},card:{title:'Encounter Results',lines:['Gold +1','Health -1']}});
    }
   }
   sendJson(res,404,{error:'Not found'});
