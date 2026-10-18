@@ -1,6 +1,8 @@
 import http from 'node:http';
 import {URL} from 'node:url';
 import crypto from 'node:crypto';
+import {access, mkdir, readFile, writeFile} from 'node:fs/promises';
+import {dirname, resolve} from 'node:path';
 
 type Terrain={name:string;color:string;icon:string};
 type Region={name:string};
@@ -15,7 +17,8 @@ type TableauCard={id:string;title:string;location:string;difficulty:number;rewar
 type ActiveEncounter={id:string;title:string;rewards:string[];penalties:string[];skillChecks:ActiveEncounterSkillCheck[]};
 type MapGeneratorName='allRandom'|'empire';
 
-type GeneratedWorld={hexes:Hex[];hexByName:Map<string,Hex>;tokens:Token[]};
+type GeneratedWorld={hexes:Hex[];hexByName:Map<string,Hex>;entities:Token[]};
+type SavedMapState={hexes:Hex[];entities:Token[]};
 
 type MapOptions={generator:MapGeneratorName;seed:string};
 
@@ -106,8 +109,8 @@ const claims:Claim[]=claimColors.map((icon,i)=>({name:`Faction ${i+1}`,icon}));
 let nextTokenId=1;
 const makeTokenId=()=>`token-${nextTokenId++}`;
 const playerTokens:Token[]=[1,2,3,4].map(i=>({id:makeTokenId(),entityName:`Player ${i}`,icon:`player${i}`}));
-const cityTokens:Token[]=['Waterdeep','Underhaven','Dawnport','Ironford','Moonfall','Highspire','Blackwell','Greengate'].map(n=>({id:makeTokenId(),entityName:`City of ${n}`,icon:'city'}));
-const tokens=[...playerTokens,...cityTokens];
+let cityTokens:Token[]=['Waterdeep','Underhaven','Dawnport','Ironford','Moonfall','Highspire','Blackwell','Greengate'].map(n=>({id:makeTokenId(),entityName:`City of ${n}`,icon:'city'}));
+let tokens:Token[]=[];
 
 function hashSeed(seed:string){
  let h=2166136261;
@@ -116,6 +119,35 @@ function hashSeed(seed:string){
   h=Math.imul(h,16777619);
  }
  return h>>>0;
+}
+
+const mapFilePath=resolve(process.cwd(),process.env['MAP_FILE']??'data/map.json');
+
+async function fileExists(filePath:string){
+ try{
+  await access(filePath);
+  return true;
+ }catch{
+  return false;
+ }
+}
+
+async function saveMap(filePath:string, state:SavedMapState){
+ await mkdir(dirname(filePath),{recursive:true});
+ await writeFile(filePath,JSON.stringify(state,null,2),'utf8');
+}
+
+async function loadMap(filePath:string){
+ const raw=await readFile(filePath,'utf8');
+ const state=JSON.parse(raw) as SavedMapState;
+ if(!Array.isArray(state.hexes)||!Array.isArray(state.entities)){
+  throw new Error('Invalid map save file');
+ }
+ return {
+  hexes:state.hexes,
+  hexByName:new Map(state.hexes.map(hex=>[hex.name,hex] as const)),
+  entities:state.entities,
+ } satisfies GeneratedWorld;
 }
 
 function rowLabel(index:number): string{
@@ -394,8 +426,7 @@ function buildAllRandom(seed:string):GeneratedWorld{
  }
  applyRandomClaims(hexes,rng);
  placeCitiesLikeAllRandom(hexes,rng);
- placePlayersAfterGeneration(hexes,rng);
- return {hexes,hexByName,tokens:[...tokens]};
+ return {hexes,hexByName,entities:[...cityTokens]};
 }
 type Temperature = 'tropical' | 'arctic' | 'temperate';
 
@@ -595,17 +626,33 @@ spreadHexes(hexes, indexByCoord, rng, curDesertArray, 40, canDesert, (h: Hex) =>
  for(const hex of hexes)hex.region=rng.pick(regions).name;
  applyRandomClaims(hexes,rng);
  placeCitiesLikeAllRandom(hexes,rng);
- placePlayersAfterGeneration(hexes,rng);
- return {hexes,hexByName,tokens:[...tokens]};
+ return {hexes,hexByName,entities:[...cityTokens]};
 }
 
 function buildWorld(options:MapOptions){
  return options.generator==='empire'?buildEmpire(options.seed):buildAllRandom(options.seed);
 }
 
+async function loadOrGenerateWorld(options:MapOptions){
+ if(await fileExists(mapFilePath)){
+  try{
+   return await loadMap(mapFilePath);
+  }catch(error){
+   console.warn('Failed to load saved map, regenerating it',error);
+  }
+ }
+ const generated=buildWorld(options);
+ await saveMap(mapFilePath,{hexes:generated.hexes,entities:generated.entities});
+ return generated;
+}
+
 const defaultGenerator:MapGeneratorName=process.env['MAP_GENERATOR']==='allRandom'||process.env['MAP_GENERATOR']==='empire'?process.env['MAP_GENERATOR']:'empire';
 const defaultSeed=process.env['MAP_SEED']??crypto.randomBytes(8).toString().slice(0, 16);
-const world=buildWorld({generator:defaultGenerator,seed:defaultSeed});
+const world=await loadOrGenerateWorld({generator:defaultGenerator,seed:defaultSeed});
+const playerPlacementRng=new RNG(`${defaultSeed}:players`);
+placePlayersAfterGeneration(world.hexes,playerPlacementRng);
+cityTokens=world.entities;
+tokens=[...playerTokens,...cityTokens];
 const hexes=world.hexes;
 const hexByName=world.hexByName;
 

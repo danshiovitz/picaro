@@ -3,7 +3,9 @@ declare const process: {
     PORT?: string;
     MAP_GENERATOR?: string;
     MAP_SEED?: string;
+    MAP_FILE?: string;
   };
+  cwd(): string;
 };
 
 declare const Buffer: {
