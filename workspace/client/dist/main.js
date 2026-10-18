@@ -112,8 +112,9 @@ function renderActiveEncounterCard(card) {
 function render(store, player, tableau) {
   const encounterById = new Map(tableau.encounters.map((encounter) => [encounter.id, encounter]));
   const encounterByLocation = new Map(tableau.encounters.map((encounter) => [encounter.location, encounter]));
-  app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableau.encounters.map(renderEncounterCard).join("")}</section></div></div><section class="map-side"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="attack" class="action-button" type="button"><img src="/images/actions/swords.svg" alt=""/><span>Attack</span></button></section><section class="play-section"><div id="play-content"></div></section></section></div></main><aside><h2>Picaro</h2><p>Bogus right-panel intelligence reports, rumors, inventories, and diplomacy notes.</p></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div>`;
+  app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button><button id="fit">Fit</button><button id="snap">Snap</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableau.encounters.map(renderEncounterCard).join("")}</section></div></div><section class="map-side"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="attack" class="action-button" type="button"><img src="/images/actions/swords.svg" alt=""/><span>Attack</span></button></section><section class="play-section"><div id="play-content"></div></section></section></div></main><aside><h2>Picaro</h2><p>Bogus right-panel intelligence reports, rumors, inventories, and diplomacy notes.</p></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div>`;
   const map = document.querySelector("#map");
+  const mapScroll = document.querySelector("#map-scroll");
   const tip = document.querySelector("#tip");
   const stats = document.querySelector("#character-stats");
   const playContent = document.querySelector("#play-content");
@@ -125,6 +126,17 @@ function render(store, player, tableau) {
   const svgNS = "http://www.w3.org/2000/svg";
   let route = null;
   let busy = false;
+  let manualZoom = false;
+  let centerPlayerAfterDraw = false;
+  const mapBounds = store.data.hexes.reduce((acc, hex) => {
+    const { x, y } = hexCenter(hex);
+    return {
+      minX: Math.min(acc.minX, x - size),
+      minY: Math.min(acc.minY, y - size),
+      maxX: Math.max(acc.maxX, x + size),
+      maxY: Math.max(acc.maxY, y + size)
+    };
+  }, { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
   function updateActionButtons() {
     const hasPlay = playContent.innerHTML.trim().length > 0;
     actionButtons.forEach((button) => button.disabled = busy || hasPlay);
@@ -142,6 +154,9 @@ function render(store, player, tableau) {
   }
   function isAdjacent(a, b) {
     return store.distance(a, b) === 1;
+  }
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
   }
   function renderSummary() {
     stats.innerHTML = `<dl><div><dt>Name</dt><dd>${esc(player.name)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${player.maxHealth}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div></dl>`;
@@ -283,13 +298,38 @@ function render(store, player, tableau) {
     if (!toHex.tokens.includes(player.tokenId)) toHex.tokens.push(player.tokenId);
     store.tokenHex.set(player.tokenId, toHex);
   }
+  function fitInitialZoom() {
+    const padding = 90;
+    const boundsWidth = Math.max(1, mapBounds.maxX - mapBounds.minX + padding * 2);
+    const boundsHeight = Math.max(1, mapBounds.maxY - mapBounds.minY + padding * 2);
+    const availableWidth = Math.max(1, mapScroll.clientWidth - 24);
+    const availableHeight = Math.max(1, mapScroll.clientHeight - tableauEl.offsetHeight - 24);
+    zoom = Math.max(0.05, Math.min(1.6, Math.min(availableWidth / boundsWidth, availableHeight / boundsHeight)));
+  }
+  function centerOnPlayer() {
+    const padding = 90;
+    const hex = store.hexes.get(player.location);
+    if (!hex) return;
+    const { x, y } = hexCenter(hex);
+    const left = (x - (mapBounds.minX - padding)) * zoom;
+    const top = (y - (mapBounds.minY - padding)) * zoom;
+    const viewportWidth = Math.max(1, mapScroll.clientWidth);
+    const viewportHeight = Math.max(1, mapScroll.clientHeight - tableauEl.offsetHeight);
+    const maxScrollLeft = Math.max(0, mapScroll.scrollWidth - viewportWidth);
+    const maxScrollTop = Math.max(0, mapScroll.scrollHeight - viewportHeight);
+    mapScroll.scrollLeft = clamp(left - viewportWidth / 2, 0, maxScrollLeft);
+    mapScroll.scrollTop = clamp(top - viewportHeight / 2, 0, maxScrollTop);
+  }
   function draw() {
     document.querySelector("#z").textContent = `${Math.round(zoom * 100)}%`;
     map.innerHTML = "";
     const svg = document.createElementNS(svgNS, "svg");
-    svg.style.width = `${(20 * w + w) * zoom}px`;
-    svg.style.height = `${(20 * size * 1.5 + h) * zoom}px`;
-    svg.setAttribute("viewBox", `-50 -50 ${20 * w + w + 100} ${20 * size * 1.5 + h + 100}`);
+    const padding = 90;
+    const width = Math.max(1, mapBounds.maxX - mapBounds.minX + padding * 2);
+    const height = Math.max(1, mapBounds.maxY - mapBounds.minY + padding * 2);
+    svg.style.width = `${width * zoom}px`;
+    svg.style.height = `${height * zoom}px`;
+    svg.setAttribute("viewBox", `${mapBounds.minX - padding} ${mapBounds.minY - padding} ${width} ${height}`);
     const defs = document.createElementNS(svgNS, "defs");
     store.data.terrains.forEach((t) => {
       defs.innerHTML += `<pattern id="p-${t.icon}" width="12" height="12" patternUnits="userSpaceOnUse"><image href="/images/terrain/${t.icon}.svg" width="12" height="12"/></pattern>`;
@@ -344,6 +384,10 @@ function render(store, player, tableau) {
       svg.append(overlay);
     }
     map.append(svg);
+    if (centerPlayerAfterDraw) {
+      centerPlayerAfterDraw = false;
+      requestAnimationFrame(() => centerOnPlayer());
+    }
   }
   function formatClaims(claims) {
     const counts = /* @__PURE__ */ new Map();
@@ -409,15 +453,29 @@ function render(store, player, tableau) {
   });
   map.onwheel = (e) => {
     e.preventDefault();
+    manualZoom = true;
     zoom = Math.max(0.22, Math.min(1.6, zoom + (e.deltaY < 0 ? 0.08 : -0.08)));
     draw();
   };
   document.querySelector("#plus").addEventListener("click", () => {
+    manualZoom = true;
     zoom = Math.min(1.6, zoom + 0.1);
     draw();
   });
   document.querySelector("#minus").addEventListener("click", () => {
+    manualZoom = true;
     zoom = Math.max(0.22, zoom - 0.1);
+    draw();
+  });
+  document.querySelector("#fit").addEventListener("click", () => {
+    manualZoom = false;
+    fitInitialZoom();
+    draw();
+  });
+  document.querySelector("#snap").addEventListener("click", () => {
+    manualZoom = true;
+    zoom = 1;
+    centerPlayerAfterDraw = true;
     draw();
   });
   document.querySelector("#travel").addEventListener("click", enterTravelMode);
@@ -437,8 +495,15 @@ function render(store, player, tableau) {
       updateActionButtons();
     }
   });
+  window.addEventListener("resize", () => {
+    if (!manualZoom) {
+      fitInitialZoom();
+      draw();
+    }
+  });
   renderSummary();
   updateActionButtons();
+  fitInitialZoom();
   draw();
 }
 //# sourceMappingURL=/main.js.map

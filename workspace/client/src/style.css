@@ -55,6 +55,18 @@ main {
   background: #111a;
   padding: 6px;
   border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bar button {
+  padding: 4px 8px;
+  border: 1px solid #778293;
+  border-radius: 6px;
+  background: #404957;
+  color: #fff;
+  font-weight: 700;
 }
 
 button {
@@ -259,6 +271,10 @@ button {
   flex: 0 0 auto;
   min-width: 0;
   overflow: visible;
+}
+
+#map svg {
+  display: block;
 }
 
 #map.travel-mode,

@@ -1,6 +1,8 @@
 declare const process: {
   env: {
     PORT?: string;
+    MAP_GENERATOR?: string;
+    MAP_SEED?: string;
   };
 };
 
