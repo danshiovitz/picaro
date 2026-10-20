@@ -151,7 +151,9 @@ button {
   border-radius: 14px;
   background: #f3e5c8;
   color: #20180d;
-  box-shadow: 0 8px 18px #0007, inset 0 0 0 5px #d4b77e;
+  box-shadow:
+    0 8px 18px #0007,
+    inset 0 0 0 5px #d4b77e;
   overflow: hidden;
 }
 
@@ -279,7 +281,9 @@ button {
 
 #map.travel-mode,
 #map.travel-mode * {
-  cursor: url('/images/actions/boots.svg') 8 8, pointer;
+  cursor:
+    url("/images/actions/boots.svg") 8 8,
+    pointer;
 }
 
 .encounter-star {
@@ -364,7 +368,9 @@ button {
   font-weight: 700;
   font-size: 13px;
   letter-spacing: 0.02em;
-  box-shadow: inset 0 1px #ffffff22, 0 2px 4px #0004;
+  box-shadow:
+    inset 0 1px #ffffff22,
+    0 2px 4px #0004;
 }
 
 .action-button:hover:not(:disabled) {

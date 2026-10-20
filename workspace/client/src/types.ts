@@ -1,16 +1,70 @@
-export type Terrain={name:string;color:string;icon:string};
-export type Region={name:string};
-export type Claim={name:string;icon:string};
-export type Token={id:string;entityName:string;icon:string};
-export type Hex={name:string;x:number;y:number;q:number;r:number;terrain:string;region:string;claims:string[];tokens:string[]};
-export type GameData={hexes:Hex[];terrains:Terrain[];regions:Region[];claims:Claim[];tokens:Token[]};
-export type EncounterSkillCheck={name:string;target:number};
-export type ActiveEncounterSkillCheck={name:string;target:number;roll:number;modifier:number;total:number;success:boolean};
-export type TableauCard={id:string;title:string;location:string;difficulty:number;rewards:string[];penalties:string[];skillChecks:EncounterSkillCheck[]};
-export type TableauData={encounters:TableauCard[]};
-export type PlayerEntity={name:string;tokenId:string;curHealth:number;maxHealth:number;curLuck:number;maxLuck:number;gold:number;reputation:number;turns:number;location:string};
-export type PlayCard={title:string;lines:string[]};
-export type ActiveEncounter={id:string;title:string;rewards:string[];penalties:string[];skillChecks:ActiveEncounterSkillCheck[]};
-export type ActionResponse={updates:Partial<PlayerEntity>;card?:PlayCard};
-export type RunEncounterResponse={encounter:ActiveEncounter};
-export type FinishEncounterResponse={updates:Partial<PlayerEntity>;card:PlayCard};
+export type Terrain = { name: string; color: string; icon: string };
+export type Region = { name: string };
+export type Claim = { name: string; icon: string };
+export type Token = { id: string; entityName: string; icon: string };
+export type Hex = {
+  name: string;
+  x: number;
+  y: number;
+  q: number;
+  r: number;
+  terrain: string;
+  region: string;
+  claims: string[];
+  tokens: string[];
+};
+export type GameData = {
+  hexes: Hex[];
+  terrains: Terrain[];
+  regions: Region[];
+  claims: Claim[];
+  tokens: Token[];
+};
+export type EncounterSkillCheck = { name: string; target: number };
+export type ActiveEncounterSkillCheck = {
+  name: string;
+  target: number;
+  roll: number;
+  modifier: number;
+  total: number;
+  success: boolean;
+};
+export type TableauCard = {
+  id: string;
+  title: string;
+  location: string;
+  difficulty: number;
+  rewards: string[];
+  penalties: string[];
+  skillChecks: EncounterSkillCheck[];
+};
+export type TableauData = { encounters: TableauCard[] };
+export type PlayerEntity = {
+  name: string;
+  tokenId: string;
+  curHealth: number;
+  maxHealth: number;
+  curLuck: number;
+  maxLuck: number;
+  gold: number;
+  reputation: number;
+  turns: number;
+  location: string;
+};
+export type PlayCard = { title: string; lines: string[] };
+export type ActiveEncounter = {
+  id: string;
+  title: string;
+  rewards: string[];
+  penalties: string[];
+  skillChecks: ActiveEncounterSkillCheck[];
+};
+export type ActionResponse = {
+  updates: Partial<PlayerEntity>;
+  card?: PlayCard;
+};
+export type RunEncounterResponse = { encounter: ActiveEncounter };
+export type FinishEncounterResponse = {
+  updates: Partial<PlayerEntity>;
+  card: PlayCard;
+};

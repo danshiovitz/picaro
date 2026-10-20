@@ -12,7 +12,7 @@ declare const Buffer: {
   byteLength(input: string): number;
 };
 
-declare module 'node:http' {
+declare module "node:http" {
   function http(...args: never[]): never;
 
   namespace http {
@@ -24,7 +24,10 @@ declare module 'node:http' {
 
     interface ServerResponse {
       setHeader(name: string, value: string | number): void;
-      writeHead(statusCode: number, headers?: Record<string, string | number>): ServerResponse;
+      writeHead(
+        statusCode: number,
+        headers?: Record<string, string | number>,
+      ): ServerResponse;
       end(chunk?: string | Uint8Array): void;
     }
 
@@ -33,14 +36,17 @@ declare module 'node:http' {
     }
 
     function createServer(
-      listener: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>,
+      listener: (
+        req: IncomingMessage,
+        res: ServerResponse,
+      ) => void | Promise<void>,
     ): Server;
   }
 
   export = http;
 }
 
-declare module 'node:url' {
+declare module "node:url" {
   export class URL {
     constructor(input: string, base?: string | URL);
     pathname: string;
