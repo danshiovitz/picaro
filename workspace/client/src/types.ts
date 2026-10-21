@@ -54,6 +54,7 @@ export type PlayerEntity = {
 export type PlayCard = { title: string; lines: string[] };
 export type ActiveEncounter = {
   id: string;
+  tableauId?: string;
   title: string;
   rewards: string[];
   penalties: string[];
@@ -62,9 +63,14 @@ export type ActiveEncounter = {
 export type ActionResponse = {
   updates: Partial<PlayerEntity>;
   card?: PlayCard;
+  tableauChanged: boolean;
+  tableau?: TableauData;
 };
 export type RunEncounterResponse = { encounter: ActiveEncounter };
 export type FinishEncounterResponse = {
   updates: Partial<PlayerEntity>;
   card: PlayCard;
+  removedEncounterId?: string;
+  tableauChanged: boolean;
+  tableau?: TableauData;
 };

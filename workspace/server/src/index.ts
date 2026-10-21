@@ -1,10 +1,27 @@
 import http from "node:http";
 
 import { PlayerEntity, TableauCard } from "./types.js";
-import { makeTokenId } from "./data.js";
+import { makeTokenId, encounterTemplates } from "./data.js";
 import { loadOrGenerateWorld, MapGeneratorName } from "./map_generator.js";
 import { RNG } from "./random.js";
-import { createApiCommands } from "./commands.js";
+import {
+  ApiState,
+  RulesViolation,
+  campEntity,
+  fillTableau,
+  finishEncounter,
+  getClaims,
+  getEntity,
+  getGame,
+  getHexes,
+  getRegions,
+  getTableau,
+  getTerrain,
+  getTokens,
+  runEncounter,
+  travelEntity,
+} from "./commands.js";
+import { setEncounterContext } from "./encounter.js";
 
 const defaultGenerator: MapGeneratorName =
   process.env["MAP_GENERATOR"] === "allRandom" ||
@@ -68,56 +85,126 @@ for (const token of playerTokens) {
   });
 }
 const activeEncounters = new Map<string, string>();
+const tableau: TableauCard[] = [];
+const encounterRng = new RNG(`${defaultSeed}:encounters`);
+setEncounterContext({ hexes, rng: encounterRng });
+const firstPlayer = players.values().next().value as PlayerEntity | undefined;
+if (firstPlayer)
+  fillTableau(tableau, encounterTemplates, firstPlayer, encounterRng);
 
-const encounters: TableauCard[] = [
-  {
-    id: "dungeon-raid",
-    title: "Dungeon Raid",
-    location: "B17",
-    difficulty: 0,
-    rewards: ["Gold"],
-    penalties: ["Health"],
-    skillChecks: [
-      { name: "Stealth", target: 5 },
-      { name: "Athletics", target: 4 },
-      { name: "Blades", target: 6 },
-    ],
-  },
-  {
-    id: "parley",
-    title: "Parley",
-    location: "H8",
-    difficulty: 4,
-    rewards: ["Gold"],
-    penalties: ["Health"],
-    skillChecks: [
-      { name: "Persuasion", target: 6 },
-      { name: "Deception", target: 5 },
-    ],
-  },
-  {
-    id: "wandering-sage",
-    title: "Wandering Sage",
-    location: "M12",
-    difficulty: 2,
-    rewards: ["Gold"],
-    penalties: ["Health"],
-    skillChecks: [
-      { name: "Lore", target: 4 },
-      { name: "Insight", target: 7 },
-    ],
-  },
-];
-
-const api = createApiCommands({
+const apiState: ApiState = {
   hexes,
   hexByName,
   tokens: playerTokens,
   players,
   activeEncounters,
-  encounters,
-});
+  tableau,
+  rng: encounterRng,
+};
 
-const server = http.createServer(api.handle);
+function sendJson(res: http.ServerResponse, status: number, data: unknown) {
+  const body = JSON.stringify(data);
+  res.writeHead(status, {
+    "Content-Type": "application/json",
+    "Content-Length": Buffer.byteLength(body),
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  });
+  res.end(body);
+}
+
+async function readJson(req: http.IncomingMessage): Promise<any> {
+  let body = "";
+  for await (const chunk of req) body += chunk;
+  if (!body) return undefined;
+  return JSON.parse(body);
+}
+
+const server = http.createServer(async (req, res) => {
+  try {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    const url = new URL(
+      req.url ?? "/",
+      `http://${req.headers.host ?? "localhost"}`,
+    );
+    const path = decodeURIComponent(url.pathname);
+
+    if (req.method === "GET" && path === "/api/hexes")
+      return sendJson(res, 200, getHexes(apiState));
+    if (req.method === "GET" && path === "/api/terrain")
+      return sendJson(res, 200, getTerrain());
+    if (req.method === "GET" && path === "/api/regions")
+      return sendJson(res, 200, getRegions());
+    if (req.method === "GET" && path === "/api/claims")
+      return sendJson(res, 200, getClaims());
+    if (req.method === "GET" && path === "/api/tokens")
+      return sendJson(res, 200, getTokens(apiState));
+    if (req.method === "GET" && path === "/api/tableau")
+      return sendJson(res, 200, getTableau(apiState));
+    if (req.method === "GET" && path === "/api/game")
+      return sendJson(res, 200, getGame(apiState));
+
+    const entityMatch = path.match(
+      /^\/api\/entities\/([^/]+)(?:\/actions\/(camp|travel|run_encounter|finish_encounter))?$/,
+    );
+    if (entityMatch) {
+      const player = players.get(entityMatch[1]);
+      if (!player) return sendJson(res, 404, { error: "Entity not found" });
+      const action = entityMatch[2];
+
+      if (req.method === "GET" && !action)
+        return sendJson(res, 200, getEntity(apiState, player));
+
+      if (req.method === "POST" && action === "camp")
+        return sendJson(res, 200, campEntity(apiState, player));
+
+      if (req.method === "POST" && action === "travel") {
+        const body = await readJson(req);
+        const request = { route: Array.isArray(body?.route) ? body.route : [] };
+        return sendJson(res, 200, travelEntity(apiState, player, request));
+      }
+
+      if (req.method === "POST" && action === "run_encounter") {
+        const body = await readJson(req);
+        const request = {
+          encounterId: String(body?.encounterId ?? ""),
+          tableauId:
+            typeof body?.tableauId === "string" ? body.tableauId : undefined,
+        };
+        return sendJson(res, 200, runEncounter(apiState, player, request));
+      }
+
+      if (req.method === "POST" && action === "finish_encounter") {
+        const body = await readJson(req);
+        const request = {
+          encounterId: String(body?.encounterId ?? ""),
+          tableauId:
+            typeof body?.tableauId === "string" ? body.tableauId : undefined,
+        };
+        return sendJson(res, 200, finishEncounter(apiState, player, request));
+      }
+    }
+
+    sendJson(res, 404, { error: "Not found" });
+  } catch (error) {
+    if (error instanceof RulesViolation) {
+      return sendJson(res, 400, {
+        errorType: "rule violation",
+        message: error.message,
+      });
+    }
+    console.error(error);
+    sendJson(res, 500, { error: "Internal server error" });
+  }
+});
 const port = Number(process.env.PORT) || 3001;
 server.listen(port, () => console.log(`Picaro server on ${port}`));

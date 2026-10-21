@@ -27,6 +27,13 @@ export type PlayerEntity = {
   location: string;
 };
 export type EncounterSkillCheck = { name: string; target: number };
+export type EncounterTemplate = {
+  title: string;
+  base_difficulty: number;
+  rewards: string[];
+  penalties: string[];
+  skills: string[];
+};
 export type ActiveEncounterSkillCheck = {
   name: string;
   target: number;
@@ -44,8 +51,10 @@ export type TableauCard = {
   penalties: string[];
   skillChecks: EncounterSkillCheck[];
 };
+export type TableauData = { encounters: TableauCard[] };
 export type ActiveEncounter = {
   id: string;
+  tableauId?: string;
   title: string;
   rewards: string[];
   penalties: string[];

@@ -1,4 +1,4 @@
-import { Claim, Region, Token } from "./types.js";
+import { Claim, EncounterTemplate, Region, Token } from "./types.js";
 
 export const terrainSpecs = [
   ["Forest", "#1a531e", "forest"],
@@ -56,6 +56,135 @@ export let claims: Claim[] = claimColors.map((icon, i) => ({
   name: `Faction ${i + 1}`,
   icon,
 }));
+
+export const skillNames = [
+  "Acrobatics",
+  "Animal Training",
+  "Appraisal",
+  "Architecture",
+  "Arctic Lore",
+  "Brutal Fighting",
+  "Carousing",
+  "Charm",
+  "Climb",
+  "Command",
+  "Debate",
+  "Desert Lore",
+  "Doctor",
+  "Dueling",
+  "Endurance",
+  "Forest Lore",
+  "Formation Fighting",
+  "Hills Lore",
+  "Jungle Lore",
+  "Mechanisms",
+  "Mesmerism",
+  "Might",
+  "Mountain Lore",
+  "Navigation",
+  "Observation",
+  "Pickpocket",
+  "Plains Lore",
+  "Research",
+  "Ride",
+  "Sea Lore",
+  "Shoot",
+  "Skill X",
+  "Skill Y",
+  "Speed",
+  "Spirit Binding",
+  "Stealth",
+  "Swamp Lore",
+  "Thaumaturgy",
+  "Throw",
+];
+
+export const encounterTemplates: EncounterTemplate[] = [
+  {
+    title: "Dungeon Raid",
+    base_difficulty: 0,
+    rewards: ["Gold"],
+    penalties: ["Health"],
+    skills: [
+      "Stealth",
+      "Endurance",
+      "Might",
+      "Mechanisms",
+      "Observation",
+      "Acrobatics",
+    ],
+  },
+  {
+    title: "Parley",
+    base_difficulty: 4,
+    rewards: ["Gold"],
+    penalties: ["Health"],
+    skills: [
+      "Charm",
+      "Debate",
+      "Command",
+      "Observation",
+      "Research",
+      "Mesmerism",
+    ],
+  },
+  {
+    title: "Wandering Sage",
+    base_difficulty: 2,
+    rewards: ["Gold"],
+    penalties: ["Health"],
+    skills: [
+      "Research",
+      "Observation",
+      "Arctic Lore",
+      "Forest Lore",
+      "Spirit Binding",
+      "Thaumaturgy",
+    ],
+  },
+  {
+    title: "Bandit Ambush",
+    base_difficulty: 1,
+    rewards: ["Gold"],
+    penalties: ["Health"],
+    skills: [
+      "Brutal Fighting",
+      "Climb",
+      "Pickpocket",
+      "Speed",
+      "Throw",
+      "Ride",
+    ],
+  },
+  {
+    title: "Ancient Ruins",
+    base_difficulty: 3,
+    rewards: ["Gold"],
+    penalties: ["Health"],
+    skills: [
+      "Architecture",
+      "Appraisal",
+      "Mechanisms",
+      "Research",
+      "Observation",
+      "Navigation",
+    ],
+  },
+  {
+    title: "Court Intrigue",
+    base_difficulty: 5,
+    rewards: ["Gold"],
+    penalties: ["Reputation"],
+    skills: [
+      "Charm",
+      "Carousing",
+      "Debate",
+      "Command",
+      "Mesmerism",
+      "Appraisal",
+    ],
+  },
+];
 
 let nextTokenId = 1;
 export const makeTokenId = () => `token-${nextTokenId++}`;

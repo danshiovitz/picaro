@@ -122,21 +122,30 @@ function renderActiveEncounterCard(card: ActiveEncounter) {
 }
 
 function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
-  const encounterById = new Map(
-    tableau.encounters.map((encounter) => [encounter.id, encounter] as const),
+  let tableauData = tableau;
+  let encounterById = new Map(
+    tableauData.encounters.map(
+      (encounter) => [encounter.id, encounter] as const,
+    ),
   );
-  const encounterByLocation = new Map(
-    tableau.encounters.map(
+  let encounterByLocation = new Map(
+    tableauData.encounters.map(
       (encounter) => [encounter.location, encounter] as const,
     ),
   );
-  app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button><button id="fit">Fit</button><button id="snap">Snap</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableau.encounters.map(renderEncounterCard).join("")}</section></div></div><section class="map-side"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="attack" class="action-button" type="button"><img src="/images/actions/swords.svg" alt=""/><span>Attack</span></button></section><section class="play-section"><div id="play-content"></div></section></section></div></main><aside><h2>Picaro</h2><p>Bogus right-panel intelligence reports, rumors, inventories, and diplomacy notes.</p></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div>`;
+  app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button><button id="fit">Fit</button><button id="snap">Snap</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableauData.encounters.map(renderEncounterCard).join("")}</section></div></div><section class="map-side"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="attack" class="action-button" type="button"><img src="/images/actions/swords.svg" alt=""/><span>Attack</span></button></section><section class="play-section"><div id="play-content"></div></section></section></div></main><aside class="right-panel"><section class="encounter-panel"><h2 id="encounter-panel-title" hidden></h2><div id="encounter-panel-content"></div></section></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div>`;
   const map = document.querySelector("#map") as HTMLElement;
   const mapScroll = document.querySelector("#map-scroll") as HTMLElement;
   const tip = document.querySelector("#tip") as HTMLElement;
   const stats = document.querySelector("#character-stats") as HTMLElement;
   const playContent = document.querySelector("#play-content") as HTMLElement;
   const tableauEl = document.querySelector(".tableau") as HTMLElement;
+  const encounterPanelTitle = document.querySelector(
+    "#encounter-panel-title",
+  ) as HTMLElement;
+  const encounterPanelContent = document.querySelector(
+    "#encounter-panel-content",
+  ) as HTMLElement;
   const actionButtons = [
     ...document.querySelectorAll(".action-button"),
   ] as HTMLButtonElement[];
@@ -174,6 +183,22 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
     playContent.innerHTML = "";
     updateActionButtons();
   }
+
+  function setEncounterPanel(card: ActiveEncounter | null) {
+    encounterPanelTitle.hidden = !card;
+    encounterPanelTitle.textContent = card ? "Encounter" : "";
+    encounterPanelContent.innerHTML = card
+      ? `${renderActiveEncounterCard(card)}<div class="encounter-controls"><button id="encounter-finish" class="card-ok" type="button">OK</button></div>`
+      : "";
+    if (card) {
+      document
+        .querySelector("#encounter-finish")!
+        .addEventListener(
+          "click",
+          () => void finishEncounter(card.tableauId ?? card.id),
+        );
+    }
+  }
   function hexCenter(hex: Hex): Point {
     return {
       x: Math.sqrt(3) * size * (hex.q + hex.r / 2) + 70,
@@ -202,6 +227,23 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
     document.querySelector("#card-ok")!.addEventListener("click", onClick);
   }
 
+  function syncTableau(next: TableauData) {
+    tableauData = next;
+    encounterById = new Map(
+      tableauData.encounters.map(
+        (encounter) => [encounter.id, encounter] as const,
+      ),
+    );
+    encounterByLocation = new Map(
+      tableauData.encounters.map(
+        (encounter) => [encounter.location, encounter] as const,
+      ),
+    );
+    tableauEl.innerHTML = tableauData.encounters
+      .map(renderEncounterCard)
+      .join("");
+  }
+
   function showEncounterPreview(card: EncounterCard) {
     setPlay(
       `${renderEncounterCard(card)}<div class="encounter-controls"><button id="encounter-ok" class="card-ok" type="button">OK</button><button id="encounter-cancel" class="card-ok" type="button">Cancel</button></div>`,
@@ -215,12 +257,8 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
   }
 
   function showActiveEncounter(card: ActiveEncounter) {
-    setPlay(
-      `${renderActiveEncounterCard(card)}<div class="encounter-controls"><button id="encounter-finish" class="card-ok" type="button">OK</button></div>`,
-    );
-    document
-      .querySelector("#encounter-finish")!
-      .addEventListener("click", () => void finishEncounter(card.id));
+    clearPlay();
+    setEncounterPanel(card);
   }
 
   function showEncounterError(message: string) {
@@ -244,7 +282,7 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ encounterId }),
+          body: JSON.stringify({ encounterId, tableauId: encounterId }),
         },
       );
       showActiveEncounter(result.encounter);
@@ -266,10 +304,12 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ encounterId }),
+          body: JSON.stringify({ encounterId, tableauId: encounterId }),
         },
       );
       Object.assign(player, result.updates);
+      setEncounterPanel(null);
+      if (result.tableauChanged && result.tableau) syncTableau(result.tableau);
       renderSummary();
       showEncounterResults(result.card);
     } catch (err) {
@@ -386,6 +426,7 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
       Object.assign(player, result.updates);
       if (result.updates.location && result.updates.location !== oldLocation)
         moveLocalPlayerToken(oldLocation, result.updates.location);
+      if (result.tableauChanged && result.tableau) syncTableau(result.tableau);
       renderSummary();
       clearPlay();
       draw();
@@ -545,6 +586,7 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
 
   function showTip(hex: Hex, anchor: DOMRect) {
     const f = store.fullHex(hex.name)!;
+    const moveHereDisabled = busy || playContent.innerHTML.trim().length > 0;
     const claimsText = formatClaims(
       f.claimObjs
         .filter((claim): claim is NonNullable<typeof claim> => Boolean(claim))
@@ -574,7 +616,7 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
     tip.style.visibility = "hidden";
     tip.style.left = "0px";
     tip.style.top = "0px";
-    tip.innerHTML = `<button id="close">×</button><h3>${f.name}</h3>${details}<a id="move-here" href="#">Move here</a>`;
+    tip.innerHTML = `<button id="close">×</button><h3>${f.name}</h3>${details}<a id="move-here" class="move-here-link" href="#">Move here</a>`;
     const bounds = tip.getBoundingClientRect();
     const gap = 12;
     let x = anchor.right + gap;
@@ -591,15 +633,36 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
     document
       .querySelector("#close")!
       .addEventListener("click", () => (tip.style.display = "none"));
-    document.querySelector("#move-here")!.addEventListener("click", (e) => {
+    const moveHereLink = document.querySelector(
+      "#move-here",
+    ) as HTMLAnchorElement;
+    moveHereLink.classList.toggle("disabled", moveHereDisabled);
+    moveHereLink.setAttribute("aria-disabled", String(moveHereDisabled));
+    if (moveHereDisabled) moveHereLink.removeAttribute("href");
+    else moveHereLink.href = "#";
+    moveHereLink.addEventListener("click", (e) => {
+      if (moveHereDisabled) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       enterTravelMode();
       if (route) selectRouteHex(hex);
     });
-    document
-      .querySelector(".encounter-link")
-      ?.addEventListener("click", (e) => {
+    const encounterLink = document.querySelector(
+      ".encounter-link",
+    ) as HTMLAnchorElement | null;
+    if (encounterLink) {
+      encounterLink.classList.toggle("disabled", moveHereDisabled);
+      encounterLink.setAttribute("aria-disabled", String(moveHereDisabled));
+      encounterLink.addEventListener("click", (e) => {
+        if (moveHereDisabled) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
         e.preventDefault();
         e.stopPropagation();
         const encounterId = (e.currentTarget as HTMLElement).dataset
@@ -609,6 +672,7 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
           : undefined;
         if (encounter) showEncounterPreview(encounter);
       });
+    }
   }
 
   tableauEl.addEventListener("click", (e) => {
@@ -664,6 +728,7 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
         { method: "POST" },
       );
       Object.assign(player, result.updates);
+      if (result.tableauChanged && result.tableau) syncTableau(result.tableau);
       renderSummary();
       if (result.card) showGenericCard(result.card);
     } catch (err) {
