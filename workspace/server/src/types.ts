@@ -43,6 +43,7 @@ export type EncounterTemplate = {
   penalties: PenaltyType[];
   skills: string[];
 };
+export type EncounterState = "active" | "lost" | "succeeded" | "critical";
 export type ActiveEncounterSkillCheck = {
   name: string;
   target: number;
@@ -50,6 +51,7 @@ export type ActiveEncounterSkillCheck = {
   modifier: number;
   total: number;
   success: boolean;
+  old?: boolean;
 };
 export type TableauCard = {
   id: string;
@@ -69,11 +71,13 @@ export type ActiveEncounter = {
   id: string;
   tableauId?: string;
   title: string;
+  state: EncounterState;
   successThreshold: number;
   criticalThreshold?: number;
   failureThreshold: number;
   numSuccesses: number;
   numFailures: number;
+  nextPenalty?: PenaltyType;
   rewards: RewardType[];
   criticalRewards: RewardType[];
   penalties: PenaltyType[];

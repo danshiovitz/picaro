@@ -9,6 +9,7 @@ import {
   RulesViolation,
   campEntity,
   fillTableau,
+  continueEncounter,
   finishEncounter,
   getClaims,
   getEntity,
@@ -157,7 +158,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, getGame(apiState));
 
     const entityMatch = path.match(
-      /^\/api\/entities\/([^/]+)(?:\/actions\/(camp|travel|run_encounter|finish_encounter))?$/,
+      /^\/api\/entities\/([^/]+)(?:\/actions\/(camp|travel|run_encounter|continue_encounter|finish_encounter))?$/,
     );
     if (entityMatch) {
       const player = players.get(entityMatch[1]);
@@ -186,12 +187,23 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 200, runEncounter(apiState, player, request));
       }
 
+      if (req.method === "POST" && action === "continue_encounter") {
+        const body = await readJson(req);
+        const request = {
+          encounterId: String(body?.encounterId ?? ""),
+          tableauId:
+            typeof body?.tableauId === "string" ? body.tableauId : undefined,
+        };
+        return sendJson(res, 200, continueEncounter(apiState, player, request));
+      }
+
       if (req.method === "POST" && action === "finish_encounter") {
         const body = await readJson(req);
         const request = {
           encounterId: String(body?.encounterId ?? ""),
           tableauId:
             typeof body?.tableauId === "string" ? body.tableauId : undefined,
+          conceding: Boolean(body?.conceding),
         };
         return sendJson(res, 200, finishEncounter(apiState, player, request));
       }

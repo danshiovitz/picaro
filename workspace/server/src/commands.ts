@@ -38,7 +38,11 @@ export type ApiState = {
 };
 
 export type TravelRequest = { route: string[] };
-export type EncounterRequest = { encounterId: string; tableauId?: string };
+export type EncounterRequest = {
+  encounterId: string;
+  tableauId?: string;
+  conceding?: boolean;
+};
 
 function allTokens(tokens: ApiState["tokens"]) {
   return [...tokens, ...cityTokens];
@@ -59,33 +63,73 @@ function moveToken(
   hexByName.get(to)?.tokens.push(tokenId);
 }
 
+function encounterState(
+  numSuccesses: number,
+  numFailures: number,
+  successThreshold: number,
+  criticalThreshold: number | undefined,
+  failureThreshold: number,
+) {
+  if (numFailures >= failureThreshold) return "lost" as const;
+  if (
+    typeof criticalThreshold === "number" &&
+    numSuccesses >= criticalThreshold
+  )
+    return "critical" as const;
+  if (numSuccesses >= successThreshold) return "succeeded" as const;
+  return "active" as const;
+}
+
+function randomPenalty(card: TableauCard, rng: RNG) {
+  return card.penalties.length > 0 ? rng.pick(card.penalties) : undefined;
+}
+
+function rollSkillChecks(
+  cards: { name: string; target: number }[],
+  rng: RNG,
+  old = false,
+) {
+  return cards.map((check): ActiveEncounterSkillCheck => {
+    const roll = rng.d6();
+    const modifier = 3;
+    const total = roll + modifier;
+    return {
+      name: check.name,
+      target: check.target,
+      roll,
+      modifier,
+      total,
+      success: total >= check.target,
+      old,
+    };
+  });
+}
+
 function activeEncounterFor(card: TableauCard, rng: RNG): ActiveEncounter {
-  const skillChecks = card.skillChecks.map(
-    (check): ActiveEncounterSkillCheck => {
-      const roll = rng.d6();
-      const modifier = 3;
-      const total = roll + modifier;
-      return {
-        name: check.name,
-        target: check.target,
-        roll,
-        modifier,
-        total,
-        success: total >= check.target,
-      };
-    },
-  );
+  const skillChecks = rollSkillChecks(card.skillChecks, rng);
   const numSuccesses = skillChecks.filter((check) => check.success).length;
   const numFailures = skillChecks.length - numSuccesses;
+  const state = encounterState(
+    numSuccesses,
+    numFailures,
+    card.successThreshold,
+    card.criticalThreshold,
+    card.failureThreshold,
+  );
   return {
     id: card.id,
     tableauId: card.id,
     title: card.title,
+    state,
     successThreshold: card.successThreshold,
     criticalThreshold: card.criticalThreshold,
     failureThreshold: card.failureThreshold,
     numSuccesses,
     numFailures,
+    nextPenalty:
+      state === "active" || state === "succeeded"
+        ? randomPenalty(card, rng)
+        : undefined,
     rewards: card.rewards,
     criticalRewards: card.criticalRewards,
     penalties: card.penalties,
@@ -281,10 +325,50 @@ export function runEncounter(
   return { encounter: active };
 }
 
-export function finishEncounter(
+export function continueEncounter(
   state: ApiState,
   player: PlayerEntity,
   request: EncounterRequest,
+) {
+  const active = state.activeEncounters.get(player.name);
+  if (!active || active.id !== request.encounterId)
+    throw new RulesViolation("No active encounter to continue");
+  if (active.state !== "active" && active.state !== "succeeded")
+    throw new RulesViolation("Encounter cannot be continued");
+  const encounter = state.tableau.find(
+    (card) => card.id === request.encounterId,
+  );
+  if (!encounter) throw new RulesViolation("Encounter not found");
+  if (active.nextPenalty) {
+    active.penalties = [...active.penalties, active.nextPenalty];
+    active.nextPenalty = undefined;
+  }
+  active.skillChecks = active.skillChecks.map((check) => ({
+    ...check,
+    old: true,
+  }));
+  active.skillChecks.push(...rollSkillChecks(encounter.skillChecks, state.rng));
+  active.numSuccesses = active.skillChecks.filter(
+    (check) => check.success,
+  ).length;
+  active.numFailures = active.skillChecks.length - active.numSuccesses;
+  active.state = encounterState(
+    active.numSuccesses,
+    active.numFailures,
+    active.successThreshold,
+    active.criticalThreshold,
+    active.failureThreshold,
+  );
+  if (active.state === "active" || active.state === "succeeded") {
+    active.nextPenalty = randomPenalty(encounter, state.rng);
+  }
+  return { encounter: active };
+}
+
+export function finishEncounter(
+  state: ApiState,
+  player: PlayerEntity,
+  request: EncounterRequest & { conceding?: boolean },
 ) {
   const active = state.activeEncounters.get(player.name);
   const encounterId = request.tableauId ?? request.encounterId;
@@ -294,6 +378,10 @@ export function finishEncounter(
     (card) => card.id === request.encounterId,
   );
   if (!encounter) throw new RulesViolation("Encounter not found");
+  if (request.conceding) {
+    active.state = "lost";
+    active.nextPenalty = undefined;
+  }
   const lines: string[] = [];
   const meetsFailureThreshold = active.numFailures >= active.failureThreshold;
   if (

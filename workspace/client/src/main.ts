@@ -2,6 +2,7 @@ import { GameStore } from "./store";
 import type {
   ActionResponse,
   ActiveEncounter,
+  ContinueEncounterResponse,
   EncounterSkillCheck,
   FinishEncounterResponse,
   GameData,
@@ -18,6 +19,7 @@ import type {
 const API = import.meta.env.VITE_API_URL ?? "";
 const PLAYER_NAME = "Player 1";
 const app = document.querySelector("#app")!;
+let activeEncounterId: string | null = null;
 
 type Point = { x: number; y: number };
 
@@ -99,7 +101,9 @@ function renderEncounterCard(card: EncounterCard) {
     (_, i) =>
       `<span class="encounter-pip ${i < card.difficulty ? "filled" : ""}" aria-hidden="true"></span>`,
   ).join("");
-  return `<article class="play-card encounter-card tableau-encounter" data-encounter-id="${esc(card.id)}">
+  const activeClass =
+    card.id === activeEncounterId ? " active-tableau-encounter" : "";
+  return `<article class="play-card encounter-card tableau-encounter${activeClass}" data-encounter-id="${esc(card.id)}">
   <div class="encounter-header">
    <div class="encounter-title-row">
     <span class="encounter-title">${esc(card.title)}</span>
@@ -118,6 +122,9 @@ function renderEncounterCard(card: EncounterCard) {
 }
 
 function renderActiveEncounterCard(card: ActiveEncounter) {
+  const nextPenalty = card.nextPenalty
+    ? `<p class="encounter-next-penalty">Next penalty: -${esc(labelForType(card.nextPenalty))}</p>`
+    : "";
   return `<article class="play-card encounter-card active-encounter-card" data-encounter-id="${esc(card.id)}">
   <div class="encounter-header">
    <div class="encounter-title-row">
@@ -127,7 +134,14 @@ function renderActiveEncounterCard(card: ActiveEncounter) {
   <div class="play-card-body encounter-body">
    <p>${esc(outcomeLine(card.rewards, card.criticalRewards, card.penalties))}</p>
    <div class="encounter-spacer"></div>
-   ${card.skillChecks.map((check) => `<p class="encounter-check">${esc(`${check.name} vs ${check.target}`)}</p>`).join("")}
+   ${card.skillChecks
+     .filter((check) => !check.old)
+     .map(
+       (check) =>
+         `<p class="encounter-check">${esc(`${check.name} vs ${check.target}`)}</p>`,
+     )
+     .join("")}
+   ${nextPenalty}
   </div>
  </article>`;
 }
@@ -145,22 +159,46 @@ function renderEncounterSummary(card: ActiveEncounter) {
     typeof card.successThreshold === "number"
       ? card.successThreshold
       : successes;
-  const criticalExtra =
-    typeof card.criticalThreshold === "number"
-      ? Math.max(0, card.criticalThreshold - successThreshold)
-      : 0;
-  const placeholder = "◦";
-  const successValue = `${"✅".repeat(successes)}${placeholder.repeat(Math.max(0, successThreshold - successes))}${card.criticalThreshold ? ` / ${placeholder.repeat(criticalExtra)}` : ""}`;
+  const hasCriticalThreshold = typeof card.criticalThreshold === "number";
+  const criticalThreshold = hasCriticalThreshold
+    ? card.criticalThreshold
+    : successThreshold;
   const failureThreshold =
     typeof card.failureThreshold === "number"
       ? card.failureThreshold
       : failures;
-  const failureValue = `${"☠️".repeat(failures)}${placeholder.repeat(Math.max(0, failureThreshold - failures))}`;
-  return `<dl class="encounter-summary"><div><dt>Successes</dt><dd>${esc(successValue)}</dd></div><div><dt>Failures</dt><dd>${esc(failureValue)}</dd></div></dl>`;
+  const placeholder = "◦";
+  const renderSegment = (filled: number, threshold: number) =>
+    `${"✅".repeat(filled)}${placeholder.repeat(Math.max(0, threshold - filled))}`;
+  const successSegments = [
+    renderSegment(Math.min(successes, successThreshold), successThreshold),
+  ];
+  if (hasCriticalThreshold) {
+    const criticalSpan = Math.max(0, criticalThreshold - successThreshold);
+    if (criticalSpan > 0) {
+      successSegments.push(
+        renderSegment(
+          Math.min(Math.max(successes - successThreshold, 0), criticalSpan),
+          criticalSpan,
+        ),
+      );
+    }
+    if (successes > criticalThreshold)
+      successSegments.push(`✅`.repeat(successes - criticalThreshold));
+  } else if (successes > successThreshold) {
+    successSegments.push(`✅`.repeat(successes - successThreshold));
+  }
+  const failureSegments = [
+    `${"☠️".repeat(Math.min(failures, failureThreshold))}${placeholder.repeat(Math.max(0, failureThreshold - failures))}`,
+  ];
+  if (failures > failureThreshold)
+    failureSegments.push(`☠️`.repeat(failures - failureThreshold));
+  return `<dl class="encounter-summary"><div><dt>Successes</dt><dd>${esc(successSegments.join(" / "))}</dd></div><div><dt>Failures</dt><dd>${esc(failureSegments.join(" / "))}</dd></div></dl>`;
 }
 
 function renderEncounterResults(card: ActiveEncounter) {
   return `<div class="encounter-results">${card.skillChecks
+    .filter((check) => !check.old)
     .map(
       (check) =>
         `<p class="encounter-result-line">${esc(`1d10 (${check.roll}) + ${check.modifier} = ${check.total} .. ${check.success ? "Success!" : "Failure!"}`)}</p>`,
@@ -234,21 +272,35 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
     setActivityPanel(null, "");
   }
 
+  function encounterButtons(card: ActiveEncounter) {
+    if (card.state === "active")
+      return `<div class="encounter-controls"><button id="encounter-continue" class="card-ok" type="button">Continue</button><button id="encounter-concede" class="card-ok" type="button">Concede</button></div>`;
+    if (card.state === "succeeded")
+      return `<div class="encounter-controls"><button id="encounter-continue" class="card-ok" type="button">Continue</button><button id="encounter-finish" class="card-ok" type="button">Finish</button></div>`;
+    if (card.state === "lost" || card.state === "critical")
+      return `<div class="encounter-controls"><button id="encounter-finish" class="card-ok" type="button">Ok</button></div>`;
+    return "";
+  }
+
   function setEncounterPanel(card: ActiveEncounter | null) {
     if (!card) {
+      activeEncounterId = null;
       clearPlay();
       return;
     }
     setActivityPanel(
       "Encounter",
-      `${renderEncounterSummary(card)}${renderActiveEncounterCard(card)}${renderEncounterResults(card)}<div class="encounter-controls"><button id="encounter-finish" class="card-ok" type="button">OK</button></div>`,
+      `${renderEncounterSummary(card)}${renderActiveEncounterCard(card)}${renderEncounterResults(card)}${encounterButtons(card)}`,
     );
     document
-      .querySelector("#encounter-finish")!
-      .addEventListener(
-        "click",
-        () => void finishEncounter(card.tableauId ?? card.id),
-      );
+      .querySelector("#encounter-continue")
+      ?.addEventListener("click", () => void continueEncounter(card.id));
+    document
+      .querySelector("#encounter-concede")
+      ?.addEventListener("click", () => void finishEncounter(card.id, true));
+    document
+      .querySelector("#encounter-finish")
+      ?.addEventListener("click", () => void finishEncounter(card.id));
   }
   function hexCenter(hex: Hex): Point {
     return {
@@ -339,6 +391,8 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
           body: JSON.stringify({ encounterId, tableauId: encounterId }),
         },
       );
+      activeEncounterId = result.encounter.id;
+      syncTableau(tableauData);
       showActiveEncounter(result.encounter);
     } catch (err) {
       console.error(err);
@@ -349,7 +403,29 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
     }
   }
 
-  async function finishEncounter(encounterId: string) {
+  async function continueEncounter(encounterId: string) {
+    busy = true;
+    updateActionButtons();
+    try {
+      const result = await apiJson<ContinueEncounterResponse>(
+        `/api/entities/${encodeURIComponent(player.name)}/actions/continue_encounter`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ encounterId, tableauId: encounterId }),
+        },
+      );
+      setEncounterPanel(result.encounter);
+    } catch (err) {
+      console.error(err);
+      showEncounterError(err instanceof Error ? err.message : String(err));
+    } finally {
+      busy = false;
+      updateActionButtons();
+    }
+  }
+
+  async function finishEncounter(encounterId: string, conceding = false) {
     busy = true;
     updateActionButtons();
     try {
@@ -358,14 +434,25 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ encounterId, tableauId: encounterId }),
+          body: JSON.stringify({
+            encounterId,
+            tableauId: encounterId,
+            conceding,
+          }),
         },
       );
-      Object.assign(player, result.updates);
-      setEncounterPanel(null);
-      if (result.tableauChanged && result.tableau) syncTableau(result.tableau);
-      renderSummary();
-      showEncounterResults(result.card);
+      if (result.encounter) {
+        activeEncounterId = result.encounter.id;
+        setEncounterPanel(result.encounter);
+      } else {
+        if (result.updates) Object.assign(player, result.updates);
+        activeEncounterId = null;
+        setEncounterPanel(null);
+        if (result.tableauChanged && result.tableau)
+          syncTableau(result.tableau);
+        renderSummary();
+        if (result.card) showEncounterResults(result.card);
+      }
     } catch (err) {
       console.error(err);
       showEncounterError(err instanceof Error ? err.message : String(err));

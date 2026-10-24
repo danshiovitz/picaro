@@ -40,7 +40,7 @@ export function instantiateEncounterTemplate(
     nearbyHexes.length > 0 ? nearbyHexes : encounterHexes;
   const successThreshold = 2;
   const criticalThreshold = 3;
-  const failureThreshold = Math.max(0, successThreshold - 2);
+  const failureThreshold = 3;
   return {
     id: randomUUID(),
     title: template.title,

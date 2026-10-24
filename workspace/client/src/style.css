@@ -98,6 +98,12 @@ button {
   cursor: default;
 }
 
+.tableau-encounter.active-tableau-encounter {
+  opacity: 0.45;
+  filter: grayscale(1) saturate(0.25) brightness(0.78);
+  pointer-events: none;
+}
+
 .encounter-header {
   display: flex;
   flex-direction: column;
@@ -212,6 +218,13 @@ button {
   flex-direction: column;
   gap: 4px;
   width: 100%;
+}
+
+.activity-panel .encounter-next-penalty {
+  margin: 14px 0 0;
+  color: #000;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .activity-panel .encounter-result-line {
