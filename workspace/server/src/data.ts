@@ -1,4 +1,11 @@
-import { Claim, EncounterTemplate, Region, Token } from "./types.js";
+import {
+  Claim,
+  EncounterTemplate,
+  PenaltyType,
+  Region,
+  RewardType,
+  Token,
+} from "./types.js";
 
 export const terrainSpecs = [
   ["Forest", "#1a531e", "forest"],
@@ -103,8 +110,9 @@ export const encounterTemplates: EncounterTemplate[] = [
   {
     title: "Dungeon Raid",
     base_difficulty: 0,
-    rewards: ["Gold"],
-    penalties: ["Health"],
+    rewards: [RewardType.Gold],
+    criticalRewards: [RewardType.Gold],
+    penalties: [PenaltyType.Health],
     skills: [
       "Stealth",
       "Endurance",
@@ -117,8 +125,9 @@ export const encounterTemplates: EncounterTemplate[] = [
   {
     title: "Parley",
     base_difficulty: 4,
-    rewards: ["Gold"],
-    penalties: ["Health"],
+    rewards: [RewardType.Gold],
+    criticalRewards: [],
+    penalties: [PenaltyType.Health],
     skills: [
       "Charm",
       "Debate",
@@ -131,8 +140,9 @@ export const encounterTemplates: EncounterTemplate[] = [
   {
     title: "Wandering Sage",
     base_difficulty: 2,
-    rewards: ["Gold"],
-    penalties: ["Health"],
+    rewards: [RewardType.Gold],
+    criticalRewards: [],
+    penalties: [PenaltyType.Health],
     skills: [
       "Research",
       "Observation",
@@ -145,8 +155,9 @@ export const encounterTemplates: EncounterTemplate[] = [
   {
     title: "Bandit Ambush",
     base_difficulty: 1,
-    rewards: ["Gold"],
-    penalties: ["Health"],
+    rewards: [RewardType.Gold],
+    criticalRewards: [],
+    penalties: [PenaltyType.Health],
     skills: [
       "Brutal Fighting",
       "Climb",
@@ -159,8 +170,9 @@ export const encounterTemplates: EncounterTemplate[] = [
   {
     title: "Ancient Ruins",
     base_difficulty: 3,
-    rewards: ["Gold"],
-    penalties: ["Health"],
+    rewards: [RewardType.Gold],
+    criticalRewards: [RewardType.Gold],
+    penalties: [PenaltyType.Health],
     skills: [
       "Architecture",
       "Appraisal",
@@ -173,8 +185,9 @@ export const encounterTemplates: EncounterTemplate[] = [
   {
     title: "Court Intrigue",
     base_difficulty: 5,
-    rewards: ["Gold"],
-    penalties: ["Reputation"],
+    rewards: [RewardType.Gold],
+    criticalRewards: [],
+    penalties: [PenaltyType.Health],
     skills: [
       "Charm",
       "Carousing",

@@ -6,8 +6,10 @@ import type {
   FinishEncounterResponse,
   GameData,
   Hex,
+  PenaltyType,
   PlayerEntity,
   PlayCard,
+  RewardType,
   RunEncounterResponse,
   TableauCard,
   TableauData,
@@ -68,10 +70,19 @@ function esc(value: unknown) {
   );
 }
 
-function outcomeLine(rewards: string[], penalties: string[]) {
+function labelForType(type: string) {
+  return type[0].toUpperCase() + type.slice(1);
+}
+
+function outcomeLine(
+  rewards: RewardType[],
+  criticalRewards: RewardType[],
+  penalties: PenaltyType[],
+) {
   const parts = [
-    ...rewards.map((item) => `+${item}`),
-    ...penalties.map((item) => `-${item}`),
+    ...rewards.map((item) => `+${labelForType(item)}`),
+    ...criticalRewards.map((item) => `++${labelForType(item)}`),
+    ...penalties.map((item) => `-${labelForType(item)}`),
   ];
   return `Outcome: ${parts.join(", ")}`;
 }
@@ -99,7 +110,7 @@ function renderEncounterCard(card: EncounterCard) {
    </div>
   </div>
   <div class="play-card-body encounter-body">
-   <p>${esc(outcomeLine(card.rewards, card.penalties))}</p>
+   <p>${esc(outcomeLine(card.rewards, card.criticalRewards, card.penalties))}</p>
    <div class="encounter-spacer"></div>
    ${card.skillChecks.map((check) => `<p class="encounter-check">${esc(skillLine(check))}</p>`).join("")}
   </div>
@@ -114,11 +125,47 @@ function renderActiveEncounterCard(card: ActiveEncounter) {
    </div>
   </div>
   <div class="play-card-body encounter-body">
-   <p>${esc(outcomeLine(card.rewards, card.penalties))}</p>
+   <p>${esc(outcomeLine(card.rewards, card.criticalRewards, card.penalties))}</p>
    <div class="encounter-spacer"></div>
-   ${card.skillChecks.map((check) => `<p class="encounter-check">${esc(`${check.name} vs ${check.target}`)}</p><p class="encounter-result">${esc(`1d10 (${check.roll}) + ${check.modifier} = ${check.total} .. ${check.success ? "Success! ✅" : "Failure! ☠️"}`)}</p>`).join("")}
+   ${card.skillChecks.map((check) => `<p class="encounter-check">${esc(`${check.name} vs ${check.target}`)}</p>`).join("")}
   </div>
  </article>`;
+}
+
+function renderEncounterSummary(card: ActiveEncounter) {
+  const successes =
+    typeof card.numSuccesses === "number"
+      ? card.numSuccesses
+      : card.skillChecks.filter((check) => check.success).length;
+  const failures =
+    typeof card.numFailures === "number"
+      ? card.numFailures
+      : card.skillChecks.length - successes;
+  const successThreshold =
+    typeof card.successThreshold === "number"
+      ? card.successThreshold
+      : successes;
+  const criticalExtra =
+    typeof card.criticalThreshold === "number"
+      ? Math.max(0, card.criticalThreshold - successThreshold)
+      : 0;
+  const placeholder = "◦";
+  const successValue = `${"✅".repeat(successes)}${placeholder.repeat(Math.max(0, successThreshold - successes))}${card.criticalThreshold ? ` / ${placeholder.repeat(criticalExtra)}` : ""}`;
+  const failureThreshold =
+    typeof card.failureThreshold === "number"
+      ? card.failureThreshold
+      : failures;
+  const failureValue = `${"☠️".repeat(failures)}${placeholder.repeat(Math.max(0, failureThreshold - failures))}`;
+  return `<dl class="encounter-summary"><div><dt>Successes</dt><dd>${esc(successValue)}</dd></div><div><dt>Failures</dt><dd>${esc(failureValue)}</dd></div></dl>`;
+}
+
+function renderEncounterResults(card: ActiveEncounter) {
+  return `<div class="encounter-results">${card.skillChecks
+    .map(
+      (check) =>
+        `<p class="encounter-result-line">${esc(`1d10 (${check.roll}) + ${check.modifier} = ${check.total} .. ${check.success ? "Success!" : "Failure!"}`)}</p>`,
+    )
+    .join("")}</div>`;
 }
 
 function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
@@ -133,19 +180,18 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
       (encounter) => [encounter.location, encounter] as const,
     ),
   );
-  app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button><button id="fit">Fit</button><button id="snap">Snap</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableauData.encounters.map(renderEncounterCard).join("")}</section></div></div><section class="map-side"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="attack" class="action-button" type="button"><img src="/images/actions/swords.svg" alt=""/><span>Attack</span></button></section><section class="play-section"><div id="play-content"></div></section></section></div></main><aside class="right-panel"><section class="encounter-panel"><h2 id="encounter-panel-title" hidden></h2><div id="encounter-panel-content"></div></section></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div>`;
+  app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button><button id="fit">Fit</button><button id="snap">Snap</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableauData.encounters.map(renderEncounterCard).join("")}</section></div></div><section class="map-side"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="attack" class="action-button" type="button"><img src="/images/actions/swords.svg" alt=""/><span>Attack</span></button></section></section></div></main><aside class="right-panel"><section class="activity-panel"><h2 id="activity-panel-title" hidden></h2><div id="activity-panel-content"></div></section></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div>`;
   const map = document.querySelector("#map") as HTMLElement;
   const mapScroll = document.querySelector("#map-scroll") as HTMLElement;
   const tip = document.querySelector("#tip") as HTMLElement;
   const stats = document.querySelector("#character-stats") as HTMLElement;
-  const playContent = document.querySelector("#play-content") as HTMLElement;
+  const activityPanelTitle = document.querySelector(
+    "#activity-panel-title",
+  ) as HTMLElement;
+  const activityPanelContent = document.querySelector(
+    "#activity-panel-content",
+  ) as HTMLElement;
   const tableauEl = document.querySelector(".tableau") as HTMLElement;
-  const encounterPanelTitle = document.querySelector(
-    "#encounter-panel-title",
-  ) as HTMLElement;
-  const encounterPanelContent = document.querySelector(
-    "#encounter-panel-content",
-  ) as HTMLElement;
   const actionButtons = [
     ...document.querySelectorAll(".action-button"),
   ] as HTMLButtonElement[];
@@ -172,32 +218,37 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
   );
 
   function updateActionButtons() {
-    const hasPlay = playContent.innerHTML.trim().length > 0;
+    const hasPlay = activityPanelContent.innerHTML.trim().length > 0;
     actionButtons.forEach((button) => (button.disabled = busy || hasPlay));
   }
-  function setPlay(html: string) {
-    playContent.innerHTML = html;
+  function setActivityPanel(title: string | null, html: string) {
+    activityPanelTitle.hidden = !title;
+    activityPanelTitle.textContent = title ?? "";
+    activityPanelContent.innerHTML = html;
     updateActionButtons();
   }
+  function setPlay(html: string, title: string) {
+    setActivityPanel(title, html);
+  }
   function clearPlay() {
-    playContent.innerHTML = "";
-    updateActionButtons();
+    setActivityPanel(null, "");
   }
 
   function setEncounterPanel(card: ActiveEncounter | null) {
-    encounterPanelTitle.hidden = !card;
-    encounterPanelTitle.textContent = card ? "Encounter" : "";
-    encounterPanelContent.innerHTML = card
-      ? `${renderActiveEncounterCard(card)}<div class="encounter-controls"><button id="encounter-finish" class="card-ok" type="button">OK</button></div>`
-      : "";
-    if (card) {
-      document
-        .querySelector("#encounter-finish")!
-        .addEventListener(
-          "click",
-          () => void finishEncounter(card.tableauId ?? card.id),
-        );
+    if (!card) {
+      clearPlay();
+      return;
     }
+    setActivityPanel(
+      "Encounter",
+      `${renderEncounterSummary(card)}${renderActiveEncounterCard(card)}${renderEncounterResults(card)}<div class="encounter-controls"><button id="encounter-finish" class="card-ok" type="button">OK</button></div>`,
+    );
+    document
+      .querySelector("#encounter-finish")!
+      .addEventListener(
+        "click",
+        () => void finishEncounter(card.tableauId ?? card.id),
+      );
   }
   function hexCenter(hex: Hex): Point {
     return {
@@ -220,9 +271,11 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
     card: PlayCard,
     buttonText = "OK",
     onClick = clearPlay,
+    title = card.title,
   ) {
     setPlay(
       `<article class="play-card"><h3>${esc(card.title)}</h3><div class="play-card-body">${card.lines.map((line) => `<p>${esc(line)}</p>`).join("")}</div></article><button id="card-ok" class="card-ok" type="button">${esc(buttonText)}</button>`,
+      title,
     );
     document.querySelector("#card-ok")!.addEventListener("click", onClick);
   }
@@ -247,6 +300,7 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
   function showEncounterPreview(card: EncounterCard) {
     setPlay(
       `${renderEncounterCard(card)}<div class="encounter-controls"><button id="encounter-ok" class="card-ok" type="button">OK</button><button id="encounter-cancel" class="card-ok" type="button">Cancel</button></div>`,
+      "Encounter",
     );
     document
       .querySelector("#encounter-cancel")!
@@ -270,7 +324,7 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
   }
 
   function showEncounterResults(card: PlayCard) {
-    showGenericCard(card, "OK", clearPlay);
+    showGenericCard(card, "OK", clearPlay, "Encounter");
   }
 
   async function runEncounter(encounterId: string) {
@@ -322,7 +376,7 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
   }
 
   function enterTravelMode() {
-    if (busy || playContent.innerHTML.trim().length > 0) return;
+    if (busy || activityPanelContent.innerHTML.trim().length > 0) return;
     route = [player.location];
     map.classList.add("travel-mode");
     tip.style.display = "none";
@@ -333,6 +387,7 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
   function showTravelCard() {
     setPlay(
       `<article class="play-card travel-card"><h3>Travel</h3><div class="play-card-body route-body"><p>${esc(route!.join(" - "))}</p></div></article><div class="travel-controls"><button id="travel-go" class="card-ok" type="button">Go</button><button id="travel-cancel" class="card-ok" type="button">Cancel</button></div>`,
+      "Travel",
     );
     document
       .querySelector("#travel-cancel")!
@@ -343,6 +398,7 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
   function showTravelError(message: string) {
     setPlay(
       `<article class="play-card error-card"><h3>Travel Error</h3><div class="play-card-body route-body"><p>${esc(message)}</p></div></article><button id="card-ok" class="card-ok" type="button">OK</button>`,
+      "Travel Error",
     );
     document.querySelector("#card-ok")!.addEventListener("click", clearPlay);
   }
@@ -586,7 +642,8 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
 
   function showTip(hex: Hex, anchor: DOMRect) {
     const f = store.fullHex(hex.name)!;
-    const moveHereDisabled = busy || playContent.innerHTML.trim().length > 0;
+    const moveHereDisabled =
+      busy || activityPanelContent.innerHTML.trim().length > 0;
     const claimsText = formatClaims(
       f.claimObjs
         .filter((claim): claim is NonNullable<typeof claim> => Boolean(claim))
@@ -730,11 +787,12 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
       Object.assign(player, result.updates);
       if (result.tableauChanged && result.tableau) syncTableau(result.tableau);
       renderSummary();
-      if (result.card) showGenericCard(result.card);
+      if (result.card) showGenericCard(result.card, "OK", clearPlay, "Camp");
     } catch (err) {
       console.error(err);
       setPlay(
         `<p class="action-error">${esc(err instanceof Error ? err.message : String(err))}</p>`,
+        "Camp Error",
       );
     } finally {
       busy = false;

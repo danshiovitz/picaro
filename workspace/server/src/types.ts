@@ -26,12 +26,21 @@ export type PlayerEntity = {
   turns: number;
   location: string;
 };
+export enum RewardType {
+  Gold = "gold",
+  Reputation = "reputation",
+}
+export enum PenaltyType {
+  Gold = "gold",
+  Health = "health",
+}
 export type EncounterSkillCheck = { name: string; target: number };
 export type EncounterTemplate = {
   title: string;
   base_difficulty: number;
-  rewards: string[];
-  penalties: string[];
+  rewards: RewardType[];
+  criticalRewards: RewardType[];
+  penalties: PenaltyType[];
   skills: string[];
 };
 export type ActiveEncounterSkillCheck = {
@@ -47,8 +56,12 @@ export type TableauCard = {
   title: string;
   location: string;
   difficulty: number;
-  rewards: string[];
-  penalties: string[];
+  successThreshold: number;
+  criticalThreshold?: number;
+  failureThreshold: number;
+  rewards: RewardType[];
+  criticalRewards: RewardType[];
+  penalties: PenaltyType[];
   skillChecks: EncounterSkillCheck[];
 };
 export type TableauData = { encounters: TableauCard[] };
@@ -56,7 +69,13 @@ export type ActiveEncounter = {
   id: string;
   tableauId?: string;
   title: string;
-  rewards: string[];
-  penalties: string[];
+  successThreshold: number;
+  criticalThreshold?: number;
+  failureThreshold: number;
+  numSuccesses: number;
+  numFailures: number;
+  rewards: RewardType[];
+  criticalRewards: RewardType[];
+  penalties: PenaltyType[];
   skillChecks: ActiveEncounterSkillCheck[];
 };

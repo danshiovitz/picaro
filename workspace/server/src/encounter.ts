@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { Hex, PlayerEntity, TableauCard, EncounterTemplate } from "./types.js";
+import { EncounterTemplate, Hex, PlayerEntity, TableauCard } from "./types.js";
 import { skillNames } from "./data.js";
 import { hexDistance } from "./hexmap.js";
 import { RNG } from "./random.js";
@@ -38,6 +38,9 @@ export function instantiateEncounterTemplate(
 
   const locationCandidates =
     nearbyHexes.length > 0 ? nearbyHexes : encounterHexes;
+  const successThreshold = 2;
+  const criticalThreshold = 3;
+  const failureThreshold = Math.max(0, successThreshold - 2);
   return {
     id: randomUUID(),
     title: template.title,
@@ -46,8 +49,12 @@ export function instantiateEncounterTemplate(
         ? randomPick(locationCandidates).name
         : player.location,
     difficulty,
-    rewards: [randomPick(template.rewards)],
-    penalties: [randomPick(template.penalties)],
+    successThreshold,
+    criticalThreshold,
+    failureThreshold,
+    rewards: [...template.rewards],
+    criticalRewards: [...template.criticalRewards],
+    penalties: [...template.penalties],
     skillChecks: [0, 1, 2].map(() => {
       const skillPool = encounterRng.next() < 0.9 ? skillSource : skillNames;
       const target = 4 + difficulty + difficultySwing();

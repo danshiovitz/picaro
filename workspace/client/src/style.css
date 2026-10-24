@@ -151,8 +151,9 @@ button {
 
 .play-card {
   box-sizing: border-box;
-  width: 420px;
-  flex: 0 0 420px;
+  width: 100%;
+  max-width: 100%;
+  flex: 0 0 auto;
   border: 2px solid #7b6038;
   border-radius: 14px;
   background: #f3e5c8;
@@ -163,19 +164,61 @@ button {
   overflow: hidden;
 }
 
-.play-section {
+.activity-panel {
   flex: 1;
   min-height: 0;
   padding: 16px;
   overflow: auto;
   background: #2b323d;
-}
-
-#play-content {
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 12px;
+}
+
+#activity-panel-content {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+}
+
+.activity-panel .encounter-summary {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+
+.activity-panel .encounter-summary > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.activity-panel .encounter-summary dt {
+  color: #b8c1ce;
+  font-weight: 700;
+}
+
+.activity-panel .encounter-summary dd {
+  margin: 0;
+  text-align: right;
+  color: #fff;
+}
+
+.activity-panel .encounter-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.activity-panel .encounter-result-line {
+  margin: 0;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 400;
 }
 
 .play-card h3 {
@@ -194,19 +237,19 @@ button {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 18px;
+  padding: 12px 14px;
   font-size: 28px;
   font-weight: 800;
   line-height: 1.3;
 }
 
 .play-card-body p {
-  margin: 6px 0;
+  margin: 3px 0;
 }
 
 .encounter-card .play-card-body {
   min-height: 0;
-  padding: 16px 18px 18px;
+  padding: 10px 14px 14px;
   align-items: flex-start;
   justify-content: flex-start;
   text-align: left;
@@ -229,7 +272,7 @@ button {
 }
 
 .encounter-result {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
   font-size: 14px;
   font-weight: 700;
 }
@@ -238,6 +281,15 @@ button {
   display: flex;
   gap: 10px;
   justify-content: center;
+}
+
+.activity-panel .play-card {
+  width: 100%;
+  max-width: 100%;
+}
+
+.activity-panel .play-card:not(.encounter-card) .play-card-body {
+  font-size: 24px;
 }
 
 .encounter-link {
@@ -343,6 +395,24 @@ button {
   background: #252b35;
   border-left: 1px solid #596273;
   flex: 0 0 280px;
+}
+
+.right-panel {
+  gap: 12px;
+}
+
+.activity-panel h2 {
+  margin: 0;
+  min-height: 1.2em;
+  align-self: stretch;
+  font-size: 18px;
+  color: #f4ead7;
+}
+
+.encounter-panel h2 {
+  font-size: 18px;
+  margin: 0 0 10px;
+  color: #f4ead7;
 }
 
 .character-summary {
@@ -480,10 +550,6 @@ aside {
   overflow: auto;
 }
 
-.right-panel {
-  gap: 12px;
-}
-
 .encounter-panel {
   display: flex;
   flex-direction: column;
@@ -499,10 +565,10 @@ aside {
   color: #f4ead7;
 }
 
-#encounter-panel-content {
+#activity-panel-content {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   width: 100%;
   gap: 12px;
 }

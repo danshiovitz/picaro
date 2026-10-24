@@ -84,7 +84,10 @@ for (const token of playerTokens) {
     location: locationForToken(token.id),
   });
 }
-const activeEncounters = new Map<string, string>();
+const activeEncounters = new Map<
+  string,
+  import("./types.js").ActiveEncounter
+>();
 const tableau: TableauCard[] = [];
 const encounterRng = new RNG(`${defaultSeed}:encounters`);
 setEncounterContext({ hexes, rng: encounterRng });

@@ -3,7 +3,9 @@ import {
   ActiveEncounterSkillCheck,
   EncounterTemplate,
   Hex,
+  PenaltyType,
   PlayerEntity,
+  RewardType,
   TableauCard,
   TableauData,
 } from "./types.js";
@@ -30,7 +32,7 @@ export type ApiState = {
   hexByName: Map<string, Hex>;
   tokens: { id: string; entityName: string; icon: string }[];
   players: Map<string, PlayerEntity>;
-  activeEncounters: Map<string, string>;
+  activeEncounters: Map<string, ActiveEncounter>;
   tableau: TableauCard[];
   rng: RNG;
 };
@@ -58,15 +60,10 @@ function moveToken(
 }
 
 function activeEncounterFor(card: TableauCard, rng: RNG): ActiveEncounter {
-  return {
-    id: card.id,
-    tableauId: card.id,
-    title: card.title,
-    rewards: card.rewards,
-    penalties: card.penalties,
-    skillChecks: card.skillChecks.map((check): ActiveEncounterSkillCheck => {
+  const skillChecks = card.skillChecks.map(
+    (check): ActiveEncounterSkillCheck => {
       const roll = rng.d6();
-      const modifier = 0;
+      const modifier = 3;
       const total = roll + modifier;
       return {
         name: check.name,
@@ -76,13 +73,85 @@ function activeEncounterFor(card: TableauCard, rng: RNG): ActiveEncounter {
         total,
         success: total >= check.target,
       };
-    }),
+    },
+  );
+  const numSuccesses = skillChecks.filter((check) => check.success).length;
+  const numFailures = skillChecks.length - numSuccesses;
+  return {
+    id: card.id,
+    tableauId: card.id,
+    title: card.title,
+    successThreshold: card.successThreshold,
+    criticalThreshold: card.criticalThreshold,
+    failureThreshold: card.failureThreshold,
+    numSuccesses,
+    numFailures,
+    rewards: card.rewards,
+    criticalRewards: card.criticalRewards,
+    penalties: card.penalties,
+    skillChecks,
   };
 }
 
 function playerDto(hexes: Hex[], player: PlayerEntity) {
   player.location = locationForToken(hexes, player.tokenId);
   return { ...player };
+}
+
+function labelForReward(type: RewardType | PenaltyType) {
+  return type[0].toUpperCase() + type.slice(1);
+}
+
+function adjustGold(player: PlayerEntity, amount: number) {
+  player.gold = Math.max(0, player.gold + amount);
+}
+
+function adjustReputation(player: PlayerEntity, amount: number) {
+  player.reputation = Math.max(0, player.reputation + amount);
+}
+
+function adjustHealth(player: PlayerEntity, amount: number) {
+  player.curHealth = Math.max(
+    0,
+    Math.min(player.maxHealth, player.curHealth + amount),
+  );
+}
+
+function computeReward(player: PlayerEntity, rewardType: RewardType) {
+  switch (rewardType) {
+    case RewardType.Gold:
+      adjustGold(player, 3);
+      return `${labelForReward(rewardType)} +3`;
+    case RewardType.Reputation:
+      adjustReputation(player, 1);
+      return `${labelForReward(rewardType)} +1`;
+  }
+}
+
+function computeCriticalReward(player: PlayerEntity, rewardType: RewardType) {
+  switch (rewardType) {
+    case RewardType.Gold:
+      adjustGold(player, 4);
+      return `${labelForReward(rewardType)} +4`;
+    case RewardType.Reputation:
+      adjustReputation(player, 1);
+      return `${labelForReward(rewardType)} +1`;
+  }
+}
+
+function computePenalty(
+  player: PlayerEntity,
+  penaltyType: PenaltyType,
+  numFailures: number,
+) {
+  switch (penaltyType) {
+    case PenaltyType.Gold:
+      if (numFailures > 0) adjustGold(player, -1);
+      return `${labelForReward(penaltyType)} -${numFailures > 0 ? 1 : 0}`;
+    case PenaltyType.Health:
+      adjustHealth(player, -numFailures);
+      return `${labelForReward(penaltyType)} -${numFailures}`;
+  }
 }
 
 export function getHexes(state: ApiState) {
@@ -207,8 +276,9 @@ export function runEncounter(
     (card) => card.id === request.encounterId,
   );
   if (!encounter) throw new RulesViolation("Encounter not found");
-  state.activeEncounters.set(player.name, request.encounterId);
-  return { encounter: activeEncounterFor(encounter, state.rng) };
+  const active = activeEncounterFor(encounter, state.rng);
+  state.activeEncounters.set(player.name, active);
+  return { encounter: active };
 }
 
 export function finishEncounter(
@@ -216,24 +286,44 @@ export function finishEncounter(
   player: PlayerEntity,
   request: EncounterRequest,
 ) {
-  const activeEncounterId = state.activeEncounters.get(player.name);
+  const active = state.activeEncounters.get(player.name);
   const encounterId = request.tableauId ?? request.encounterId;
-  if (!activeEncounterId || activeEncounterId !== request.encounterId)
+  if (!active || active.id !== request.encounterId)
     throw new RulesViolation("No active encounter to finish");
   const encounter = state.tableau.find(
     (card) => card.id === request.encounterId,
   );
   if (!encounter) throw new RulesViolation("Encounter not found");
-  player.gold += 1;
-  player.curHealth = Math.max(0, player.curHealth - 1);
+  const lines: string[] = [];
+  const meetsFailureThreshold = active.numFailures >= active.failureThreshold;
+  if (
+    !meetsFailureThreshold &&
+    active.numSuccesses >= active.successThreshold
+  ) {
+    for (const reward of active.rewards)
+      lines.push(computeReward(player, reward));
+    if (
+      typeof active.criticalThreshold === "number" &&
+      active.numSuccesses >= active.criticalThreshold
+    ) {
+      for (const reward of active.criticalRewards)
+        lines.push(computeCriticalReward(player, reward));
+    }
+  }
+  for (const penalty of active.penalties)
+    lines.push(computePenalty(player, penalty, active.numFailures));
   state.activeEncounters.delete(player.name);
   const removedEncounterId = removeEncounterFromTableau(state, encounterId)
     ? encounterId
     : undefined;
   const tableauChanged = endTurn(state, player) || Boolean(removedEncounterId);
   return {
-    updates: { gold: player.gold, curHealth: player.curHealth },
-    card: { title: "Encounter Results", lines: ["Gold +1", "Health -1"] },
+    updates: {
+      gold: player.gold,
+      curHealth: player.curHealth,
+      reputation: player.reputation,
+    },
+    card: { title: "Encounter Results", lines },
     removedEncounterId,
     tableauChanged,
     tableau: tableauChanged ? getTableau(state) : undefined,
