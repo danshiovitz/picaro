@@ -86,11 +86,11 @@ function outcomeLine(
     ...criticalRewards.map((item) => `++${labelForType(item)}`),
     ...penalties.map((item) => `-${labelForType(item)}`),
   ];
-  return `Outcome: ${parts.join(", ")}`;
+  return `${parts.join(", ")}`;
 }
 
-function skillLine(check: EncounterSkillCheck) {
-  return `${check.name} vs ${check.target}`;
+function skillLine(check: EncounterSkillCheck, showTarget = true) {
+  return showTarget ? `${check.name} vs ${check.target}` : check.name;
 }
 
 type EncounterCard = TableauCard;
@@ -116,7 +116,13 @@ function renderEncounterCard(card: EncounterCard) {
   <div class="play-card-body encounter-body">
    <p>${esc(outcomeLine(card.rewards, card.criticalRewards, card.penalties))}</p>
    <div class="encounter-spacer"></div>
-   ${card.skillChecks.map((check) => `<p class="encounter-check">${esc(skillLine(check))}</p>`).join("")}
+   ${card.skillChecks
+     .slice(0, 1)
+     .map(
+       (check) =>
+         `<p class="encounter-check">${esc(skillLine(check, false))}</p>`,
+     )
+     .join("")}
   </div>
  </article>`;
 }
