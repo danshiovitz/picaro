@@ -1,4 +1,5 @@
 pi_agent_home/sessions/
+pi_agent_home/models-store.json
 node_modules/
 workspace/client/dist/
 workspace/server/data/

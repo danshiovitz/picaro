@@ -2,6 +2,7 @@ export type Terrain = { name: string; color: string; icon: string };
 export type Region = { name: string };
 export type Claim = { name: string; icon: string };
 export type Token = { id: string; entityName: string; icon: string };
+export type Item = { id: string; name: string };
 export type AxialPoint = { q: number; r: number };
 export type Hex = {
   name: string;
@@ -26,6 +27,7 @@ export type PlayerEntity = {
   reputation: number;
   turns: number;
   location: string;
+  inventory: Item[];
 };
 export enum RewardType {
   Gold = "gold",
@@ -86,6 +88,8 @@ export type PlayCard = { title: string; lines: string[] };
 export type ActionResponse = {
   updates: Partial<PlayerEntity>;
   card?: PlayCard;
+  encounter?: ActiveEncounter;
+  travelRoute?: string[];
   tableauChanged: boolean;
   tableau?: TableauData;
 };
@@ -109,4 +113,5 @@ export type ActiveEncounter = {
   criticalRewards: RewardType[];
   penalties: PenaltyType[];
   skillChecks: ActiveEncounterSkillCheck[];
+  skillCheckTemplate: EncounterSkillCheck[];
 };

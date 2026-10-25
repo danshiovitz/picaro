@@ -1,7 +1,7 @@
 import http from "node:http";
 
-import { PlayerEntity, TableauCard } from "./types.js";
-import { makeTokenId, encounterTemplates } from "./data.js";
+import { Item, PlayerEntity, TableauCard } from "./types.js";
+import { makeItemId, makeTokenId, encounterTemplates } from "./data.js";
 import { loadOrGenerateWorld, MapGeneratorName } from "./map_generator.js";
 import { RNG } from "./random.js";
 import {
@@ -74,6 +74,13 @@ function locationForToken(tokenId: string) {
 }
 
 const players = new Map<string, PlayerEntity>();
+function startingInventory(): Item[] {
+  return ["sword", "shield", "can of coke"].map((name) => ({
+    id: makeItemId(),
+    name,
+  }));
+}
+
 for (const token of playerTokens) {
   players.set(token.entityName, {
     name: token.entityName,
@@ -87,12 +94,15 @@ for (const token of playerTokens) {
     reputation: 10,
     turns: 20,
     location: locationForToken(token.id),
+    inventory: startingInventory(),
   });
 }
 const activeEncounters = new Map<
   string,
   import("./types.js").ActiveEncounter
 >();
+const travelContinuation = new Map<string, boolean>();
+const travelContinuationRoute = new Map<string, string[]>();
 const tableau: TableauCard[] = [];
 const encounterRng = new RNG(`${defaultSeed}:encounters`);
 setEncounterContext({ hexes, rng: encounterRng });
@@ -106,6 +116,8 @@ const apiState: ApiState = {
   tokens: playerTokens,
   players,
   activeEncounters,
+  travelContinuation,
+  travelContinuationRoute,
   tableau,
   rng: encounterRng,
 };

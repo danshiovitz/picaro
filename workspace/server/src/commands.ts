@@ -6,6 +6,7 @@ import {
   EffectType,
   EncounterTemplate,
   Hex,
+  Item,
   PenaltyType,
   PlayerEntity,
   RewardType,
@@ -20,6 +21,7 @@ import {
   claims,
   cityTokens,
   encounterTemplates,
+  terrainEncounterTemplates,
 } from "./data.js";
 import { hexDistance } from "./hexmap.js";
 import { instantiateEncounterTemplate } from "./encounter.js";
@@ -54,11 +56,13 @@ export type ApiState = {
   tokens: { id: string; entityName: string; icon: string }[];
   players: Map<string, PlayerEntity>;
   activeEncounters: Map<string, ActiveEncounter>;
+  travelContinuation: Map<string, boolean>;
+  travelContinuationRoute: Map<string, string[]>;
   tableau: TableauCard[];
   rng: RNG;
 };
 
-export type TravelRequest = { route: string[] };
+export type TravelRequest = { route: string[]; continuing?: boolean };
 export type EncounterRequest = {
   encounterId: string;
   tableauId?: string;
@@ -155,12 +159,17 @@ function activeEncounterFor(card: TableauCard, rng: RNG): ActiveEncounter {
     criticalRewards: card.criticalRewards,
     penalties: card.penalties,
     skillChecks,
+    skillCheckTemplate: card.skillChecks,
   };
+}
+
+function cloneInventory(inventory: Item[]) {
+  return inventory.map((item) => ({ ...item }));
 }
 
 function playerDto(hexes: Hex[], player: PlayerEntity) {
   player.location = locationForToken(hexes, player.tokenId);
-  return { ...player };
+  return { ...player, inventory: cloneInventory(player.inventory) };
 }
 
 function playerUpdates(player: PlayerEntity) {
@@ -171,7 +180,38 @@ function playerUpdates(player: PlayerEntity) {
     turns: player.turns,
     speed: player.speed,
     location: player.location,
+    inventory: cloneInventory(player.inventory),
   } satisfies Partial<PlayerEntity>;
+}
+
+function resolveEncounterEffects(
+  player: PlayerEntity,
+  active: ActiveEncounter,
+  conceding = false,
+) {
+  if (conceding) {
+    active.state = "lost";
+    active.nextPenalty = undefined;
+  }
+  const effects: Effect[] = [];
+  const meetsFailureThreshold = active.numFailures >= active.failureThreshold;
+  if (
+    !meetsFailureThreshold &&
+    active.numSuccesses >= active.successThreshold
+  ) {
+    for (const reward of active.rewards) effects.push(...computeReward(reward));
+    if (
+      typeof active.criticalThreshold === "number" &&
+      active.numSuccesses >= active.criticalThreshold
+    ) {
+      for (const reward of active.criticalRewards)
+        effects.push(...computeCriticalReward(reward));
+    }
+  }
+  for (const penalty of active.penalties)
+    effects.push(...computePenalty(penalty, active.numFailures));
+  applyEffects(player, effects);
+  return effects;
 }
 
 function labelForReward(type: RewardType | PenaltyType) {
@@ -327,6 +367,8 @@ export function performSpecialAction(
     (item) => item.id === request.specialActionId,
   );
   if (!action) throw new RulesViolation("Special action not found");
+  state.travelContinuation.delete(player.name);
+  state.travelContinuationRoute.delete(player.name);
   if (!action.availability(player))
     throw new RulesViolation("Special action is unavailable");
   if (action.locations?.length && !action.locations.includes(player.location))
@@ -383,6 +425,8 @@ function endTurn(state: ApiState, player: PlayerEntity) {
 
 export function campEntity(state: ApiState, player: PlayerEntity) {
   const turnCost = [{ type: EffectType.Turns, amount: 1 }];
+  state.travelContinuation.delete(player.name);
+  state.travelContinuationRoute.delete(player.name);
   if (!canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
   payCost(player, turnCost);
@@ -407,32 +451,88 @@ export function travelEntity(
   request: TravelRequest,
 ) {
   const turnCost = [{ type: EffectType.Turns, amount: 1 }];
-  if (!canAfford(player, turnCost))
+  const canContinueWithoutCost =
+    state.travelContinuation.get(player.name) ?? false;
+  if (!canContinueWithoutCost && !canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
   const route = request.route;
-  if (route.length > player.speed + 1)
-    throw new RulesViolation("The travel route is too long");
+  const storedContinuation = state.travelContinuationRoute.get(player.name);
+  if (storedContinuation) {
+    const sameRoute =
+      storedContinuation.length === route.length &&
+      storedContinuation.every((hex, i) => hex === route[i]);
+    if (!sameRoute) throw new RulesViolation("There are gaps in the route");
+  }
   const current = locationForToken(state.hexes, player.tokenId);
   if (route.length < 1 || route[0] !== current)
     throw new RulesViolation("There are gaps in the route");
-  for (let i = 0; i < route.length; i++) {
-    if (typeof route[i] !== "string" || !state.hexByName.has(route[i])) {
+  const travelPath = route.slice(0, player.speed + 1);
+  for (let i = 0; i < travelPath.length; i++) {
+    if (
+      typeof travelPath[i] !== "string" ||
+      !state.hexByName.has(travelPath[i])
+    ) {
       throw new RulesViolation("There are gaps in the route");
     }
   }
-  for (let i = 1; i < route.length; i++) {
-    const a = state.hexByName.get(route[i - 1])!,
-      b = state.hexByName.get(route[i])!;
+  for (let i = 1; i < travelPath.length; i++) {
+    const a = state.hexByName.get(travelPath[i - 1])!,
+      b = state.hexByName.get(travelPath[i])!;
     if (hexDistance(a, b) !== 1)
       throw new RulesViolation("There are gaps in the route");
   }
-  const destination = route[route.length - 1];
+  const destination = travelPath[travelPath.length - 1];
+  const encounterRoute = travelPath.slice(1);
+  const encounterHexName =
+    encounterRoute.length > 0 && state.rng.next() < 0.5
+      ? state.rng.pick(encounterRoute)
+      : undefined;
+  if (encounterHexName) {
+    const encounterHex = state.hexByName.get(encounterHexName);
+    if (encounterHex) {
+      moveToken(state.hexes, state.hexByName, player.tokenId, encounterHexName);
+      player.location = encounterHexName;
+    }
+    const templates = encounterHex
+      ? (terrainEncounterTemplates[encounterHex.terrain] ?? encounterTemplates)
+      : encounterTemplates;
+    const template = state.rng.pick(templates);
+    const encounterCard = instantiateEncounterTemplate(template, player);
+    encounterCard.location = encounterHexName;
+    const active = {
+      ...activeEncounterFor(encounterCard, state.rng),
+      tableauId: undefined,
+    };
+    state.activeEncounters.set(player.name, active);
+    const resumeRoute = route.slice(route.indexOf(encounterHexName));
+    state.travelContinuation.set(player.name, true);
+    state.travelContinuationRoute.set(player.name, resumeRoute);
+    if (!canContinueWithoutCost) payCost(player, turnCost);
+    return {
+      updates: playerUpdates(player),
+      encounter: active,
+      travelRoute: resumeRoute,
+      tableauChanged: false,
+    };
+  }
   moveToken(state.hexes, state.hexByName, player.tokenId, destination);
   player.location = destination;
-  payCost(player, turnCost);
+  if (!canContinueWithoutCost) payCost(player, turnCost);
+  const remainingRoute =
+    route.length > travelPath.length
+      ? route.slice(travelPath.length - 1)
+      : undefined;
+  if (remainingRoute) {
+    state.travelContinuation.set(player.name, true);
+    state.travelContinuationRoute.set(player.name, remainingRoute);
+  } else {
+    state.travelContinuation.delete(player.name);
+    state.travelContinuationRoute.delete(player.name);
+  }
   const tableauChanged = endTurn(state, player);
   return {
     updates: playerUpdates(player),
+    travelRoute: remainingRoute,
     tableauChanged,
     tableau: tableauChanged ? getTableau(state) : undefined,
   };
@@ -446,6 +546,8 @@ export function runEncounter(
   const turnCost = [{ type: EffectType.Turns, amount: 1 }];
   if (!canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
+  state.travelContinuation.delete(player.name);
+  state.travelContinuationRoute.delete(player.name);
   const encounter = state.tableau.find(
     (card) => card.id === request.encounterId,
   );
@@ -466,10 +568,13 @@ export function continueEncounter(
     throw new RulesViolation("No active encounter to continue");
   if (active.state !== "active" && active.state !== "succeeded")
     throw new RulesViolation("Encounter cannot be continued");
-  const encounter = state.tableau.find(
-    (card) => card.id === request.encounterId,
-  );
-  if (!encounter) throw new RulesViolation("Encounter not found");
+  const encounter = active.tableauId
+    ? state.tableau.find((card) => card.id === request.encounterId)
+    : undefined;
+  if (active.tableauId && !encounter)
+    throw new RulesViolation("Encounter not found");
+  const encounterSkillChecks =
+    encounter?.skillChecks ?? active.skillCheckTemplate;
   if (active.nextPenalty) {
     active.penalties = [...active.penalties, active.nextPenalty];
     active.nextPenalty = undefined;
@@ -478,7 +583,7 @@ export function continueEncounter(
     ...check,
     old: true,
   }));
-  active.skillChecks.push(...rollSkillChecks(encounter.skillChecks, state.rng));
+  active.skillChecks.push(...rollSkillChecks(encounterSkillChecks, state.rng));
   active.numSuccesses = active.skillChecks.filter(
     (check) => check.success,
   ).length;
@@ -491,7 +596,12 @@ export function continueEncounter(
     active.failureThreshold,
   );
   if (active.state === "active" || active.state === "succeeded") {
-    active.nextPenalty = randomPenalty(encounter, state.rng);
+    active.nextPenalty = encounter
+      ? randomPenalty(encounter, state.rng)
+      : randomPenalty(
+          { penalties: active.penalties } as TableauCard,
+          state.rng,
+        );
   }
   return { encounter: active, updates: playerUpdates(player) };
 }
@@ -505,44 +615,30 @@ export function finishEncounter(
   const encounterId = request.tableauId ?? request.encounterId;
   if (!active || active.id !== request.encounterId)
     throw new RulesViolation("No active encounter to finish");
-  const encounter = state.tableau.find(
-    (card) => card.id === request.encounterId,
-  );
-  if (!encounter) throw new RulesViolation("Encounter not found");
+  const encounter = active.tableauId
+    ? state.tableau.find((card) => card.id === request.encounterId)
+    : undefined;
+  if (active.tableauId && !encounter)
+    throw new RulesViolation("Encounter not found");
   if (request.conceding) {
     active.state = "lost";
     active.nextPenalty = undefined;
   }
-  const effects: Effect[] = [];
-  const meetsFailureThreshold = active.numFailures >= active.failureThreshold;
-  if (
-    !meetsFailureThreshold &&
-    active.numSuccesses >= active.successThreshold
-  ) {
-    for (const reward of active.rewards) effects.push(...computeReward(reward));
-    if (
-      typeof active.criticalThreshold === "number" &&
-      active.numSuccesses >= active.criticalThreshold
-    ) {
-      for (const reward of active.criticalRewards)
-        effects.push(...computeCriticalReward(reward));
-    }
-  }
-  for (const penalty of active.penalties)
-    effects.push(...computePenalty(penalty, active.numFailures));
-  applyEffects(player, effects);
+  const effects = resolveEncounterEffects(player, active, request.conceding);
   state.activeEncounters.delete(player.name);
-  const removedEncounterId = removeEncounterFromTableau(state, encounterId)
-    ? encounterId
+  const removedEncounterId = encounter
+    ? removeEncounterFromTableau(state, encounterId)
+      ? encounterId
+      : undefined
     : undefined;
-  const tableauChanged = endTurn(state, player) || Boolean(removedEncounterId);
+  const travelRoute = state.travelContinuationRoute.get(player.name);
+  const tableauChanged = encounter
+    ? endTurn(state, player) || Boolean(removedEncounterId)
+    : false;
   return {
-    updates: {
-      gold: player.gold,
-      curHealth: player.curHealth,
-      reputation: player.reputation,
-    },
+    updates: playerUpdates(player),
     card: { title: "Encounter Results", lines: effectsToLines(effects) },
+    travelRoute,
     removedEncounterId,
     tableauChanged,
     tableau: tableauChanged ? getTableau(state) : undefined,

@@ -1,6 +1,7 @@
 import {
   Claim,
   EncounterTemplate,
+  Item,
   PenaltyType,
   Region,
   RewardType,
@@ -106,6 +107,44 @@ export const skillNames = [
   "Throw",
 ];
 
+const terrainLoreSkills: Record<string, string[]> = {
+  Forest: ["Forest Lore", "Stealth", "Observation"],
+  "Deep Forest": ["Forest Lore", "Stealth", "Observation"],
+  Desert: ["Desert Lore", "Endurance", "Navigation"],
+  Water: ["Sea Lore", "Navigation", "Observation"],
+  Plains: ["Plains Lore", "Ride", "Observation"],
+  Mountain: ["Mountain Lore", "Climb", "Endurance"],
+  Hills: ["Hills Lore", "Ride", "Observation"],
+  Swamp: ["Swamp Lore", "Stealth", "Endurance"],
+  Tundra: ["Arctic Lore", "Endurance", "Navigation"],
+  Jungle: ["Jungle Lore", "Stealth", "Observation"],
+  Badlands: ["Desert Lore", "Throw", "Might"],
+  Marsh: ["Swamp Lore", "Stealth", "Observation"],
+  Glacier: ["Arctic Lore", "Endurance", "Observation"],
+  Savannah: ["Plains Lore", "Ride", "Observation"],
+};
+
+export const terrainEncounterTemplates: Record<string, EncounterTemplate[]> =
+  Object.fromEntries(
+    terrainSpecs.map((terrain) => [
+      terrain.name,
+      [
+        {
+          title: `Beast of the ${terrain.name}`,
+          base_difficulty: 2,
+          rewards: [RewardType.Gold],
+          criticalRewards: [RewardType.Gold],
+          penalties: [PenaltyType.Health],
+          skills: terrainLoreSkills[terrain.name] ?? [
+            "Observation",
+            "Speed",
+            "Might",
+          ],
+        },
+      ],
+    ]),
+  );
+
 export const encounterTemplates: EncounterTemplate[] = [
   {
     title: "Dungeon Raid",
@@ -201,6 +240,9 @@ export const encounterTemplates: EncounterTemplate[] = [
 
 let nextTokenId = 1;
 export const makeTokenId = () => `token-${nextTokenId++}`;
+
+let nextItemId = 1;
+export const makeItemId = () => `item-${nextItemId++}`;
 
 export let cityTokens: Token[] = [
   "Waterdeep",

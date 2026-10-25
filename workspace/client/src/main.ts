@@ -9,6 +9,7 @@ import type {
   FinishEncounterResponse,
   GameData,
   Hex,
+  Item,
   PenaltyType,
   PlayerEntity,
   PlayCard,
@@ -305,6 +306,10 @@ function render(
   let specialActionCatalog = initialSpecialActionCatalog;
   let pendingSpecialAction: { actionId: string; targetHex: string } | null =
     null;
+  let pendingTravelRoute: string[] | null = null;
+  let travelContinuation = false;
+  let travelSpecialAction: { actionId: string; targetHex: string } | null =
+    null;
   const mapBounds = store.data.hexes.reduce(
     (acc, hex) => {
       const { x, y } = hexCenter(hex);
@@ -464,6 +469,9 @@ function render(
       );
       Object.assign(player, result.updates);
       pendingSpecialAction = null;
+      pendingTravelRoute = null;
+      travelContinuation = false;
+      travelSpecialAction = null;
       renderSummary();
       if (result.tableauChanged && result.tableau) syncTableau(result.tableau);
       await refreshSpecialActions();
@@ -539,8 +547,16 @@ function render(
     return Math.max(min, Math.min(max, value));
   }
 
+  function renderInventory(items: Item[]) {
+    return items.length
+      ? `<ul class="inventory-list">${items
+          .map((item) => `<li>${esc(item.name)}</li>`)
+          .join("")}</ul>`
+      : `<p class="inventory-empty">None</p>`;
+  }
+
   function renderSummary() {
-    stats.innerHTML = `<dl><div><dt>Name</dt><dd>${esc(player.name)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${player.maxHealth}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div><dt>Speed</dt><dd>${player.speed}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div></dl>`;
+    stats.innerHTML = `<dl><div><dt>Name</dt><dd>${esc(player.name)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${player.maxHealth}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div><dt>Speed</dt><dd>${player.speed}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div><div class="inventory-row"><dt>Inventory</dt><dd>${renderInventory(player.inventory)}</dd></div></dl>`;
   }
 
   function showGenericCard(
@@ -603,8 +619,8 @@ function render(
     );
   }
 
-  function showEncounterResults(card: PlayCard) {
-    showGenericCard(card, "OK", clearPlay, "Encounter");
+  function showEncounterResults(card: PlayCard, onOk = clearPlay) {
+    showGenericCard(card, "OK", onOk, "Encounter");
   }
 
   async function runEncounter(encounterId: string) {
@@ -682,7 +698,37 @@ function render(
           syncTableau(result.tableau);
         renderSummary();
         await refreshSpecialActions();
-        if (result.card) showEncounterResults(result.card);
+        if (result.card) {
+          const routeAfterEncounter = result.travelRoute ?? pendingTravelRoute;
+          showEncounterResults(result.card, () => {
+            clearPlay();
+            if (routeAfterEncounter?.length) {
+              route = routeAfterEncounter;
+              pendingTravelRoute = null;
+              pendingSpecialAction = travelSpecialAction;
+              travelContinuation = true;
+              map.classList.add("travel-mode");
+              showTravelCard();
+              draw();
+            } else if (
+              travelSpecialAction &&
+              (result.updates.location ?? player.location) ===
+                travelSpecialAction.targetHex
+            ) {
+              pendingTravelRoute = null;
+              travelContinuation = false;
+              const action = specialActionCatalog.find(
+                (item) => item.id === travelSpecialAction.actionId,
+              );
+              if (action)
+                showSpecialActionPrompt(action, travelSpecialAction.targetHex);
+            } else {
+              pendingTravelRoute = null;
+              travelContinuation = false;
+            }
+            travelSpecialAction = null;
+          });
+        }
       }
     } catch (err) {
       console.error(err);
@@ -696,6 +742,8 @@ function render(
   function enterTravelMode() {
     if (busy || activityPanelContent.innerHTML.trim().length > 0) return;
     route = [player.location];
+    pendingTravelRoute = null;
+    travelContinuation = false;
     map.classList.add("travel-mode");
     tip.style.display = "none";
     showTravelCard();
@@ -728,9 +776,9 @@ function render(
   }
 
   function showTravelCard() {
-    const canAfford = canAffordEffects(player, [
-      { type: EffectType.Turns, amount: 1 },
-    ]);
+    const canAfford = travelContinuation
+      ? true
+      : canAffordEffects(player, [{ type: EffectType.Turns, amount: 1 }]);
     setPlay(
       `<article class="play-card travel-card"><h3>Travel</h3><div class="play-card-body route-body"><p>${travelRouteHtml()}</p></div></article><div class="travel-controls"><button id="travel-go" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You\'re out of turns." aria-disabled="true"'}>Go</button><button id="travel-cancel" class="card-ok" type="button">Cancel</button></div>`,
       "Travel",
@@ -744,6 +792,9 @@ function render(
 
   function showTravelError(message: string) {
     pendingSpecialAction = null;
+    pendingTravelRoute = null;
+    travelContinuation = false;
+    travelSpecialAction = null;
     setPlay(
       `<article class="play-card error-card"><h3>Travel Error</h3><div class="play-card-body route-body"><p>${esc(message)}</p></div></article><button id="card-ok" class="card-ok" type="button">OK</button>`,
       "Travel Error",
@@ -760,6 +811,9 @@ function render(
         { method: "POST" },
       );
       Object.assign(player, result.updates);
+      pendingTravelRoute = null;
+      travelContinuation = false;
+      travelSpecialAction = null;
       renderSummary();
       await refreshSpecialActions();
       if (result.card) showGenericCard(result.card, "OK", clearPlay, "Camp");
@@ -783,6 +837,9 @@ function render(
   function exitTravelMode() {
     route = null;
     pendingSpecialAction = null;
+    pendingTravelRoute = null;
+    travelContinuation = false;
+    travelSpecialAction = null;
     map.classList.remove("travel-mode");
     clearPlay();
     draw();
@@ -841,11 +898,9 @@ function render(
 
   async function goTravel() {
     if (!route) return;
-    const maxNodes = player.speed + 1;
-    const submittedRoute = route.slice(0, maxNodes);
-    const remainingRoute =
-      route.length > maxNodes ? route.slice(maxNodes - 1) : null;
     const pendingAction = pendingSpecialAction;
+    travelSpecialAction = pendingAction;
+    const submittedRoute = [...route];
     route = null;
     pendingSpecialAction = null;
     map.classList.remove("travel-mode");
@@ -868,20 +923,35 @@ function render(
       if (result.tableauChanged && result.tableau) syncTableau(result.tableau);
       renderSummary();
       await refreshSpecialActions();
-      const destination = result.updates.location ?? player.location;
-      if (pendingAction && destination === pendingAction.targetHex) {
-        const action = specialActionCatalog.find(
-          (item) => item.id === pendingAction.actionId,
-        );
-        if (action) showSpecialActionPrompt(action, pendingAction.targetHex);
-        else clearPlay();
-      } else if (remainingRoute) {
-        route = remainingRoute;
-        pendingSpecialAction = pendingAction;
-        map.classList.add("travel-mode");
-        showTravelCard();
+      if (result.encounter) {
+        pendingTravelRoute = result.travelRoute ?? null;
+        travelContinuation = Boolean(result.travelRoute?.length);
+        showActiveEncounter(result.encounter);
       } else {
-        clearPlay();
+        const destination = result.updates.location ?? player.location;
+        const continueTravel = () => {
+          if (result.travelRoute?.length) {
+            route = result.travelRoute;
+            pendingSpecialAction = pendingAction;
+            travelContinuation = true;
+            map.classList.add("travel-mode");
+            showTravelCard();
+          } else {
+            travelContinuation = false;
+            pendingTravelRoute = null;
+            travelSpecialAction = null;
+            clearPlay();
+          }
+        };
+        if (pendingAction && destination === pendingAction.targetHex) {
+          const action = specialActionCatalog.find(
+            (item) => item.id === pendingAction.actionId,
+          );
+          if (action) showSpecialActionPrompt(action, pendingAction.targetHex);
+          else clearPlay();
+        } else {
+          continueTravel();
+        }
       }
       draw();
     } catch (err) {
