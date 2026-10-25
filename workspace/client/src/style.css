@@ -530,6 +530,10 @@ button {
   font-weight: 700;
 }
 
+.camp-card .play-card-body {
+  min-height: 180px;
+}
+
 .action-button {
   flex: 1;
   display: flex;

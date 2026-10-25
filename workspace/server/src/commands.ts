@@ -163,6 +163,16 @@ function playerDto(hexes: Hex[], player: PlayerEntity) {
   return { ...player };
 }
 
+function playerUpdates(player: PlayerEntity) {
+  return {
+    curHealth: player.curHealth,
+    gold: player.gold,
+    reputation: player.reputation,
+    turns: player.turns,
+    location: player.location,
+  } satisfies Partial<PlayerEntity>;
+}
+
 function labelForReward(type: RewardType | PenaltyType) {
   return type[0].toUpperCase() + type.slice(1);
 }
@@ -195,6 +205,8 @@ function canAfford(player: PlayerEntity, cost: Effect[]) {
         return player.reputation >= effect.amount;
       case EffectType.Health:
         return player.curHealth >= effect.amount;
+      case EffectType.Turns:
+        return player.turns >= effect.amount;
     }
   });
 }
@@ -210,6 +222,9 @@ function applyEffects(player: PlayerEntity, effects: Effect[]) {
         break;
       case EffectType.Health:
         adjustHealth(player, effect.amount);
+        break;
+      case EffectType.Turns:
+        player.turns = Math.max(0, player.turns + effect.amount);
         break;
     }
   }
@@ -256,6 +271,8 @@ function computePenalty(penaltyType: PenaltyType, numFailures: number) {
       return numFailures > 0
         ? [{ type: EffectType.Health, amount: -numFailures }]
         : [];
+    case PenaltyType.Turns:
+      return [{ type: EffectType.Turns, amount: -1 }];
   }
 }
 
@@ -319,13 +336,7 @@ export function performSpecialAction(
   const lines = effectsToLines(action.execute(state, player));
   player.location = locationForToken(state.hexes, player.tokenId);
   return {
-    updates: {
-      curHealth: player.curHealth,
-      gold: player.gold,
-      reputation: player.reputation,
-      turns: player.turns,
-      location: player.location,
-    },
+    updates: playerUpdates(player),
     card: { title: "Action Results", lines },
     tableauChanged: false,
   };
@@ -370,8 +381,11 @@ function endTurn(state: ApiState, player: PlayerEntity) {
 }
 
 export function campEntity(state: ApiState, player: PlayerEntity) {
+  const turnCost = [{ type: EffectType.Turns, amount: 1 }];
+  if (!canAfford(player, turnCost))
+    throw new RulesViolation("You can't afford to perform this action.");
+  payCost(player, turnCost);
   player.curHealth = Math.min(player.maxHealth, player.curHealth + 1);
-  player.turns = Math.max(0, player.turns - 1);
   player.location = locationForToken(state.hexes, player.tokenId);
   const tableauChanged = endTurn(state, player);
   return {
@@ -391,6 +405,9 @@ export function travelEntity(
   player: PlayerEntity,
   request: TravelRequest,
 ) {
+  const turnCost = [{ type: EffectType.Turns, amount: 1 }];
+  if (!canAfford(player, turnCost))
+    throw new RulesViolation("You can't afford to perform this action.");
   const route = request.route;
   if (route.length > 4)
     throw new RulesViolation("The travel route is too long");
@@ -411,10 +428,10 @@ export function travelEntity(
   const destination = route[route.length - 1];
   moveToken(state.hexes, state.hexByName, player.tokenId, destination);
   player.location = destination;
-  player.turns = Math.max(0, player.turns - 1);
+  payCost(player, turnCost);
   const tableauChanged = endTurn(state, player);
   return {
-    updates: { location: player.location, turns: player.turns },
+    updates: playerUpdates(player),
     tableauChanged,
     tableau: tableauChanged ? getTableau(state) : undefined,
   };
@@ -425,13 +442,17 @@ export function runEncounter(
   player: PlayerEntity,
   request: EncounterRequest,
 ) {
+  const turnCost = [{ type: EffectType.Turns, amount: 1 }];
+  if (!canAfford(player, turnCost))
+    throw new RulesViolation("You can't afford to perform this action.");
   const encounter = state.tableau.find(
     (card) => card.id === request.encounterId,
   );
   if (!encounter) throw new RulesViolation("Encounter not found");
+  payCost(player, turnCost);
   const active = activeEncounterFor(encounter, state.rng);
   state.activeEncounters.set(player.name, active);
-  return { encounter: active };
+  return { encounter: active, updates: { turns: player.turns } };
 }
 
 export function continueEncounter(
@@ -471,7 +492,7 @@ export function continueEncounter(
   if (active.state === "active" || active.state === "succeeded") {
     active.nextPenalty = randomPenalty(encounter, state.rng);
   }
-  return { encounter: active };
+  return { encounter: active, updates: playerUpdates(player) };
 }
 
 export function finishEncounter(

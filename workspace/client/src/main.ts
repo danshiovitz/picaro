@@ -114,6 +114,8 @@ function canAffordEffects(player: PlayerEntity, effects: Effect[]) {
         return player.reputation >= effect.amount;
       case EffectType.Health:
         return player.curHealth >= effect.amount;
+      case EffectType.Turns:
+        return player.turns >= effect.amount;
     }
   });
 }
@@ -572,16 +574,20 @@ function render(
   }
 
   function showEncounterPreview(card: EncounterCard) {
+    const canAfford = canAffordEffects(player, [
+      { type: EffectType.Turns, amount: 1 },
+    ]);
     setPlay(
-      `${renderEncounterCard(card)}<div class="encounter-controls"><button id="encounter-ok" class="card-ok" type="button">OK</button><button id="encounter-cancel" class="card-ok" type="button">Cancel</button></div>`,
+      `${renderEncounterCard(card)}<div class="encounter-controls"><button id="encounter-ok" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You\'re out of turns." aria-disabled="true"'}>OK</button><button id="encounter-cancel" class="card-ok" type="button">Cancel</button></div>`,
       "Encounter",
     );
     document
       .querySelector("#encounter-cancel")!
       .addEventListener("click", clearPlay);
-    document
-      .querySelector("#encounter-ok")!
-      .addEventListener("click", () => void runEncounter(card.id));
+    if (canAfford)
+      document
+        .querySelector("#encounter-ok")!
+        .addEventListener("click", () => void runEncounter(card.id));
   }
 
   function showActiveEncounter(card: ActiveEncounter) {
@@ -614,7 +620,9 @@ function render(
         },
       );
       activeEncounterId = result.encounter.id;
+      if (result.updates) Object.assign(player, result.updates);
       syncTableau(tableauData);
+      renderSummary();
       showActiveEncounter(result.encounter);
     } catch (err) {
       console.error(err);
@@ -694,15 +702,34 @@ function render(
     draw();
   }
 
-  function showTravelCard() {
+  function showCampCard() {
+    const canAfford = canAffordEffects(player, [
+      { type: EffectType.Turns, amount: 1 },
+    ]);
     setPlay(
-      `<article class="play-card travel-card"><h3>Travel</h3><div class="play-card-body route-body"><p>${esc(route!.join(" - "))}</p></div></article><div class="travel-controls"><button id="travel-go" class="card-ok" type="button">Go</button><button id="travel-cancel" class="card-ok" type="button">Cancel</button></div>`,
+      `<article class="play-card camp-card"><h3>Camp</h3><div class="play-card-body"><img src="/images/actions/campfire.svg" alt="Campfire" style="width:120px;height:120px;object-fit:contain"/></div></article><div class="travel-controls"><button id="camp-go" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You\'re out of turns." aria-disabled="true"'}>OK</button><button id="camp-cancel" class="card-ok" type="button">Cancel</button></div>`,
+      "Camp",
+    );
+    document
+      .querySelector("#camp-cancel")!
+      .addEventListener("click", clearPlay);
+    if (canAfford)
+      document.querySelector("#camp-go")!.addEventListener("click", goCamp);
+  }
+
+  function showTravelCard() {
+    const canAfford = canAffordEffects(player, [
+      { type: EffectType.Turns, amount: 1 },
+    ]);
+    setPlay(
+      `<article class="play-card travel-card"><h3>Travel</h3><div class="play-card-body route-body"><p>${esc(route!.join(" - "))}</p></div></article><div class="travel-controls"><button id="travel-go" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You\'re out of turns." aria-disabled="true"'}>Go</button><button id="travel-cancel" class="card-ok" type="button">Cancel</button></div>`,
       "Travel",
     );
     document
       .querySelector("#travel-cancel")!
       .addEventListener("click", exitTravelMode);
-    document.querySelector("#travel-go")!.addEventListener("click", goTravel);
+    if (canAfford)
+      document.querySelector("#travel-go")!.addEventListener("click", goTravel);
   }
 
   function showTravelError(message: string) {
@@ -712,6 +739,35 @@ function render(
       "Travel Error",
     );
     document.querySelector("#card-ok")!.addEventListener("click", clearPlay);
+  }
+
+  async function goCamp() {
+    busy = true;
+    updateActionButtons();
+    try {
+      const result = await apiJson<ActionResponse>(
+        `/api/entities/${encodeURIComponent(player.name)}/actions/camp`,
+        { method: "POST" },
+      );
+      Object.assign(player, result.updates);
+      renderSummary();
+      await refreshSpecialActions();
+      if (result.card) showGenericCard(result.card, "OK", clearPlay, "Camp");
+    } catch (err) {
+      console.error(err);
+      showGenericCard(
+        {
+          title: "Camp Error",
+          lines: [err instanceof Error ? err.message : String(err)],
+        },
+        "OK",
+        clearPlay,
+        "Camp Error",
+      );
+    } finally {
+      busy = false;
+      updateActionButtons();
+    }
   }
 
   function exitTravelMode() {
@@ -1133,30 +1189,7 @@ function render(
     draw();
   });
   document.querySelector("#travel")!.addEventListener("click", enterTravelMode);
-  document.querySelector("#camp")!.addEventListener("click", async () => {
-    busy = true;
-    updateActionButtons();
-    try {
-      const result = await apiJson<ActionResponse>(
-        `/api/entities/${encodeURIComponent(player.name)}/actions/camp`,
-        { method: "POST" },
-      );
-      Object.assign(player, result.updates);
-      if (result.tableauChanged && result.tableau) syncTableau(result.tableau);
-      renderSummary();
-      await refreshSpecialActions();
-      if (result.card) showGenericCard(result.card, "OK", clearPlay, "Camp");
-    } catch (err) {
-      console.error(err);
-      setPlay(
-        `<p class="action-error">${esc(err instanceof Error ? err.message : String(err))}</p>`,
-        "Camp Error",
-      );
-    } finally {
-      busy = false;
-      updateActionButtons();
-    }
-  });
+  document.querySelector("#camp")!.addEventListener("click", showCampCard);
   window.addEventListener("resize", () => {
     if (!manualZoom) {
       fitInitialZoom();

@@ -33,11 +33,13 @@ export enum RewardType {
 export enum PenaltyType {
   Gold = "gold",
   Health = "health",
+  Turns = "turns",
 }
 export enum EffectType {
   Gold = "gold",
   Reputation = "reputation",
   Health = "health",
+  Turns = "turns",
 }
 export type Effect = { type: EffectType; amount: number };
 export type EncounterSkillCheck = { name: string; target: number };
@@ -87,6 +89,10 @@ export type ActionResponse = {
   tableau?: TableauData;
 };
 export type SpecialActionRequest = { specialActionId: string };
+export type RunEncounterResponse = {
+  encounter: ActiveEncounter;
+  updates?: Partial<PlayerEntity>;
+};
 export type ActiveEncounter = {
   id: string;
   tableauId?: string;
