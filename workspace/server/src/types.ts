@@ -21,6 +21,7 @@ export type PlayerEntity = {
   maxHealth: number;
   curLuck: number;
   maxLuck: number;
+  speed: number;
   gold: number;
   reputation: number;
   turns: number;

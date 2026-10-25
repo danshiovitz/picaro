@@ -169,6 +169,7 @@ function playerUpdates(player: PlayerEntity) {
     gold: player.gold,
     reputation: player.reputation,
     turns: player.turns,
+    speed: player.speed,
     location: player.location,
   } satisfies Partial<PlayerEntity>;
 }
@@ -370,7 +371,7 @@ function endTurn(state: ApiState, player: PlayerEntity) {
     const before = state.tableau.length;
     state.tableau = state.tableau.filter((card) => {
       const hex = state.hexByName.get(card.location);
-      return hex ? hexDistance(currentHex, hex) <= 6 : true;
+      return hex ? hexDistance(currentHex, hex) <= 2 * player.speed : true;
     });
     if (state.tableau.length !== before) changed = true;
   }
@@ -409,7 +410,7 @@ export function travelEntity(
   if (!canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
   const route = request.route;
-  if (route.length > 4)
+  if (route.length > player.speed + 1)
     throw new RulesViolation("The travel route is too long");
   const current = locationForToken(state.hexes, player.tokenId);
   if (route.length < 1 || route[0] !== current)
@@ -452,7 +453,7 @@ export function runEncounter(
   payCost(player, turnCost);
   const active = activeEncounterFor(encounter, state.rng);
   state.activeEncounters.set(player.name, active);
-  return { encounter: active, updates: { turns: player.turns } };
+  return { encounter: active, updates: playerUpdates(player) };
 }
 
 export function continueEncounter(

@@ -591,6 +591,10 @@ button {
   text-align: center;
 }
 
+.travel-route-future {
+  color: #8a93a1;
+}
+
 .travel-controls {
   display: flex;
   gap: 10px;

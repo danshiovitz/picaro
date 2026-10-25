@@ -24,7 +24,9 @@ function difficultySwing() {
 function hexesNearPlayer(player: PlayerEntity) {
   const origin = encounterHexes.find((hex) => hex.name === player.location);
   if (!origin) return [...encounterHexes];
-  const nearby = encounterHexes.filter((hex) => hexDistance(origin, hex) <= 3);
+  const nearby = encounterHexes.filter(
+    (hex) => hexDistance(origin, hex) <= player.speed,
+  );
   return nearby.length > 0 ? nearby : [...encounterHexes];
 }
 

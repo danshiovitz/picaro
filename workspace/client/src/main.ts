@@ -363,7 +363,7 @@ function render(
       if (!origin) return false;
       return action.locations.some((location) => {
         const hex = store.hexes.get(location);
-        return hex ? store.distance(origin, hex) <= 3 : false;
+        return hex ? store.distance(origin, hex) <= player.speed : false;
       });
     });
   }
@@ -540,7 +540,7 @@ function render(
   }
 
   function renderSummary() {
-    stats.innerHTML = `<dl><div><dt>Name</dt><dd>${esc(player.name)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${player.maxHealth}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div></dl>`;
+    stats.innerHTML = `<dl><div><dt>Name</dt><dd>${esc(player.name)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${player.maxHealth}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div><dt>Speed</dt><dd>${player.speed}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div></dl>`;
   }
 
   function showGenericCard(
@@ -717,12 +717,22 @@ function render(
       document.querySelector("#camp-go")!.addEventListener("click", goCamp);
   }
 
+  function travelRouteHtml() {
+    const maxNodes = player.speed + 1;
+    return route!
+      .map((hexName, index) => {
+        const cls = index >= maxNodes ? ' class="travel-route-future"' : "";
+        return `<span${cls}>${esc(hexName)}</span>`;
+      })
+      .join(" - ");
+  }
+
   function showTravelCard() {
     const canAfford = canAffordEffects(player, [
       { type: EffectType.Turns, amount: 1 },
     ]);
     setPlay(
-      `<article class="play-card travel-card"><h3>Travel</h3><div class="play-card-body route-body"><p>${esc(route!.join(" - "))}</p></div></article><div class="travel-controls"><button id="travel-go" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You\'re out of turns." aria-disabled="true"'}>Go</button><button id="travel-cancel" class="card-ok" type="button">Cancel</button></div>`,
+      `<article class="play-card travel-card"><h3>Travel</h3><div class="play-card-body route-body"><p>${travelRouteHtml()}</p></div></article><div class="travel-controls"><button id="travel-go" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You\'re out of turns." aria-disabled="true"'}>Go</button><button id="travel-cancel" class="card-ok" type="button">Cancel</button></div>`,
       "Travel",
     );
     document
@@ -831,7 +841,10 @@ function render(
 
   async function goTravel() {
     if (!route) return;
-    const submittedRoute = [...route];
+    const maxNodes = player.speed + 1;
+    const submittedRoute = route.slice(0, maxNodes);
+    const remainingRoute =
+      route.length > maxNodes ? route.slice(maxNodes - 1) : null;
     const pendingAction = pendingSpecialAction;
     route = null;
     pendingSpecialAction = null;
@@ -862,6 +875,11 @@ function render(
         );
         if (action) showSpecialActionPrompt(action, pendingAction.targetHex);
         else clearPlay();
+      } else if (remainingRoute) {
+        route = remainingRoute;
+        pendingSpecialAction = pendingAction;
+        map.classList.add("travel-mode");
+        showTravelCard();
       } else {
         clearPlay();
       }

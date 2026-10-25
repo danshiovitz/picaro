@@ -82,6 +82,7 @@ for (const token of playerTokens) {
     maxHealth: 10,
     curLuck: 1,
     maxLuck: 3,
+    speed: 3,
     gold: 0,
     reputation: 10,
     turns: 20,
