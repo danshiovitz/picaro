@@ -305,17 +305,20 @@ button {
   font-size: 24px;
 }
 
-.encounter-link {
+.encounter-link,
+.special-action-popup-link {
   color: #234fb6;
   text-decoration: underline;
   font-weight: 800;
 }
 
-.encounter-link:hover {
+.encounter-link:hover,
+.special-action-popup-link:hover {
   filter: brightness(1.12);
 }
 
-.encounter-link.disabled {
+.encounter-link.disabled,
+.special-action-popup-link.disabled {
   color: #234fb6;
   cursor: not-allowed;
   filter: none;
@@ -323,7 +326,8 @@ button {
   text-decoration: underline;
 }
 
-.encounter-link.disabled:hover {
+.encounter-link.disabled:hover,
+.special-action-popup-link.disabled:hover {
   filter: none;
 }
 
@@ -467,11 +471,63 @@ button {
   min-height: 96px;
   padding: 12px;
   display: flex;
+  flex-direction: column;
   gap: 10px;
-  align-items: center;
-  justify-content: space-between;
   border-bottom: 1px solid #596273;
   background: #202731;
+}
+
+.action-buttons-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.special-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.special-actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.special-action-link {
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border: 1px solid #778293;
+  border-radius: 8px;
+  background: #2a3340;
+  color: #f4ead7;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.special-action-link:hover:not(:disabled) {
+  filter: brightness(1.13);
+}
+
+.special-action-link:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  filter: grayscale(0.8);
+}
+
+.special-action-controls {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.special-action-cost {
+  margin-top: 10px;
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .action-button {
@@ -546,8 +602,17 @@ button {
   font-weight: 700;
 }
 
-.card-ok:hover {
+.card-ok:hover:not(:disabled) {
   filter: brightness(1.15);
+}
+
+.card-ok:disabled {
+  cursor: not-allowed;
+  background: #666f7b;
+  border-color: #8d97a5;
+  color: #e1e6ee;
+  opacity: 0.75;
+  filter: grayscale(0.9);
 }
 
 .action-error {

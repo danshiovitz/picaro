@@ -16,9 +16,12 @@ import {
   getGame,
   getHexes,
   getRegions,
+  getSpecialActionCatalog,
+  getSpecialActions,
   getTableau,
   getTerrain,
   getTokens,
+  performSpecialAction,
   runEncounter,
   travelEntity,
 } from "./commands.js";
@@ -156,9 +159,21 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, getTableau(apiState));
     if (req.method === "GET" && path === "/api/game")
       return sendJson(res, 200, getGame(apiState));
+    if (req.method === "GET" && path === "/api/special_actions")
+      return sendJson(res, 200, getSpecialActionCatalog());
+
+    const specialActionsMatch = path.match(
+      /^\/api\/entities\/([^/]+)\/special_actions$/,
+    );
+    if (specialActionsMatch) {
+      const player = players.get(specialActionsMatch[1]);
+      if (!player) return sendJson(res, 404, { error: "Entity not found" });
+      if (req.method === "GET")
+        return sendJson(res, 200, getSpecialActions(apiState, player));
+    }
 
     const entityMatch = path.match(
-      /^\/api\/entities\/([^/]+)(?:\/actions\/(camp|travel|run_encounter|continue_encounter|finish_encounter))?$/,
+      /^\/api\/entities\/([^/]+)(?:\/actions\/(camp|travel|run_encounter|continue_encounter|finish_encounter|special_action))?$/,
     );
     if (entityMatch) {
       const player = players.get(entityMatch[1]);
@@ -206,6 +221,18 @@ const server = http.createServer(async (req, res) => {
           conceding: Boolean(body?.conceding),
         };
         return sendJson(res, 200, finishEncounter(apiState, player, request));
+      }
+
+      if (req.method === "POST" && action === "special_action") {
+        const body = await readJson(req);
+        const request = {
+          specialActionId: String(body?.specialActionId ?? ""),
+        };
+        return sendJson(
+          res,
+          200,
+          performSpecialAction(apiState, player, request),
+        );
       }
     }
 

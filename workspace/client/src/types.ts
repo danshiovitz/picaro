@@ -28,6 +28,12 @@ export enum PenaltyType {
   Gold = "gold",
   Health = "health",
 }
+export enum EffectType {
+  Gold = "gold",
+  Reputation = "reputation",
+  Health = "health",
+}
+export type Effect = { type: EffectType; amount: number };
 export type EncounterSkillCheck = { name: string; target: number };
 export type EncounterTemplate = {
   title: string;
@@ -61,6 +67,12 @@ export type TableauCard = {
   skillChecks: EncounterSkillCheck[];
 };
 export type TableauData = { encounters: TableauCard[] };
+export type SpecialAction = {
+  id: string;
+  name: string;
+  locations?: string[];
+  cost: Effect[];
+};
 export type PlayerEntity = {
   name: string;
   tokenId: string;

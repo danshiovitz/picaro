@@ -1,11 +1,16 @@
 import {
+  ActionResponse,
   ActiveEncounter,
   ActiveEncounterSkillCheck,
+  Effect,
+  EffectType,
   EncounterTemplate,
   Hex,
   PenaltyType,
   PlayerEntity,
   RewardType,
+  SpecialAction,
+  SpecialActionRequest,
   TableauCard,
   TableauData,
 } from "./types.js";
@@ -26,6 +31,22 @@ export class RulesViolation extends Error {
     this.name = "RulesViolation";
   }
 }
+
+type SpecialActionDefinition = SpecialAction & {
+  availability: (player: PlayerEntity) => boolean;
+  execute: (state: ApiState, player: PlayerEntity) => Effect[];
+};
+
+const specialActions: SpecialActionDefinition[] = [
+  {
+    id: "medical-visit",
+    name: "Medical Visit",
+    locations: ["C10"],
+    cost: [{ type: EffectType.Gold, amount: 2 }],
+    availability: (player) => player.curHealth < player.maxHealth,
+    execute: (_state, _player) => [{ type: EffectType.Health, amount: 2 }],
+  },
+];
 
 export type ApiState = {
   hexes: Hex[];
@@ -146,6 +167,10 @@ function labelForReward(type: RewardType | PenaltyType) {
   return type[0].toUpperCase() + type.slice(1);
 }
 
+function labelForEffect(type: EffectType) {
+  return type[0].toUpperCase() + type.slice(1);
+}
+
 function adjustGold(player: PlayerEntity, amount: number) {
   player.gold = Math.max(0, player.gold + amount);
 }
@@ -161,40 +186,76 @@ function adjustHealth(player: PlayerEntity, amount: number) {
   );
 }
 
-function computeReward(player: PlayerEntity, rewardType: RewardType) {
-  switch (rewardType) {
-    case RewardType.Gold:
-      adjustGold(player, 3);
-      return `${labelForReward(rewardType)} +3`;
-    case RewardType.Reputation:
-      adjustReputation(player, 1);
-      return `${labelForReward(rewardType)} +1`;
+function canAfford(player: PlayerEntity, cost: Effect[]) {
+  return cost.every((effect) => {
+    switch (effect.type) {
+      case EffectType.Gold:
+        return player.gold >= effect.amount;
+      case EffectType.Reputation:
+        return player.reputation >= effect.amount;
+      case EffectType.Health:
+        return player.curHealth >= effect.amount;
+    }
+  });
+}
+
+function applyEffects(player: PlayerEntity, effects: Effect[]) {
+  for (const effect of effects) {
+    switch (effect.type) {
+      case EffectType.Gold:
+        adjustGold(player, effect.amount);
+        break;
+      case EffectType.Reputation:
+        adjustReputation(player, effect.amount);
+        break;
+      case EffectType.Health:
+        adjustHealth(player, effect.amount);
+        break;
+    }
   }
 }
 
-function computeCriticalReward(player: PlayerEntity, rewardType: RewardType) {
+function payCost(player: PlayerEntity, cost: Effect[]) {
+  applyEffects(
+    player,
+    cost.map((effect) => ({ ...effect, amount: -effect.amount })),
+  );
+}
+
+function effectLabelLine(effect: Effect) {
+  return `${effect.amount >= 0 ? "+" : "-"}${Math.abs(effect.amount)} ${labelForEffect(effect.type)}`;
+}
+
+function effectsToLines(effects: Effect[]) {
+  return effects.map(effectLabelLine);
+}
+
+function computeReward(rewardType: RewardType) {
   switch (rewardType) {
     case RewardType.Gold:
-      adjustGold(player, 4);
-      return `${labelForReward(rewardType)} +4`;
+      return [{ type: EffectType.Gold, amount: 3 }];
     case RewardType.Reputation:
-      adjustReputation(player, 1);
-      return `${labelForReward(rewardType)} +1`;
+      return [{ type: EffectType.Reputation, amount: 1 }];
   }
 }
 
-function computePenalty(
-  player: PlayerEntity,
-  penaltyType: PenaltyType,
-  numFailures: number,
-) {
+function computeCriticalReward(rewardType: RewardType) {
+  switch (rewardType) {
+    case RewardType.Gold:
+      return [{ type: EffectType.Gold, amount: 4 }];
+    case RewardType.Reputation:
+      return [{ type: EffectType.Reputation, amount: 1 }];
+  }
+}
+
+function computePenalty(penaltyType: PenaltyType, numFailures: number) {
   switch (penaltyType) {
     case PenaltyType.Gold:
-      if (numFailures > 0) adjustGold(player, -1);
-      return `${labelForReward(penaltyType)} -${numFailures > 0 ? 1 : 0}`;
+      return numFailures > 0 ? [{ type: EffectType.Gold, amount: -1 }] : [];
     case PenaltyType.Health:
-      adjustHealth(player, -numFailures);
-      return `${labelForReward(penaltyType)} -${numFailures}`;
+      return numFailures > 0
+        ? [{ type: EffectType.Health, amount: -numFailures }]
+        : [];
   }
 }
 
@@ -220,6 +281,54 @@ export function getTokens(state: ApiState) {
 
 export function getTableau(state: ApiState): TableauData {
   return { encounters: state.tableau };
+}
+
+export function getSpecialActionCatalog(): SpecialAction[] {
+  return specialActions.map(
+    ({ availability: _availability, execute: _execute, ...action }) => action,
+  );
+}
+
+export function getSpecialActions(
+  state: ApiState,
+  player: PlayerEntity,
+): SpecialAction[] {
+  return specialActions
+    .filter((action) => action.availability(player))
+    .map(
+      ({ availability: _availability, execute: _execute, ...action }) => action,
+    );
+}
+
+export function performSpecialAction(
+  state: ApiState,
+  player: PlayerEntity,
+  request: SpecialActionRequest,
+): ActionResponse {
+  const action = specialActions.find(
+    (item) => item.id === request.specialActionId,
+  );
+  if (!action) throw new RulesViolation("Special action not found");
+  if (!action.availability(player))
+    throw new RulesViolation("Special action is unavailable");
+  if (action.locations?.length && !action.locations.includes(player.location))
+    throw new RulesViolation("Special action cannot be performed here");
+  if (!canAfford(player, action.cost))
+    throw new RulesViolation("You can't afford to perform this action.");
+  payCost(player, action.cost);
+  const lines = effectsToLines(action.execute(state, player));
+  player.location = locationForToken(state.hexes, player.tokenId);
+  return {
+    updates: {
+      curHealth: player.curHealth,
+      gold: player.gold,
+      reputation: player.reputation,
+      turns: player.turns,
+      location: player.location,
+    },
+    card: { title: "Action Results", lines },
+    tableauChanged: false,
+  };
 }
 
 export function getGame(state: ApiState) {
@@ -382,24 +491,24 @@ export function finishEncounter(
     active.state = "lost";
     active.nextPenalty = undefined;
   }
-  const lines: string[] = [];
+  const effects: Effect[] = [];
   const meetsFailureThreshold = active.numFailures >= active.failureThreshold;
   if (
     !meetsFailureThreshold &&
     active.numSuccesses >= active.successThreshold
   ) {
-    for (const reward of active.rewards)
-      lines.push(computeReward(player, reward));
+    for (const reward of active.rewards) effects.push(...computeReward(reward));
     if (
       typeof active.criticalThreshold === "number" &&
       active.numSuccesses >= active.criticalThreshold
     ) {
       for (const reward of active.criticalRewards)
-        lines.push(computeCriticalReward(player, reward));
+        effects.push(...computeCriticalReward(reward));
     }
   }
   for (const penalty of active.penalties)
-    lines.push(computePenalty(player, penalty, active.numFailures));
+    effects.push(...computePenalty(penalty, active.numFailures));
+  applyEffects(player, effects);
   state.activeEncounters.delete(player.name);
   const removedEncounterId = removeEncounterFromTableau(state, encounterId)
     ? encounterId
@@ -411,7 +520,7 @@ export function finishEncounter(
       curHealth: player.curHealth,
       reputation: player.reputation,
     },
-    card: { title: "Encounter Results", lines },
+    card: { title: "Encounter Results", lines: effectsToLines(effects) },
     removedEncounterId,
     tableauChanged,
     tableau: tableauChanged ? getTableau(state) : undefined,

@@ -1,8 +1,10 @@
 import { GameStore } from "./store";
+import { EffectType } from "./types";
 import type {
   ActionResponse,
   ActiveEncounter,
   ContinueEncounterResponse,
+  Effect,
   EncounterSkillCheck,
   FinishEncounterResponse,
   GameData,
@@ -12,6 +14,7 @@ import type {
   PlayCard,
   RewardType,
   RunEncounterResponse,
+  SpecialAction,
   TableauCard,
   TableauData,
 } from "./types";
@@ -58,8 +61,22 @@ Promise.all([
     20,
   ),
   apiJson<TableauData>("/api/tableau", undefined, 20),
+  apiJson<SpecialAction[]>("/api/special_actions", undefined, 20),
+  apiJson<SpecialAction[]>(
+    `/api/entities/${encodeURIComponent(PLAYER_NAME)}/special_actions`,
+    undefined,
+    20,
+  ),
 ])
-  .then(([d, player, tableau]) => render(new GameStore(d), player, tableau))
+  .then(([d, player, tableau, specialActionCatalog, specialActions]) =>
+    render(
+      new GameStore(d),
+      player,
+      tableau,
+      specialActionCatalog,
+      specialActions,
+    ),
+  )
   .catch((err) => {
     console.error(err);
     app.innerHTML = `<main style="padding:24px"><h2>Unable to load game data</h2><p>${err instanceof Error ? err.message : String(err)}</p><p>Check that the API server is running on port 3001.</p></main>`;
@@ -74,6 +91,31 @@ function esc(value: unknown) {
 
 function labelForType(type: string) {
   return type[0].toUpperCase() + type.slice(1);
+}
+
+function effectLabel(type: EffectType) {
+  return labelForType(type);
+}
+
+function formatEffects(effects: Effect[]) {
+  return effects.length
+    ? effects
+        .map((effect) => `-${effect.amount} ${effectLabel(effect.type)}`)
+        .join(", ")
+    : "none";
+}
+
+function canAffordEffects(player: PlayerEntity, effects: Effect[]) {
+  return effects.every((effect) => {
+    switch (effect.type) {
+      case EffectType.Gold:
+        return player.gold >= effect.amount;
+      case EffectType.Reputation:
+        return player.reputation >= effect.amount;
+      case EffectType.Health:
+        return player.curHealth >= effect.amount;
+    }
+  });
 }
 
 function outcomeLine(
@@ -212,7 +254,13 @@ function renderEncounterResults(card: ActiveEncounter) {
     .join("")}</div>`;
 }
 
-function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
+function render(
+  store: GameStore,
+  player: PlayerEntity,
+  tableau: TableauData,
+  initialSpecialActionCatalog: SpecialAction[],
+  initialSpecialActions: SpecialAction[],
+) {
   let tableauData = tableau;
   let encounterById = new Map(
     tableauData.encounters.map(
@@ -224,7 +272,7 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
       (encounter) => [encounter.location, encounter] as const,
     ),
   );
-  app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button><button id="fit">Fit</button><button id="snap">Snap</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableauData.encounters.map(renderEncounterCard).join("")}</section></div></div><section class="map-side"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="attack" class="action-button" type="button"><img src="/images/actions/swords.svg" alt=""/><span>Attack</span></button></section></section></div></main><aside class="right-panel"><section class="activity-panel"><h2 id="activity-panel-title" hidden></h2><div id="activity-panel-content"></div></section></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div>`;
+  app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button><button id="fit">Fit</button><button id="snap">Snap</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableauData.encounters.map(renderEncounterCard).join("")}</section></div></div><section class="map-side"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><div class="action-buttons-row"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="attack" class="action-button" type="button"><img src="/images/actions/swords.svg" alt=""/><span>Attack</span></button></div><div id="special-actions" class="special-actions"></div></section></section></div></main><aside class="right-panel"><section class="activity-panel"><h2 id="activity-panel-title" hidden></h2><div id="activity-panel-content"></div></section></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div>`;
   const map = document.querySelector("#map") as HTMLElement;
   const mapScroll = document.querySelector("#map-scroll") as HTMLElement;
   const tip = document.querySelector("#tip") as HTMLElement;
@@ -239,6 +287,9 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
   const actionButtons = [
     ...document.querySelectorAll(".action-button"),
   ] as HTMLButtonElement[];
+  const specialActionsEl = document.querySelector(
+    "#special-actions",
+  ) as HTMLElement;
   let zoom = 0.72;
   const size = 44;
   const w = Math.sqrt(3) * size,
@@ -248,6 +299,10 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
   let busy = false;
   let manualZoom = false;
   let centerPlayerAfterDraw = false;
+  let specialActions = initialSpecialActions;
+  let specialActionCatalog = initialSpecialActionCatalog;
+  let pendingSpecialAction: { actionId: string; targetHex: string } | null =
+    null;
   const mapBounds = store.data.hexes.reduce(
     (acc, hex) => {
       const { x, y } = hexCenter(hex);
@@ -263,7 +318,9 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
 
   function updateActionButtons() {
     const hasPlay = activityPanelContent.innerHTML.trim().length > 0;
-    actionButtons.forEach((button) => (button.disabled = busy || hasPlay));
+    const disabled = busy || hasPlay;
+    actionButtons.forEach((button) => (button.disabled = disabled));
+    renderSpecialActionList();
   }
   function setActivityPanel(title: string | null, html: string) {
     activityPanelTitle.hidden = !title;
@@ -277,6 +334,165 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
   function clearPlay() {
     setActivityPanel(null, "");
   }
+
+  function currentLocationHex() {
+    return store.hexes.get(player.location);
+  }
+
+  function specialActionTarget(action: SpecialAction) {
+    if (!action.locations?.length) return undefined;
+    const origin = currentLocationHex();
+    if (!origin) return action.locations[0];
+    let best: { name: string; distance: number } | undefined;
+    for (const location of action.locations) {
+      const hex = store.hexes.get(location);
+      if (!hex) continue;
+      const distance = store.distance(origin, hex);
+      if (!best || distance < best.distance)
+        best = { name: location, distance };
+    }
+    return best?.name;
+  }
+
+  function visibleSpecialActions() {
+    const origin = currentLocationHex();
+    return specialActions.filter((action) => {
+      if (!action.locations?.length) return true;
+      if (!origin) return false;
+      return action.locations.some((location) => {
+        const hex = store.hexes.get(location);
+        return hex ? store.distance(origin, hex) <= 3 : false;
+      });
+    });
+  }
+
+  function catalogSpecialActionsForHex(hexName: string) {
+    return specialActionCatalog.filter((action) =>
+      action.locations?.includes(hexName),
+    );
+  }
+
+  function renderSpecialActionLabel(action: SpecialAction, target?: string) {
+    return `${esc(action.name)}${target ? ` (${esc(target)})` : ""}`;
+  }
+
+  function renderSpecialActionList() {
+    const actions = visibleSpecialActions();
+    const disabled = busy || activityPanelContent.innerHTML.trim().length > 0;
+    specialActionsEl.innerHTML = actions.length
+      ? `<div class="special-actions-list">${actions
+          .map((action) => {
+            const target = specialActionTarget(action);
+            return `<button class="special-action-link" type="button" data-action-id="${esc(action.id)}"${target ? ` data-target-hex="${esc(target)}"` : ""} ${disabled ? "disabled" : ""}>${renderSpecialActionLabel(action, target)}</button>`;
+          })
+          .join("")}</div>`
+      : "";
+  }
+
+  async function refreshSpecialActions() {
+    try {
+      specialActions = await apiJson<SpecialAction[]>(
+        `/api/entities/${encodeURIComponent(player.name)}/special_actions`,
+        undefined,
+        20,
+      );
+      renderSpecialActionList();
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function specialActionTitle(action: SpecialAction, hexName: string) {
+    return `Perform ${action.name} in hex ${hexName}?`;
+  }
+
+  function showSpecialActionPrompt(action: SpecialAction, hexName: string) {
+    const canAfford = canAffordEffects(player, action.cost ?? []);
+    setPlay(
+      `<article class="play-card special-action-card"><h3>${esc(action.name)}</h3><div class="play-card-body"><p>${esc(specialActionTitle(action, hexName))}</p><p class="special-action-cost">Cost: ${esc(formatEffects(action.cost ?? []))}</p></div></article><div class="special-action-controls"><button id="special-action-ok" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You can\'t afford to perform this action." aria-disabled="true"'}>OK</button><button id="special-action-cancel" class="card-ok" type="button">Cancel</button></div>`,
+      action.name,
+    );
+    document
+      .querySelector("#special-action-cancel")!
+      .addEventListener("click", clearPlay);
+    const okButton = document.querySelector(
+      "#special-action-ok",
+    ) as HTMLButtonElement;
+    if (canAfford)
+      okButton.addEventListener(
+        "click",
+        () => void performSpecialAction(action.id),
+      );
+  }
+
+  function startSpecialAction(action: SpecialAction, targetHex: string) {
+    const currentHex = player.location;
+    if (currentHex === targetHex) {
+      showSpecialActionPrompt(action, targetHex);
+      return;
+    }
+    pendingSpecialAction = { actionId: action.id, targetHex };
+    enterTravelMode();
+    const hex = store.hexes.get(targetHex);
+    if (hex) selectRouteHex(hex);
+  }
+
+  function specialActionLinkClick(actionId: string, targetHex?: string) {
+    const action = specialActionCatalog.find((item) => item.id === actionId);
+    const hexName =
+      targetHex ??
+      (action?.locations?.length
+        ? specialActionTarget(action)
+        : player.location);
+    if (!action || !hexName) return;
+    startSpecialAction(action, hexName);
+  }
+
+  async function performSpecialAction(specialActionId: string) {
+    busy = true;
+    updateActionButtons();
+    try {
+      const result = await apiJson<ActionResponse>(
+        `/api/entities/${encodeURIComponent(player.name)}/actions/special_action`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ specialActionId }),
+        },
+      );
+      Object.assign(player, result.updates);
+      pendingSpecialAction = null;
+      renderSummary();
+      if (result.tableauChanged && result.tableau) syncTableau(result.tableau);
+      await refreshSpecialActions();
+      if (result.card)
+        showGenericCard(result.card, "OK", clearPlay, "Action Results");
+    } catch (err) {
+      console.error(err);
+      showGenericCard(
+        {
+          title: "Action Error",
+          lines: [err instanceof Error ? err.message : String(err)],
+        },
+        "OK",
+        clearPlay,
+        "Action Error",
+      );
+    } finally {
+      busy = false;
+      updateActionButtons();
+    }
+  }
+
+  specialActionsEl.addEventListener("click", (e) => {
+    const button = (e.target as HTMLElement).closest(
+      ".special-action-link",
+    ) as HTMLButtonElement | null;
+    if (!button || button.disabled) return;
+    const actionId = button.dataset.actionId;
+    if (!actionId) return;
+    specialActionLinkClick(actionId, button.dataset.targetHex);
+  });
 
   function encounterButtons(card: ActiveEncounter) {
     if (card.state === "active")
@@ -457,6 +673,7 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
         if (result.tableauChanged && result.tableau)
           syncTableau(result.tableau);
         renderSummary();
+        await refreshSpecialActions();
         if (result.card) showEncounterResults(result.card);
       }
     } catch (err) {
@@ -489,6 +706,7 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
   }
 
   function showTravelError(message: string) {
+    pendingSpecialAction = null;
     setPlay(
       `<article class="play-card error-card"><h3>Travel Error</h3><div class="play-card-body route-body"><p>${esc(message)}</p></div></article><button id="card-ok" class="card-ok" type="button">OK</button>`,
       "Travel Error",
@@ -498,6 +716,7 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
 
   function exitTravelMode() {
     route = null;
+    pendingSpecialAction = null;
     map.classList.remove("travel-mode");
     clearPlay();
     draw();
@@ -557,7 +776,9 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
   async function goTravel() {
     if (!route) return;
     const submittedRoute = [...route];
+    const pendingAction = pendingSpecialAction;
     route = null;
+    pendingSpecialAction = null;
     map.classList.remove("travel-mode");
     busy = true;
     updateActionButtons();
@@ -577,7 +798,17 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
         moveLocalPlayerToken(oldLocation, result.updates.location);
       if (result.tableauChanged && result.tableau) syncTableau(result.tableau);
       renderSummary();
-      clearPlay();
+      await refreshSpecialActions();
+      const destination = result.updates.location ?? player.location;
+      if (pendingAction && destination === pendingAction.targetHex) {
+        const action = specialActionCatalog.find(
+          (item) => item.id === pendingAction.actionId,
+        );
+        if (action) showSpecialActionPrompt(action, pendingAction.targetHex);
+        else clearPlay();
+      } else {
+        clearPlay();
+      }
       draw();
     } catch (err) {
       console.error(err);
@@ -683,7 +914,12 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
           const cl = store.claims.get(c);
           g.innerHTML += `<image href="/images/claims/${cl.icon}.svg" x="${cx - 24 + i * 16}" y="${cy + 22}" width="14" height="14"/>`;
         });
-      if (encounterByLocation.has(hex.name))
+      if (
+        encounterByLocation.has(hex.name) ||
+        specialActionCatalog.some((action) =>
+          action.locations?.includes(hex.name),
+        )
+      )
         g.innerHTML += `<text x="${cx}" y="${cy + 10}" text-anchor="middle" class="encounter-star" aria-hidden="true">★</text>`;
       g.onclick = (e) => {
         e.stopPropagation();
@@ -748,6 +984,7 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
       ),
     );
     const encounter = encounterByLocation.get(hex.name);
+    const specialActionsHere = catalogSpecialActionsForHex(hex.name);
     const lines: [string, string][] = [
       ["Terrain", esc(f.terrain)],
       ["Region", esc(f.region)],
@@ -758,6 +995,16 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
       lines.push([
         "Encounter",
         `<a class="encounter-link" href="#" data-encounter-id="${esc(encounter.id)}">${esc(encounter.title)}</a>`,
+      ]);
+    if (specialActionsHere.length)
+      lines.push([
+        "Special Actions",
+        specialActionsHere
+          .map(
+            (action) =>
+              `<a class="special-action-popup-link" href="#" data-action-id="${esc(action.id)}" data-target-hex="${esc(hex.name)}">${esc(action.name)}</a>`,
+          )
+          .join("<br/>"),
       ]);
     const details = lines
       .map(([label, value]) => `<p><b>${label}:</b> ${value}</p>`)
@@ -823,6 +1070,23 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
         if (encounter) showEncounterPreview(encounter);
       });
     }
+    tip.querySelectorAll(".special-action-popup-link").forEach((link) => {
+      const specialActionLink = link as HTMLAnchorElement;
+      specialActionLink.classList.toggle("disabled", moveHereDisabled);
+      specialActionLink.setAttribute("aria-disabled", String(moveHereDisabled));
+      specialActionLink.addEventListener("click", (e) => {
+        if (moveHereDisabled) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        const actionId = specialActionLink.dataset.actionId;
+        const targetHex = specialActionLink.dataset.targetHex;
+        if (actionId) specialActionLinkClick(actionId, targetHex);
+      });
+    });
   }
 
   tableauEl.addEventListener("click", (e) => {
@@ -880,6 +1144,7 @@ function render(store: GameStore, player: PlayerEntity, tableau: TableauData) {
       Object.assign(player, result.updates);
       if (result.tableauChanged && result.tableau) syncTableau(result.tableau);
       renderSummary();
+      await refreshSpecialActions();
       if (result.card) showGenericCard(result.card, "OK", clearPlay, "Camp");
     } catch (err) {
       console.error(err);
