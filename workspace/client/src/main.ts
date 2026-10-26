@@ -9,6 +9,7 @@ import type {
   FinishEncounterResponse,
   GameData,
   Hex,
+  Condition,
   Item,
   PenaltyType,
   PlayerEntity,
@@ -575,8 +576,20 @@ function render(
       : `<p class="inventory-empty">None</p>`;
   }
 
+  function renderConditions(conditions: Condition[]) {
+    return conditions.length
+      ? `<ul class="condition-list">${conditions
+          .map((condition) =>
+            condition.duration == 1
+              ? `<li>${esc(condition.name)} (1 turn)</li>`
+              : `<li>${esc(condition.name)} (${esc(condition.duration)} turns)</li>`,
+          )
+          .join("")}</ul>`
+      : `<p class="condition-empty">None</p>`;
+  }
+
   function renderSummary() {
-    stats.innerHTML = `<dl><div><dt>Name</dt><dd>${esc(player.name)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${player.maxHealth}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div class="resources-row"><dt>Resources</dt><dd>${renderResources(player.resources)}</dd></div><div><dt>Speed</dt><dd>${player.speed}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div><div class="inventory-row"><dt>Inventory</dt><dd>${renderInventory(player.inventory)}</dd></div></dl>`;
+    stats.innerHTML = `<dl><div><dt>Name</dt><dd>${esc(player.name)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${player.maxHealth}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div class="resources-row"><dt>Resources</dt><dd>${renderResources(player.resources)}</dd></div><div><dt>Speed</dt><dd>${player.speed}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div><div class="inventory-row"><dt>Inventory</dt><dd>${renderInventory(player.inventory)}</dd></div><div class="conditions-row"><dt>Conditions</dt><dd>${renderConditions(player.conditions)}</dd></div></dl>`;
   }
 
   function showGenericCard(

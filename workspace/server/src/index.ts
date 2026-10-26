@@ -2,6 +2,7 @@ import http from "node:http";
 
 import { Item, PlayerEntity, TableauCard } from "./types.js";
 import {
+  makeConditionId,
   makeEmptyResources,
   makeItemId,
   makeTokenId,
@@ -86,6 +87,10 @@ function startingInventory(): Item[] {
   }));
 }
 
+function startingConditions() {
+  return [{ id: makeConditionId(), name: "Flatulent", duration: 5 }];
+}
+
 function startingResources() {
   const resources = makeEmptyResources();
   resources.Silk = 1;
@@ -109,6 +114,7 @@ for (const token of playerTokens) {
     location: locationForToken(token.id),
     resources: startingResources(),
     inventory: startingInventory(),
+    conditions: startingConditions(),
   });
 }
 const activeEncounters = new Map<

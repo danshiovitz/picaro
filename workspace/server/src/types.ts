@@ -3,6 +3,7 @@ export type Region = { name: string };
 export type Claim = { name: string; icon: string };
 export type Token = { id: string; entityName: string; icon: string };
 export type Item = { id: string; name: string };
+export type Condition = { id: string; name: string; duration: number };
 export type AxialPoint = { q: number; r: number };
 export type Hex = {
   name: string;
@@ -29,6 +30,7 @@ export type PlayerEntity = {
   location: string;
   resources: Record<string, number>;
   inventory: Item[];
+  conditions: Condition[];
 };
 export enum RewardType {
   Gold = "gold",

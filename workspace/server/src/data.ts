@@ -254,6 +254,9 @@ export const makeTokenId = () => `token-${nextTokenId++}`;
 let nextItemId = 1;
 export const makeItemId = () => `item-${nextItemId++}`;
 
+let nextConditionId = 1;
+export const makeConditionId = () => `condition-${nextConditionId++}`;
+
 export function makeEmptyResources(): Record<string, number> {
   return Object.fromEntries(resourceTypes.map((type) => [type, 0] as const));
 }

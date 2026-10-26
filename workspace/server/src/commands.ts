@@ -7,6 +7,7 @@ import {
   EncounterTemplate,
   Hex,
   Item,
+  Condition,
   PenaltyType,
   PlayerEntity,
   RewardType,
@@ -168,6 +169,10 @@ function cloneInventory(inventory: Item[]) {
   return inventory.map((item) => ({ ...item }));
 }
 
+function cloneConditions(conditions: Condition[]) {
+  return conditions.map((condition) => ({ ...condition }));
+}
+
 function cloneResources(resources: Record<string, number>) {
   return { ...resources };
 }
@@ -186,6 +191,7 @@ function playerDto(hexes: Hex[], player: PlayerEntity) {
     ...player,
     resources: cloneResources(player.resources),
     inventory: cloneInventory(player.inventory),
+    conditions: cloneConditions(player.conditions),
   };
 }
 
@@ -201,6 +207,7 @@ function playerUpdates(player: PlayerEntity) {
     location: player.location,
     resources: cloneResources(player.resources),
     inventory: cloneInventory(player.inventory),
+    conditions: cloneConditions(player.conditions),
   } satisfies Partial<PlayerEntity>;
 }
 
@@ -268,6 +275,10 @@ function adjustResource(
   player.resources[resourceType] = Math.max(0, current + amount);
 }
 
+function adjustTurns(player: PlayerEntity, amount: number) {
+  player.turns = Math.max(0, player.turns + amount);
+}
+
 function adjustLuck(player: PlayerEntity, amount: number) {
   player.curLuck = Math.max(
     0,
@@ -307,7 +318,7 @@ function applyEffects(player: PlayerEntity, effects: Effect[]) {
         adjustHealth(player, effect.amount);
         break;
       case EffectType.Turns:
-        player.turns = Math.max(0, player.turns + effect.amount);
+        adjustTurns(player, effect.amount);
         break;
       case EffectType.Luck:
         adjustLuck(player, effect.amount);
@@ -473,7 +484,12 @@ function removeEncounterFromTableau(state: ApiState, encounterId: string) {
   return true;
 }
 
-function endTurn(state: ApiState, player: PlayerEntity) {
+function endTurn(state: ApiState, player: PlayerEntity, reason: string) {
+  console.log(`[endTurn] ${reason} for ${player.name} @ ${player.location}`);
+  for (const condition of player.conditions) condition.duration -= 1;
+  player.conditions = player.conditions.filter(
+    (condition) => condition.duration > 0,
+  );
   const currentHex = state.hexByName.get(player.location);
   let changed = false;
   if (currentHex) {
@@ -499,12 +515,13 @@ export function campEntity(state: ApiState, player: PlayerEntity) {
   payCost(player, turnCost);
   player.curHealth = Math.min(player.maxHealth, player.curHealth + 1);
   player.location = locationForToken(state.hexes, player.tokenId);
-  const tableauChanged = endTurn(state, player);
+  const tableauChanged = endTurn(state, player, "camp");
   return {
     updates: {
       curHealth: player.curHealth,
       turns: player.turns,
       location: player.location,
+      conditions: cloneConditions(player.conditions),
     },
     card: { title: "A Restful Night", lines: ["+1 Health", "-1 Turn"] },
     tableauChanged,
@@ -522,6 +539,7 @@ export function travelEntity(
     state.travelContinuation.get(player.name) ?? false;
   if (!canContinueWithoutCost && !canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
+  if (!canContinueWithoutCost) payCost(player, turnCost);
   const route = request.route;
   const storedContinuation = state.travelContinuationRoute.get(player.name);
   if (storedContinuation) {
@@ -571,20 +589,31 @@ export function travelEntity(
       tableauId: undefined,
     };
     state.activeEncounters.set(player.name, active);
-    const resumeRoute = route.slice(route.indexOf(encounterHexName));
-    state.travelContinuation.set(player.name, true);
-    state.travelContinuationRoute.set(player.name, resumeRoute);
-    if (!canContinueWithoutCost) payCost(player, turnCost);
+    const tripDestination = route[route.length - 1];
+    const completesTrip = encounterHexName === tripDestination;
+    if (completesTrip) {
+      state.travelContinuation.delete(player.name);
+      state.travelContinuationRoute.delete(player.name);
+    } else {
+      const resumeRoute = route.slice(route.indexOf(encounterHexName));
+      state.travelContinuation.set(player.name, true);
+      state.travelContinuationRoute.set(player.name, resumeRoute);
+    }
+    const tableauChanged = completesTrip
+      ? endTurn(state, player, "travel-encounter-destination")
+      : false;
     return {
       updates: playerUpdates(player),
       encounter: active,
-      travelRoute: resumeRoute,
-      tableauChanged: false,
+      travelRoute: completesTrip
+        ? undefined
+        : route.slice(route.indexOf(encounterHexName)),
+      tableauChanged,
+      tableau: tableauChanged ? getTableau(state) : undefined,
     };
   }
   moveToken(state.hexes, state.hexByName, player.tokenId, destination);
   player.location = destination;
-  if (!canContinueWithoutCost) payCost(player, turnCost);
   const remainingRoute =
     route.length > travelPath.length
       ? route.slice(travelPath.length - 1)
@@ -596,7 +625,10 @@ export function travelEntity(
     state.travelContinuation.delete(player.name);
     state.travelContinuationRoute.delete(player.name);
   }
-  const tableauChanged = endTurn(state, player);
+  let tableauChanged = false;
+  if (!remainingRoute) {
+    tableauChanged = endTurn(state, player, "travel-complete");
+  }
   return {
     updates: playerUpdates(player),
     travelRoute: remainingRoute,
@@ -613,13 +645,13 @@ export function runEncounter(
   const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
   if (!canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
+  payCost(player, turnCost);
   state.travelContinuation.delete(player.name);
   state.travelContinuationRoute.delete(player.name);
   const encounter = state.tableau.find(
     (card) => card.id === request.encounterId,
   );
   if (!encounter) throw new RulesViolation("Encounter not found");
-  payCost(player, turnCost);
   const active = activeEncounterFor(encounter, state.rng);
   state.activeEncounters.set(player.name, active);
   return { encounter: active, updates: playerUpdates(player) };
@@ -705,11 +737,14 @@ export function finishEncounter(
     : undefined;
   const travelRoute = state.travelContinuationRoute.get(player.name);
   const tableauChanged = encounter
-    ? endTurn(state, player) || Boolean(removedEncounterId)
+    ? endTurn(state, player, "finish-encounter") || Boolean(removedEncounterId)
     : false;
   return {
     updates: playerUpdates(player),
-    card: { title: "Encounter Results", lines: effectsToLines(effects) },
+    card: {
+      title: "Encounter Results",
+      lines: effectsToLines(effects),
+    },
     travelRoute,
     removedEncounterId,
     tableauChanged,

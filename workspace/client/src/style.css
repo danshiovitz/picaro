@@ -465,13 +465,15 @@ button {
 }
 
 .character-summary .resources-row,
-.character-summary .inventory-row {
+.character-summary .inventory-row,
+.character-summary .conditions-row {
   grid-column: 1 / -1;
   display: block;
 }
 
 .character-summary .resources-row dd,
-.character-summary .inventory-row dd {
+.character-summary .inventory-row dd,
+.character-summary .conditions-row dd {
   text-align: left;
 }
 
@@ -487,7 +489,8 @@ button {
 }
 
 .resource-list,
-.inventory-list {
+.inventory-list,
+.condition-list {
   margin: 6px 0 0;
   padding-left: 20px;
   display: grid;
@@ -495,7 +498,8 @@ button {
 }
 
 .resource-empty,
-.inventory-empty {
+.inventory-empty,
+.condition-empty {
   margin: 6px 0 0;
   color: #cdd5df;
 }
