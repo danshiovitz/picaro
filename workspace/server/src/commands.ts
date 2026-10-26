@@ -21,6 +21,7 @@ import {
   claims,
   cityTokens,
   encounterTemplates,
+  resourceTypes,
   terrainEncounterTemplates,
 } from "./data.js";
 import { hexDistance } from "./hexmap.js";
@@ -167,19 +168,38 @@ function cloneInventory(inventory: Item[]) {
   return inventory.map((item) => ({ ...item }));
 }
 
+function cloneResources(resources: Record<string, number>) {
+  return { ...resources };
+}
+
+function resourceEffect(resourceType: string, amount: number): Effect {
+  return { type: EffectType.Resource, resourceType, amount };
+}
+
+function randomResourceType(rng: RNG) {
+  return rng.pick(resourceTypes);
+}
+
 function playerDto(hexes: Hex[], player: PlayerEntity) {
   player.location = locationForToken(hexes, player.tokenId);
-  return { ...player, inventory: cloneInventory(player.inventory) };
+  return {
+    ...player,
+    resources: cloneResources(player.resources),
+    inventory: cloneInventory(player.inventory),
+  };
 }
 
 function playerUpdates(player: PlayerEntity) {
   return {
     curHealth: player.curHealth,
+    curLuck: player.curLuck,
+    maxLuck: player.maxLuck,
     gold: player.gold,
     reputation: player.reputation,
     turns: player.turns,
     speed: player.speed,
     location: player.location,
+    resources: cloneResources(player.resources),
     inventory: cloneInventory(player.inventory),
   } satisfies Partial<PlayerEntity>;
 }
@@ -187,6 +207,7 @@ function playerUpdates(player: PlayerEntity) {
 function resolveEncounterEffects(
   player: PlayerEntity,
   active: ActiveEncounter,
+  rng: RNG,
   conceding = false,
 ) {
   if (conceding) {
@@ -199,17 +220,18 @@ function resolveEncounterEffects(
     !meetsFailureThreshold &&
     active.numSuccesses >= active.successThreshold
   ) {
-    for (const reward of active.rewards) effects.push(...computeReward(reward));
+    for (const reward of active.rewards)
+      effects.push(...computeReward(reward, rng));
     if (
       typeof active.criticalThreshold === "number" &&
       active.numSuccesses >= active.criticalThreshold
     ) {
       for (const reward of active.criticalRewards)
-        effects.push(...computeCriticalReward(reward));
+        effects.push(...computeCriticalReward(reward, rng));
     }
   }
   for (const penalty of active.penalties)
-    effects.push(...computePenalty(penalty, active.numFailures));
+    effects.push(...computePenalty(penalty, active.numFailures, rng));
   applyEffects(player, effects);
   return effects;
 }
@@ -237,6 +259,22 @@ function adjustHealth(player: PlayerEntity, amount: number) {
   );
 }
 
+function adjustResource(
+  player: PlayerEntity,
+  resourceType: string,
+  amount: number,
+) {
+  const current = player.resources[resourceType] ?? 0;
+  player.resources[resourceType] = Math.max(0, current + amount);
+}
+
+function adjustLuck(player: PlayerEntity, amount: number) {
+  player.curLuck = Math.max(
+    0,
+    Math.min(player.maxLuck, player.curLuck + amount),
+  );
+}
+
 function canAfford(player: PlayerEntity, cost: Effect[]) {
   return cost.every((effect) => {
     switch (effect.type) {
@@ -248,6 +286,10 @@ function canAfford(player: PlayerEntity, cost: Effect[]) {
         return player.curHealth >= effect.amount;
       case EffectType.Turns:
         return player.turns >= effect.amount;
+      case EffectType.Luck:
+        return player.curLuck >= effect.amount;
+      case EffectType.Resource:
+        return (player.resources[effect.resourceType] ?? 0) >= effect.amount;
     }
   });
 }
@@ -266,6 +308,12 @@ function applyEffects(player: PlayerEntity, effects: Effect[]) {
         break;
       case EffectType.Turns:
         player.turns = Math.max(0, player.turns + effect.amount);
+        break;
+      case EffectType.Luck:
+        adjustLuck(player, effect.amount);
+        break;
+      case EffectType.Resource:
+        adjustResource(player, effect.resourceType, effect.amount);
         break;
     }
   }
@@ -286,25 +334,37 @@ function effectsToLines(effects: Effect[]) {
   return effects.map(effectLabelLine);
 }
 
-function computeReward(rewardType: RewardType) {
+function computeReward(rewardType: RewardType, rng: RNG): Effect[] {
   switch (rewardType) {
     case RewardType.Gold:
       return [{ type: EffectType.Gold, amount: 3 }];
     case RewardType.Reputation:
       return [{ type: EffectType.Reputation, amount: 1 }];
+    case RewardType.Luck:
+      return [{ type: EffectType.Luck, amount: 1 }];
+    case RewardType.Resource:
+      return [resourceEffect(randomResourceType(rng), 1)];
   }
 }
 
-function computeCriticalReward(rewardType: RewardType) {
+function computeCriticalReward(rewardType: RewardType, rng: RNG): Effect[] {
   switch (rewardType) {
     case RewardType.Gold:
       return [{ type: EffectType.Gold, amount: 4 }];
     case RewardType.Reputation:
       return [{ type: EffectType.Reputation, amount: 1 }];
+    case RewardType.Luck:
+      return [{ type: EffectType.Luck, amount: 1 }];
+    case RewardType.Resource:
+      return [resourceEffect(randomResourceType(rng), 2)];
   }
 }
 
-function computePenalty(penaltyType: PenaltyType, numFailures: number) {
+function computePenalty(
+  penaltyType: PenaltyType,
+  numFailures: number,
+  rng: RNG,
+): Effect[] {
   switch (penaltyType) {
     case PenaltyType.Gold:
       return numFailures > 0 ? [{ type: EffectType.Gold, amount: -1 }] : [];
@@ -314,6 +374,12 @@ function computePenalty(penaltyType: PenaltyType, numFailures: number) {
         : [];
     case PenaltyType.Turns:
       return [{ type: EffectType.Turns, amount: -1 }];
+    case PenaltyType.Luck:
+      return [{ type: EffectType.Luck, amount: -1 }];
+    case PenaltyType.Resource:
+      return numFailures > 0
+        ? [resourceEffect(randomResourceType(rng), -numFailures)]
+        : [];
   }
 }
 
@@ -392,6 +458,7 @@ export function getGame(state: ApiState) {
     regions,
     claims,
     tokens: allTokens(state.tokens),
+    resourceTypes,
   };
 }
 
@@ -424,7 +491,7 @@ function endTurn(state: ApiState, player: PlayerEntity) {
 }
 
 export function campEntity(state: ApiState, player: PlayerEntity) {
-  const turnCost = [{ type: EffectType.Turns, amount: 1 }];
+  const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
   state.travelContinuation.delete(player.name);
   state.travelContinuationRoute.delete(player.name);
   if (!canAfford(player, turnCost))
@@ -450,7 +517,7 @@ export function travelEntity(
   player: PlayerEntity,
   request: TravelRequest,
 ) {
-  const turnCost = [{ type: EffectType.Turns, amount: 1 }];
+  const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
   const canContinueWithoutCost =
     state.travelContinuation.get(player.name) ?? false;
   if (!canContinueWithoutCost && !canAfford(player, turnCost))
@@ -543,7 +610,7 @@ export function runEncounter(
   player: PlayerEntity,
   request: EncounterRequest,
 ) {
-  const turnCost = [{ type: EffectType.Turns, amount: 1 }];
+  const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
   if (!canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
   state.travelContinuation.delete(player.name);
@@ -624,7 +691,12 @@ export function finishEncounter(
     active.state = "lost";
     active.nextPenalty = undefined;
   }
-  const effects = resolveEncounterEffects(player, active, request.conceding);
+  const effects = resolveEncounterEffects(
+    player,
+    active,
+    state.rng,
+    request.conceding,
+  );
   state.activeEncounters.delete(player.name);
   const removedEncounterId = encounter
     ? removeEncounterFromTableau(state, encounterId)

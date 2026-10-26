@@ -60,6 +60,16 @@ export const claimColors = [
   "purple",
   "orange",
 ];
+
+export const resourceTypes = [
+  "Silk",
+  "Jewels",
+  "Steel",
+  "Bricks",
+  "Spices",
+  "Wood",
+  "Wine",
+];
 export let claims: Claim[] = claimColors.map((icon, i) => ({
   name: `Faction ${i + 1}`,
   icon,
@@ -243,6 +253,10 @@ export const makeTokenId = () => `token-${nextTokenId++}`;
 
 let nextItemId = 1;
 export const makeItemId = () => `item-${nextItemId++}`;
+
+export function makeEmptyResources(): Record<string, number> {
+  return Object.fromEntries(resourceTypes.map((type) => [type, 0] as const));
+}
 
 export let cityTokens: Token[] = [
   "Waterdeep",

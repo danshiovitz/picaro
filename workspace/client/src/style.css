@@ -36,13 +36,18 @@ footer {
 main {
   position: relative;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "top-strip character-panel"
+    "map-shell character-panel";
+  gap: 0;
   min-width: 0;
 }
 
 .top-strip {
-  width: calc(100% - 280px);
+  grid-area: top-strip;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -354,7 +359,7 @@ button {
 }
 
 .map-shell {
-  flex: 1;
+  grid-area: map-shell;
   min-height: 0;
   display: flex;
   min-width: 0;
@@ -405,13 +410,15 @@ button {
   pointer-events: none;
 }
 
-.map-side {
+.character-panel {
+  grid-area: character-panel;
   width: 280px;
   display: flex;
   flex-direction: column;
   background: #252b35;
   border-left: 1px solid #596273;
-  flex: 0 0 280px;
+  overflow: auto;
+  min-height: 0;
 }
 
 .right-panel {
@@ -447,7 +454,8 @@ button {
 .character-summary dl {
   margin: 0;
   display: grid;
-  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
 }
 
 .character-summary dl > div {
@@ -456,10 +464,13 @@ button {
   gap: 14px;
 }
 
+.character-summary .resources-row,
 .character-summary .inventory-row {
+  grid-column: 1 / -1;
   display: block;
 }
 
+.character-summary .resources-row dd,
 .character-summary .inventory-row dd {
   text-align: left;
 }
@@ -475,6 +486,7 @@ button {
   color: #fff;
 }
 
+.resource-list,
 .inventory-list {
   margin: 6px 0 0;
   padding-left: 20px;
@@ -482,6 +494,7 @@ button {
   gap: 4px;
 }
 
+.resource-empty,
 .inventory-empty {
   margin: 6px 0 0;
   color: #cdd5df;

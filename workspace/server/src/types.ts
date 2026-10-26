@@ -27,24 +27,37 @@ export type PlayerEntity = {
   reputation: number;
   turns: number;
   location: string;
+  resources: Record<string, number>;
   inventory: Item[];
 };
 export enum RewardType {
   Gold = "gold",
   Reputation = "reputation",
+  Luck = "luck",
+  Resource = "resource",
 }
 export enum PenaltyType {
   Gold = "gold",
   Health = "health",
   Turns = "turns",
+  Luck = "luck",
+  Resource = "resource",
 }
 export enum EffectType {
   Gold = "gold",
   Reputation = "reputation",
   Health = "health",
   Turns = "turns",
+  Luck = "luck",
+  Resource = "resource",
 }
-export type Effect = { type: EffectType; amount: number };
+export type Effect =
+  | { type: EffectType.Gold; amount: number }
+  | { type: EffectType.Reputation; amount: number }
+  | { type: EffectType.Health; amount: number }
+  | { type: EffectType.Turns; amount: number }
+  | { type: EffectType.Luck; amount: number }
+  | { type: EffectType.Resource; resourceType: string; amount: number };
 export type EncounterSkillCheck = { name: string; target: number };
 export type EncounterTemplate = {
   title: string;

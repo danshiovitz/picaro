@@ -1,7 +1,12 @@
 import http from "node:http";
 
 import { Item, PlayerEntity, TableauCard } from "./types.js";
-import { makeItemId, makeTokenId, encounterTemplates } from "./data.js";
+import {
+  makeEmptyResources,
+  makeItemId,
+  makeTokenId,
+  encounterTemplates,
+} from "./data.js";
 import { loadOrGenerateWorld, MapGeneratorName } from "./map_generator.js";
 import { RNG } from "./random.js";
 import {
@@ -81,6 +86,14 @@ function startingInventory(): Item[] {
   }));
 }
 
+function startingResources() {
+  const resources = makeEmptyResources();
+  resources.Silk = 1;
+  resources.Steel = 1;
+  resources.Jewels = 1;
+  return resources;
+}
+
 for (const token of playerTokens) {
   players.set(token.entityName, {
     name: token.entityName,
@@ -94,6 +107,7 @@ for (const token of playerTokens) {
     reputation: 10,
     turns: 20,
     location: locationForToken(token.id),
+    resources: startingResources(),
     inventory: startingInventory(),
   });
 }

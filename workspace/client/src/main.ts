@@ -94,14 +94,16 @@ function labelForType(type: string) {
   return type[0].toUpperCase() + type.slice(1);
 }
 
-function effectLabel(type: EffectType) {
-  return labelForType(type);
+function effectLabel(effect: Effect) {
+  return effect.type === EffectType.Resource
+    ? `${labelForType(effect.type)} (${effect.resourceType})`
+    : labelForType(effect.type);
 }
 
 function formatEffects(effects: Effect[]) {
   return effects.length
     ? effects
-        .map((effect) => `-${effect.amount} ${effectLabel(effect.type)}`)
+        .map((effect) => `-${effect.amount} ${effectLabel(effect)}`)
         .join(", ")
     : "none";
 }
@@ -117,6 +119,10 @@ function canAffordEffects(player: PlayerEntity, effects: Effect[]) {
         return player.curHealth >= effect.amount;
       case EffectType.Turns:
         return player.turns >= effect.amount;
+      case EffectType.Luck:
+        return player.curLuck >= effect.amount;
+      case EffectType.Resource:
+        return (player.resources[effect.resourceType] ?? 0) >= effect.amount;
     }
   });
 }
@@ -275,7 +281,7 @@ function render(
       (encounter) => [encounter.location, encounter] as const,
     ),
   );
-  app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button><button id="fit">Fit</button><button id="snap">Snap</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableauData.encounters.map(renderEncounterCard).join("")}</section></div></div><section class="map-side"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><div class="action-buttons-row"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="attack" class="action-button" type="button"><img src="/images/actions/swords.svg" alt=""/><span>Attack</span></button></div><div id="special-actions" class="special-actions"></div></section></section></div></main><aside class="right-panel"><section class="activity-panel"><h2 id="activity-panel-title" hidden></h2><div id="activity-panel-content"></div></section></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div>`;
+  app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button><button id="fit">Fit</button><button id="snap">Snap</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableauData.encounters.map(renderEncounterCard).join("")}</section></div></div></div><section class="character-panel"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><div class="action-buttons-row"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="attack" class="action-button" type="button"><img src="/images/actions/swords.svg" alt=""/><span>Attack</span></button></div><div id="special-actions" class="special-actions"></div></section></section></main><aside class="right-panel"><section class="activity-panel"><h2 id="activity-panel-title" hidden></h2><div id="activity-panel-content"></div></section></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div>`;
   const map = document.querySelector("#map") as HTMLElement;
   const mapScroll = document.querySelector("#map-scroll") as HTMLElement;
   const tip = document.querySelector("#tip") as HTMLElement;
@@ -547,6 +553,20 @@ function render(
     return Math.max(min, Math.min(max, value));
   }
 
+  function renderResources(resources: Record<string, number>) {
+    const visibleResources = store.data.resourceTypes.filter(
+      (resourceType) => (resources[resourceType] ?? 0) > 0,
+    );
+    return visibleResources.length
+      ? `<ul class="resource-list">${visibleResources
+          .map(
+            (resourceType) =>
+              `<li>${esc(resourceType)}: ${esc(resources[resourceType])}</li>`,
+          )
+          .join("")}</ul>`
+      : `<p class="resource-empty">None</p>`;
+  }
+
   function renderInventory(items: Item[]) {
     return items.length
       ? `<ul class="inventory-list">${items
@@ -556,7 +576,7 @@ function render(
   }
 
   function renderSummary() {
-    stats.innerHTML = `<dl><div><dt>Name</dt><dd>${esc(player.name)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${player.maxHealth}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div><dt>Speed</dt><dd>${player.speed}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div><div class="inventory-row"><dt>Inventory</dt><dd>${renderInventory(player.inventory)}</dd></div></dl>`;
+    stats.innerHTML = `<dl><div><dt>Name</dt><dd>${esc(player.name)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${player.maxHealth}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div class="resources-row"><dt>Resources</dt><dd>${renderResources(player.resources)}</dd></div><div><dt>Speed</dt><dd>${player.speed}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div><div class="inventory-row"><dt>Inventory</dt><dd>${renderInventory(player.inventory)}</dd></div></dl>`;
   }
 
   function showGenericCard(
