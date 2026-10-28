@@ -105,6 +105,7 @@ export type PlayerEntity = {
   resources: Record<string, number>;
   inventory: Item[];
   conditions: Condition[];
+  skills: Record<string, number>;
 };
 export type PlayCard = { title: string; lines: string[] };
 export type ActiveEncounter = {

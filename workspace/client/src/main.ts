@@ -588,8 +588,19 @@ function render(
       : `<p class="condition-empty">None</p>`;
   }
 
+  function renderSkills(skills: Record<string, number>) {
+    const visibleSkills = Object.entries(skills).sort(([a], [b]) =>
+      a.localeCompare(b),
+    );
+    return visibleSkills.length
+      ? `<ul class="skill-list">${visibleSkills
+          .map(([name, value]) => `<li>${esc(name)}: ${esc(value)}</li>`)
+          .join("")}</ul>`
+      : `<p class="skill-empty">None</p>`;
+  }
+
   function renderSummary() {
-    stats.innerHTML = `<dl><div><dt>Name</dt><dd>${esc(player.name)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${player.maxHealth}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div class="resources-row"><dt>Resources</dt><dd>${renderResources(player.resources)}</dd></div><div><dt>Speed</dt><dd>${player.speed}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div><div class="inventory-row"><dt>Inventory</dt><dd>${renderInventory(player.inventory)}</dd></div><div class="conditions-row"><dt>Conditions</dt><dd>${renderConditions(player.conditions)}</dd></div></dl>`;
+    stats.innerHTML = `<dl><div><dt>Name</dt><dd>${esc(player.name)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${player.maxHealth}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div class="resources-row"><dt>Resources</dt><dd>${renderResources(player.resources)}</dd></div><div><dt>Speed</dt><dd>${player.speed}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div><div class="inventory-row"><dt>Inventory</dt><dd>${renderInventory(player.inventory)}</dd></div><div class="conditions-row"><dt>Conditions</dt><dd>${renderConditions(player.conditions)}</dd></div><div class="skills-row"><dt>Skills</dt><dd>${renderSkills(player.skills)}</dd></div></dl>`;
   }
 
   function showGenericCard(

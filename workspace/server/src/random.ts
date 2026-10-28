@@ -31,6 +31,9 @@ export class RNG {
   d6() {
     return this.range(1, 6);
   }
+  d10() {
+    return this.range(1, 10);
+  }
   hashSeed(seed: string): number {
     let h = 2166136261;
     for (let i = 0; i < seed.length; i++) {

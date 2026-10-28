@@ -1,8 +1,15 @@
 import { randomUUID } from "node:crypto";
 
-import { EncounterTemplate, Hex, PlayerEntity, TableauCard } from "./types.js";
+import {
+  EncounterTemplate,
+  Hex,
+  PlayerEntity,
+  SectionType,
+  TableauCard,
+} from "./types.js";
 import { skillNames } from "./data.js";
 import { hexDistance } from "./hexmap.js";
+import { computeEffectiveValue } from "./rule.js";
 import { RNG } from "./random.js";
 
 let encounterHexes: Hex[] = [];
@@ -24,8 +31,9 @@ function difficultySwing() {
 function hexesNearPlayer(player: PlayerEntity) {
   const origin = encounterHexes.find((hex) => hex.name === player.location);
   if (!origin) return [...encounterHexes];
+  const speed = computeEffectiveValue(player, SectionType.speed);
   const nearby = encounterHexes.filter(
-    (hex) => hexDistance(origin, hex) <= player.speed,
+    (hex) => hexDistance(origin, hex) <= speed,
   );
   return nearby.length > 0 ? nearby : [...encounterHexes];
 }

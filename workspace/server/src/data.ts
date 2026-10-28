@@ -3,8 +3,12 @@ import {
   EncounterTemplate,
   Item,
   PenaltyType,
+  PlayerEntity,
   Region,
   RewardType,
+  Rule,
+  RuleType,
+  SectionType,
   Token,
 } from "./types.js";
 
@@ -274,3 +278,68 @@ export let cityTokens: Token[] = [
 export function setCityTokens(next: Token[]) {
   cityTokens = next;
 }
+
+export function makeEmptySkills() {
+  return Object.fromEntries(skillNames.map((skill) => [skill, 0] as const));
+}
+
+export const rulesBySection = new Map<
+  SectionType,
+  Map<string | undefined, Map<RuleType, Rule[]>>
+>();
+const ruleNames = new Set<string>();
+
+function resolvedPriority(rule: Rule) {
+  return rule.priority ?? 10;
+}
+
+function insertRule(list: Rule[], rule: Rule) {
+  const index = list.findIndex(
+    (existing) => resolvedPriority(existing) < resolvedPriority(rule),
+  );
+  if (index === -1) list.push(rule);
+  else list.splice(index, 0, rule);
+}
+
+export function addRule(rule: Rule) {
+  if (ruleNames.has(rule.name)) {
+    throw new Error(`Rule name must be unique: ${rule.name}`);
+  }
+  ruleNames.add(rule.name);
+  const sectionRules =
+    rulesBySection.get(rule.section) ??
+    new Map<string | undefined, Map<RuleType, Rule[]>>();
+  rulesBySection.set(rule.section, sectionRules);
+  const subsectionRules =
+    sectionRules.get(rule.subsection) ?? new Map<RuleType, Rule[]>();
+  sectionRules.set(rule.subsection, subsectionRules);
+  const ruleList = subsectionRules.get(rule.type) ?? [];
+  subsectionRules.set(rule.type, ruleList);
+  insertRule(ruleList, {
+    ...rule,
+    priority: resolvedPriority(rule),
+  });
+}
+
+function hasItem(player: PlayerEntity, itemName: string) {
+  return player.inventory.some((item) => item.name === itemName);
+}
+
+addRule({
+  id: "rule-speed-can-of-coke",
+  name: "Can of Coke Speed Boost",
+  section: SectionType.speed,
+  type: RuleType.ModifierValue,
+  condition: (player) => hasItem(player, "can of coke"),
+  value: () => 2,
+});
+
+addRule({
+  id: "rule-endurance-shield-base",
+  name: "Shield Endurance Base",
+  section: SectionType.skill,
+  subsection: "Endurance",
+  type: RuleType.BaseValue,
+  condition: (player) => hasItem(player, "shield"),
+  value: () => 4,
+});

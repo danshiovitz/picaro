@@ -2,15 +2,16 @@ import {
   ActionResponse,
   ActiveEncounter,
   ActiveEncounterSkillCheck,
+  Condition,
   Effect,
   EffectType,
   EncounterTemplate,
   Hex,
   Item,
-  Condition,
   PenaltyType,
   PlayerEntity,
   RewardType,
+  SectionType,
   SpecialAction,
   SpecialActionRequest,
   TableauCard,
@@ -23,10 +24,12 @@ import {
   cityTokens,
   encounterTemplates,
   resourceTypes,
+  skillNames,
   terrainEncounterTemplates,
 } from "./data.js";
 import { hexDistance } from "./hexmap.js";
 import { instantiateEncounterTemplate } from "./encounter.js";
+import { computeEffectiveValue } from "./rule.js";
 import { RNG } from "./random.js";
 
 export class RulesViolation extends Error {
@@ -41,14 +44,32 @@ type SpecialActionDefinition = SpecialAction & {
   execute: (state: ApiState, player: PlayerEntity) => Effect[];
 };
 
+function hasItemNamed(player: PlayerEntity, itemName: string) {
+  return player.inventory.some((item) => item.name === itemName);
+}
+
 const specialActions: SpecialActionDefinition[] = [
   {
     id: "medical-visit",
     name: "Medical Visit",
     locations: ["C10"],
     cost: [{ type: EffectType.Gold, amount: 2 }],
-    availability: (player) => player.curHealth < player.maxHealth,
+    availability: (player) =>
+      player.curHealth < computeEffectiveValue(player, SectionType.maxHealth),
     execute: (_state, _player) => [{ type: EffectType.Health, amount: 2 }],
+  },
+  {
+    id: "drink",
+    name: "Drink",
+    cost: [],
+    availability: (player) => hasItemNamed(player, "can of coke"),
+    execute: (_state, player) => {
+      const itemIndex = player.inventory.findIndex(
+        (item) => item.name === "can of coke",
+      );
+      if (itemIndex >= 0) player.inventory.splice(itemIndex, 1);
+      return [];
+    },
   },
 ];
 
@@ -112,13 +133,18 @@ function randomPenalty(card: TableauCard, rng: RNG) {
 }
 
 function rollSkillChecks(
+  player: PlayerEntity,
   cards: { name: string; target: number }[],
   rng: RNG,
   old = false,
 ) {
   return cards.map((check): ActiveEncounterSkillCheck => {
-    const roll = rng.d6();
-    const modifier = 3;
+    const roll = rng.d10();
+    const modifier = computeEffectiveValue(
+      player,
+      SectionType.skill,
+      check.name,
+    );
     const total = roll + modifier;
     return {
       name: check.name,
@@ -132,8 +158,12 @@ function rollSkillChecks(
   });
 }
 
-function activeEncounterFor(card: TableauCard, rng: RNG): ActiveEncounter {
-  const skillChecks = rollSkillChecks(card.skillChecks, rng);
+function activeEncounterFor(
+  player: PlayerEntity,
+  card: TableauCard,
+  rng: RNG,
+): ActiveEncounter {
+  const skillChecks = rollSkillChecks(player, card.skillChecks, rng);
   const numSuccesses = skillChecks.filter((check) => check.success).length;
   const numFailures = skillChecks.length - numSuccesses;
   const state = encounterState(
@@ -185,10 +215,25 @@ function randomResourceType(rng: RNG) {
   return rng.pick(resourceTypes);
 }
 
+function effectiveSkills(player: PlayerEntity) {
+  return Object.fromEntries(
+    skillNames.map(
+      (skill) =>
+        [
+          skill,
+          computeEffectiveValue(player, SectionType.skill, skill),
+        ] as const,
+    ),
+  );
+}
+
 function playerDto(hexes: Hex[], player: PlayerEntity) {
   player.location = locationForToken(hexes, player.tokenId);
   return {
     ...player,
+    maxHealth: computeEffectiveValue(player, SectionType.maxHealth),
+    speed: computeEffectiveValue(player, SectionType.speed),
+    skills: effectiveSkills(player),
     resources: cloneResources(player.resources),
     inventory: cloneInventory(player.inventory),
     conditions: cloneConditions(player.conditions),
@@ -203,8 +248,10 @@ function playerUpdates(player: PlayerEntity) {
     gold: player.gold,
     reputation: player.reputation,
     turns: player.turns,
-    speed: player.speed,
+    maxHealth: computeEffectiveValue(player, SectionType.maxHealth),
+    speed: computeEffectiveValue(player, SectionType.speed),
     location: player.location,
+    skills: effectiveSkills(player),
     resources: cloneResources(player.resources),
     inventory: cloneInventory(player.inventory),
     conditions: cloneConditions(player.conditions),
@@ -238,7 +285,7 @@ function resolveEncounterEffects(
     }
   }
   for (const penalty of active.penalties)
-    effects.push(...computePenalty(penalty, active.numFailures, rng));
+    effects.push(...computePenalty(penalty, active.numFailures, player, rng));
   applyEffects(player, effects);
   return effects;
 }
@@ -260,9 +307,10 @@ function adjustReputation(player: PlayerEntity, amount: number) {
 }
 
 function adjustHealth(player: PlayerEntity, amount: number) {
+  const maxHealth = computeEffectiveValue(player, SectionType.maxHealth);
   player.curHealth = Math.max(
     0,
-    Math.min(player.maxHealth, player.curHealth + amount),
+    Math.min(maxHealth, player.curHealth + amount),
   );
 }
 
@@ -374,6 +422,7 @@ function computeCriticalReward(rewardType: RewardType, rng: RNG): Effect[] {
 function computePenalty(
   penaltyType: PenaltyType,
   numFailures: number,
+  player: PlayerEntity,
   rng: RNG,
 ): Effect[] {
   switch (penaltyType) {
@@ -387,10 +436,37 @@ function computePenalty(
       return [{ type: EffectType.Turns, amount: -1 }];
     case PenaltyType.Luck:
       return [{ type: EffectType.Luck, amount: -1 }];
-    case PenaltyType.Resource:
-      return numFailures > 0
-        ? [resourceEffect(randomResourceType(rng), -numFailures)]
-        : [];
+    case PenaltyType.Resource: {
+      const removals = Math.ceil(numFailures / 2);
+      if (removals <= 0) return [];
+      const pool = Object.entries(player.resources).flatMap(
+        ([resourceType, amount]) =>
+          Array.from({ length: Math.max(0, amount) }, () => resourceType),
+      );
+      if (pool.length === 0) return [];
+      const remaining = new Map(Object.entries(player.resources));
+      const removed = new Map<string, number>();
+      let available = pool.length;
+      const chooseResource = () => {
+        let pick = rng.int(available);
+        for (const [resourceType, amount] of remaining) {
+          if (amount <= 0) continue;
+          if (pick < amount) return resourceType;
+          pick -= amount;
+        }
+        return undefined;
+      };
+      for (let i = 0; i < Math.min(removals, pool.length); i++) {
+        const resourceType = chooseResource();
+        if (!resourceType) break;
+        remaining.set(resourceType, (remaining.get(resourceType) ?? 0) - 1);
+        removed.set(resourceType, (removed.get(resourceType) ?? 0) + 1);
+        available -= 1;
+      }
+      return [...removed.entries()].map(([resourceType, amount]) =>
+        resourceEffect(resourceType, -amount),
+      );
+    }
   }
 }
 
@@ -493,10 +569,11 @@ function endTurn(state: ApiState, player: PlayerEntity, reason: string) {
   const currentHex = state.hexByName.get(player.location);
   let changed = false;
   if (currentHex) {
+    const speed = computeEffectiveValue(player, SectionType.speed);
     const before = state.tableau.length;
     state.tableau = state.tableau.filter((card) => {
       const hex = state.hexByName.get(card.location);
-      return hex ? hexDistance(currentHex, hex) <= 2 * player.speed : true;
+      return hex ? hexDistance(currentHex, hex) <= 2 * speed : true;
     });
     if (state.tableau.length !== before) changed = true;
   }
@@ -513,7 +590,7 @@ export function campEntity(state: ApiState, player: PlayerEntity) {
   if (!canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
   payCost(player, turnCost);
-  player.curHealth = Math.min(player.maxHealth, player.curHealth + 1);
+  adjustHealth(player, 1);
   player.location = locationForToken(state.hexes, player.tokenId);
   const tableauChanged = endTurn(state, player, "camp");
   return {
@@ -551,7 +628,8 @@ export function travelEntity(
   const current = locationForToken(state.hexes, player.tokenId);
   if (route.length < 1 || route[0] !== current)
     throw new RulesViolation("There are gaps in the route");
-  const travelPath = route.slice(0, player.speed + 1);
+  const speed = computeEffectiveValue(player, SectionType.speed);
+  const travelPath = route.slice(0, speed + 1);
   for (let i = 0; i < travelPath.length; i++) {
     if (
       typeof travelPath[i] !== "string" ||
@@ -585,7 +663,7 @@ export function travelEntity(
     const encounterCard = instantiateEncounterTemplate(template, player);
     encounterCard.location = encounterHexName;
     const active = {
-      ...activeEncounterFor(encounterCard, state.rng),
+      ...activeEncounterFor(player, encounterCard, state.rng),
       tableauId: undefined,
     };
     state.activeEncounters.set(player.name, active);
@@ -652,7 +730,7 @@ export function runEncounter(
     (card) => card.id === request.encounterId,
   );
   if (!encounter) throw new RulesViolation("Encounter not found");
-  const active = activeEncounterFor(encounter, state.rng);
+  const active = activeEncounterFor(player, encounter, state.rng);
   state.activeEncounters.set(player.name, active);
   return { encounter: active, updates: playerUpdates(player) };
 }
@@ -682,7 +760,9 @@ export function continueEncounter(
     ...check,
     old: true,
   }));
-  active.skillChecks.push(...rollSkillChecks(encounterSkillChecks, state.rng));
+  active.skillChecks.push(
+    ...rollSkillChecks(player, encounterSkillChecks, state.rng),
+  );
   active.numSuccesses = active.skillChecks.filter(
     (check) => check.success,
   ).length;

@@ -4,6 +4,7 @@ import { Item, PlayerEntity, TableauCard } from "./types.js";
 import {
   makeConditionId,
   makeEmptyResources,
+  makeEmptySkills,
   makeItemId,
   makeTokenId,
   encounterTemplates,
@@ -115,6 +116,7 @@ for (const token of playerTokens) {
     resources: startingResources(),
     inventory: startingInventory(),
     conditions: startingConditions(),
+    skills: makeEmptySkills(),
   });
 }
 const activeEncounters = new Map<

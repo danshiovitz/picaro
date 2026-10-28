@@ -31,7 +31,34 @@ export type PlayerEntity = {
   resources: Record<string, number>;
   inventory: Item[];
   conditions: Condition[];
+  skills: Record<string, number>;
 };
+export enum SectionType {
+  speed = "speed",
+  maxHealth = "max_health",
+  skill = "skill",
+}
+export enum RuleType {
+  BaseValue = "BaseValue",
+  ModifierValue = "ModifierValue",
+}
+export type RuleBase = {
+  id: string;
+  name: string;
+  priority?: number;
+  section: SectionType;
+  subsection?: string;
+  condition: (player: PlayerEntity) => boolean;
+};
+export type BaseValueRule = RuleBase & {
+  type: RuleType.BaseValue;
+  value: (player: PlayerEntity) => number;
+};
+export type ModifierValueRule = RuleBase & {
+  type: RuleType.ModifierValue;
+  value: (player: PlayerEntity) => number;
+};
+export type Rule = BaseValueRule | ModifierValueRule;
 export enum RewardType {
   Gold = "gold",
   Reputation = "reputation",
