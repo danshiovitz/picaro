@@ -12,6 +12,7 @@ import {
   PlayerEntity,
   RewardType,
   SectionType,
+  Selection,
   SpecialAction,
   SpecialActionRequest,
   TableauCard,
@@ -31,6 +32,8 @@ import { hexDistance } from "./hexmap.js";
 import { instantiateEncounterTemplate } from "./encounter.js";
 import { computeEffectiveValue } from "./rule.js";
 import { RNG } from "./random.js";
+import { getActiveSelection, presentSelection } from "./selection.js";
+import { randomUUID } from "node:crypto";
 
 export class RulesViolation extends Error {
   constructor(message: string) {
@@ -71,6 +74,47 @@ const specialActions: SpecialActionDefinition[] = [
       return [];
     },
   },
+  {
+    id: "wish",
+    name: "Wish",
+    cost: [],
+    availability: () => true,
+    execute: (state, player) => {
+      const selection: Selection = {
+        id: randomUUID(),
+        title: "You Get Your Wish",
+        description: "What would you like?",
+        choices: [
+          { description: "1 gold", data: "gold", index: 0 },
+          { description: "1 luck", data: "luck", index: 1 },
+          { description: "1 Silk", data: "Silk", index: 2 },
+        ],
+        minChoices: 0,
+        maxChoices: 1,
+        callback: (indexes) => {
+          if (indexes.length === 0) return;
+          const choice = selection.choices.find(
+            (item) => item.index === indexes[0],
+          );
+          if (!choice) return;
+          switch (choice.data) {
+            case "gold":
+              player.gold += 1;
+              break;
+            case "luck":
+              player.curLuck = Math.min(player.maxLuck, player.curLuck + 1);
+              break;
+            default:
+              player.resources[choice.data] =
+                (player.resources[choice.data] ?? 0) + 1;
+              break;
+          }
+        },
+      };
+      presentSelection(state, player, selection);
+      return [];
+    },
+  },
 ];
 
 export type ApiState = {
@@ -79,6 +123,7 @@ export type ApiState = {
   tokens: { id: string; entityName: string; icon: string }[];
   players: Map<string, PlayerEntity>;
   activeEncounters: Map<string, ActiveEncounter>;
+  activeSelections: Map<string, Selection>;
   travelContinuation: Map<string, boolean>;
   travelContinuationRoute: Map<string, string[]>;
   tableau: TableauCard[];
@@ -531,11 +576,18 @@ export function performSpecialAction(
   payCost(player, action.cost);
   const lines = effectsToLines(action.execute(state, player));
   player.location = locationForToken(state.hexes, player.tokenId);
-  return {
-    updates: playerUpdates(player),
-    card: { title: "Action Results", lines },
-    tableauChanged: false,
-  };
+  const selection = getActiveSelection(state, player);
+  return selection
+    ? {
+        updates: playerUpdates(player),
+        selection,
+        tableauChanged: false,
+      }
+    : {
+        updates: playerUpdates(player),
+        card: { title: "Action Results", lines },
+        tableauChanged: false,
+      };
 }
 
 export function getGame(state: ApiState) {
@@ -601,6 +653,7 @@ export function campEntity(state: ApiState, player: PlayerEntity) {
       conditions: cloneConditions(player.conditions),
     },
     card: { title: "A Restful Night", lines: ["+1 Health", "-1 Turn"] },
+    selection: getActiveSelection(state, player),
     tableauChanged,
     tableau: tableauChanged ? getTableau(state) : undefined,
   };
@@ -709,6 +762,7 @@ export function travelEntity(
   }
   return {
     updates: playerUpdates(player),
+    selection: getActiveSelection(state, player),
     travelRoute: remainingRoute,
     tableauChanged,
     tableau: tableauChanged ? getTableau(state) : undefined,
@@ -732,7 +786,11 @@ export function runEncounter(
   if (!encounter) throw new RulesViolation("Encounter not found");
   const active = activeEncounterFor(player, encounter, state.rng);
   state.activeEncounters.set(player.name, active);
-  return { encounter: active, updates: playerUpdates(player) };
+  return {
+    encounter: active,
+    selection: getActiveSelection(state, player),
+    updates: playerUpdates(player),
+  };
 }
 
 export function continueEncounter(
@@ -825,6 +883,7 @@ export function finishEncounter(
       title: "Encounter Results",
       lines: effectsToLines(effects),
     },
+    selection: getActiveSelection(state, player),
     travelRoute,
     removedEncounterId,
     tableauChanged,

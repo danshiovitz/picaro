@@ -16,6 +16,7 @@ import type {
   PlayCard,
   RewardType,
   RunEncounterResponse,
+  Selection,
   SpecialAction,
   TableauCard,
   TableauData,
@@ -218,9 +219,7 @@ function renderEncounterSummary(card: ActiveEncounter) {
       ? card.successThreshold
       : successes;
   const hasCriticalThreshold = typeof card.criticalThreshold === "number";
-  const criticalThreshold = hasCriticalThreshold
-    ? card.criticalThreshold
-    : successThreshold;
+  const criticalThreshold = card.criticalThreshold ?? successThreshold;
   const failureThreshold =
     typeof card.failureThreshold === "number"
       ? card.failureThreshold
@@ -262,6 +261,35 @@ function renderEncounterResults(card: ActiveEncounter) {
         `<p class="encounter-result-line">${esc(`1d10 (${check.roll}) + ${check.modifier} = ${check.total} .. ${check.success ? "Success!" : "Failure!"}`)}</p>`,
     )
     .join("")}</div>`;
+}
+
+function renderSelectionCard(selection: Selection, error = "") {
+  const maxChoices = selection.maxChoices ?? 1;
+  const inputType = maxChoices === 1 ? "radio" : "checkbox";
+  const instruction =
+    selection.minChoices === 0
+      ? maxChoices === 1
+        ? "Choose one option or cancel."
+        : `Choose up to ${maxChoices} options.`
+      : selection.minChoices === maxChoices
+        ? `Choose ${maxChoices} option${maxChoices === 1 ? "" : "s"}.`
+        : `Choose between ${selection.minChoices ?? 1} and ${maxChoices} options.`;
+  const choices = selection.choices
+    .map(
+      (choice) => `
+        <label class="selection-choice">
+          <input type="${inputType}" name="selection-${esc(selection.id)}" value="${esc(choice.index)}" data-choice-index="${esc(choice.index)}" />
+          <span>${esc(choice.description)}</span>
+        </label>`,
+    )
+    .join("");
+  const description = selection.description
+    ? `<p class="selection-description">${esc(selection.description)}</p>`
+    : "";
+  const errorHtml = error
+    ? `<div class="selection-error" role="alert">${esc(error)}</div>`
+    : `<div class="selection-error" role="alert"></div>`;
+  return `<article class="play-card selection-card"><h3>${esc(selection.title)}</h3><div class="play-card-body selection-body">${description}<p class="selection-instruction">${esc(instruction)}</p><div class="selection-choice-list">${choices}</div></div></article>${errorHtml}<div class="selection-controls"><button id="selection-select" class="card-ok" type="button">Select</button>${selection.minChoices === 0 ? '<button id="selection-cancel" class="card-ok" type="button">Cancel</button>' : ""}</div>`;
 }
 
 function render(
@@ -317,6 +345,7 @@ function render(
   let travelContinuation = false;
   let travelSpecialAction: { actionId: string; targetHex: string } | null =
     null;
+  let activeSelection: Selection | null = null;
   const mapBounds = store.data.hexes.reduce(
     (acc, hex) => {
       const { x, y } = hexCenter(hex);
@@ -334,6 +363,11 @@ function render(
     const hasPlay = activityPanelContent.innerHTML.trim().length > 0;
     const disabled = busy || hasPlay;
     actionButtons.forEach((button) => (button.disabled = disabled));
+    document
+      .querySelectorAll<HTMLButtonElement>(
+        "#selection-select, #selection-cancel",
+      )
+      .forEach((button) => (button.disabled = busy));
     renderSpecialActionList();
   }
   function setActivityPanel(title: string | null, html: string) {
@@ -346,7 +380,109 @@ function render(
     setActivityPanel(title, html);
   }
   function clearPlay() {
+    activeSelection = null;
     setActivityPanel(null, "");
+  }
+
+  function validateSelectionLocally(
+    selection: Selection,
+    selectedIndexes: number[],
+  ) {
+    const minChoices = selection.minChoices ?? 1;
+    const maxChoices = selection.maxChoices ?? 1;
+    if (
+      selectedIndexes.length < minChoices ||
+      selectedIndexes.length > maxChoices
+    ) {
+      return `Select between ${minChoices} and ${maxChoices} choices.`;
+    }
+    return null;
+  }
+
+  async function submitSelection(selectedIndexes: number[]) {
+    if (!activeSelection) return;
+    busy = true;
+    updateActionButtons();
+    try {
+      const result = await apiJson<ActionResponse>(
+        `/api/entities/${encodeURIComponent(player.name)}/actions/make_selection`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            selectionId: activeSelection.id,
+            selectedIndexes,
+          }),
+        },
+      );
+      Object.assign(player, result.updates);
+      activeSelection = null;
+      pendingSpecialAction = null;
+      pendingTravelRoute = null;
+      travelContinuation = false;
+      travelSpecialAction = null;
+      renderSummary();
+      await refreshSpecialActions();
+      if (result.tableauChanged && result.tableau) syncTableau(result.tableau);
+      if (result.selection) showSelection(result.selection);
+      else if (result.card)
+        showGenericCard(result.card, "OK", clearPlay, "Selection Results");
+    } catch (err) {
+      console.error(err);
+      showGenericCard(
+        {
+          title: "Selection Error",
+          lines: [err instanceof Error ? err.message : String(err)],
+        },
+        "OK",
+        clearPlay,
+        "Selection Error",
+      );
+    } finally {
+      busy = false;
+      updateActionButtons();
+    }
+  }
+
+  function showSelection(selection: Selection) {
+    activeSelection = selection;
+    setActivityPanel("Selection", renderSelectionCard(selection));
+    const errorEl = document.querySelector(
+      ".selection-error",
+    ) as HTMLElement | null;
+    const selectButton = document.querySelector(
+      "#selection-select",
+    ) as HTMLButtonElement | null;
+    const cancelButton = document.querySelector(
+      "#selection-cancel",
+    ) as HTMLButtonElement | null;
+    const clearError = () => {
+      if (errorEl) errorEl.textContent = "";
+    };
+    document
+      .querySelectorAll<HTMLInputElement>(
+        `input[name="selection-${CSS.escape(selection.id)}"]`,
+      )
+      .forEach((input) => input.addEventListener("change", clearError));
+    cancelButton?.addEventListener("click", () => {
+      void submitSelection([]);
+    });
+    selectButton?.addEventListener("click", () => {
+      const selectedIndexes = [
+        ...document.querySelectorAll<HTMLInputElement>(
+          `.selection-card input[name="selection-${CSS.escape(selection.id)}"]:checked`,
+        ),
+      ].map((input) => Number(input.value));
+      const validationError = validateSelectionLocally(
+        selection,
+        selectedIndexes,
+      );
+      if (validationError) {
+        if (errorEl) errorEl.textContent = validationError;
+        return;
+      }
+      void submitSelection(selectedIndexes);
+    });
   }
 
   function currentLocationHex() {
@@ -482,7 +618,8 @@ function render(
       renderSummary();
       if (result.tableauChanged && result.tableau) syncTableau(result.tableau);
       await refreshSpecialActions();
-      if (result.card)
+      if (result.selection) showSelection(result.selection);
+      else if (result.card)
         showGenericCard(result.card, "OK", clearPlay, "Action Results");
     } catch (err) {
       console.error(err);
@@ -683,7 +820,8 @@ function render(
       if (result.updates) Object.assign(player, result.updates);
       syncTableau(tableauData);
       renderSummary();
-      showActiveEncounter(result.encounter);
+      if (result.selection) showSelection(result.selection);
+      else showActiveEncounter(result.encounter);
     } catch (err) {
       console.error(err);
       showEncounterError(err instanceof Error ? err.message : String(err));
@@ -744,28 +882,29 @@ function render(
         await refreshSpecialActions();
         if (result.card) {
           const routeAfterEncounter = result.travelRoute ?? pendingTravelRoute;
+          const destination = result.updates?.location ?? player.location;
+          const pendingAction = travelSpecialAction;
           showEncounterResults(result.card, () => {
             clearPlay();
             if (routeAfterEncounter?.length) {
               route = routeAfterEncounter;
               pendingTravelRoute = null;
-              pendingSpecialAction = travelSpecialAction;
+              pendingSpecialAction = pendingAction;
               travelContinuation = true;
               map.classList.add("travel-mode");
               showTravelCard();
               draw();
             } else if (
-              travelSpecialAction &&
-              (result.updates.location ?? player.location) ===
-                travelSpecialAction.targetHex
+              pendingAction &&
+              destination === pendingAction.targetHex
             ) {
               pendingTravelRoute = null;
               travelContinuation = false;
               const action = specialActionCatalog.find(
-                (item) => item.id === travelSpecialAction.actionId,
+                (item) => item.id === pendingAction.actionId,
               );
               if (action)
-                showSpecialActionPrompt(action, travelSpecialAction.targetHex);
+                showSpecialActionPrompt(action, pendingAction.targetHex);
             } else {
               pendingTravelRoute = null;
               travelContinuation = false;
@@ -860,7 +999,9 @@ function render(
       travelSpecialAction = null;
       renderSummary();
       await refreshSpecialActions();
-      if (result.card) showGenericCard(result.card, "OK", clearPlay, "Camp");
+      if (result.selection) showSelection(result.selection);
+      else if (result.card)
+        showGenericCard(result.card, "OK", clearPlay, "Camp");
     } catch (err) {
       console.error(err);
       showGenericCard(
@@ -967,7 +1108,12 @@ function render(
       if (result.tableauChanged && result.tableau) syncTableau(result.tableau);
       renderSummary();
       await refreshSpecialActions();
-      if (result.encounter) {
+      if (result.selection) {
+        pendingTravelRoute = null;
+        travelContinuation = false;
+        travelSpecialAction = null;
+        showSelection(result.selection);
+      } else if (result.encounter) {
         pendingTravelRoute = result.travelRoute ?? null;
         travelContinuation = Boolean(result.travelRoute?.length);
         showActiveEncounter(result.encounter);

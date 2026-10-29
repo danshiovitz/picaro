@@ -32,6 +32,7 @@ import {
   runEncounter,
   travelEntity,
 } from "./commands.js";
+import { makeSelection } from "./selection.js";
 import { setEncounterContext } from "./encounter.js";
 
 const defaultGenerator: MapGeneratorName =
@@ -123,6 +124,7 @@ const activeEncounters = new Map<
   string,
   import("./types.js").ActiveEncounter
 >();
+const activeSelections = new Map<string, import("./types.js").Selection>();
 const travelContinuation = new Map<string, boolean>();
 const travelContinuationRoute = new Map<string, string[]>();
 const tableau: TableauCard[] = [];
@@ -138,6 +140,7 @@ const apiState: ApiState = {
   tokens: playerTokens,
   players,
   activeEncounters,
+  activeSelections,
   travelContinuation,
   travelContinuationRoute,
   tableau,
@@ -208,7 +211,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     const entityMatch = path.match(
-      /^\/api\/entities\/([^/]+)(?:\/actions\/(camp|travel|run_encounter|continue_encounter|finish_encounter|special_action))?$/,
+      /^\/api\/entities\/([^/]+)(?:\/actions\/(camp|travel|run_encounter|continue_encounter|finish_encounter|special_action|make_selection))?$/,
     );
     if (entityMatch) {
       const player = players.get(entityMatch[1]);
@@ -268,6 +271,17 @@ const server = http.createServer(async (req, res) => {
           200,
           performSpecialAction(apiState, player, request),
         );
+      }
+
+      if (req.method === "POST" && action === "make_selection") {
+        const body = await readJson(req);
+        const request = {
+          selectionId: String(body?.selectionId ?? ""),
+          selectedIndexes: Array.isArray(body?.selectedIndexes)
+            ? body.selectedIndexes.map((value: unknown) => Number(value))
+            : [],
+        };
+        return sendJson(res, 200, makeSelection(apiState, player, request));
       }
     }
 

@@ -569,6 +569,62 @@ button {
   justify-content: center;
 }
 
+.selection-card .play-card-body {
+  min-height: 0;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 12px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.selection-description,
+.selection-instruction {
+  margin: 0;
+  width: 100%;
+  text-align: left;
+}
+
+.selection-instruction {
+  color: #3b3b3b;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.selection-choice-list {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+}
+
+.selection-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.selection-choice input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.selection-error {
+  min-height: 1.1em;
+  color: #9d1f1f;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.selection-controls {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
 .special-action-cost {
   margin-top: 10px;
   font-size: 18px;

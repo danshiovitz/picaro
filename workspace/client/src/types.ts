@@ -90,6 +90,18 @@ export type SpecialAction = {
   locations?: string[];
   cost: Effect[];
 };
+export type SelectionChoice = {
+  description: string;
+  index: number;
+};
+export type Selection = {
+  id: string;
+  title: string;
+  description?: string;
+  choices: SelectionChoice[];
+  minChoices?: number;
+  maxChoices?: number;
+};
 export type PlayerEntity = {
   name: string;
   tokenId: string;
@@ -129,12 +141,14 @@ export type ActionResponse = {
   updates: Partial<PlayerEntity>;
   card?: PlayCard;
   encounter?: ActiveEncounter;
+  selection?: Selection;
   travelRoute?: string[];
   tableauChanged: boolean;
   tableau?: TableauData;
 };
 export type RunEncounterResponse = {
   encounter: ActiveEncounter;
+  selection?: Selection;
   updates?: Partial<PlayerEntity>;
 };
 export type ContinueEncounterResponse = { encounter: ActiveEncounter };
