@@ -691,9 +691,19 @@ function render(
     return Math.max(min, Math.min(max, value));
   }
 
+  let collapsedSummarySections = {
+    resources: false,
+    inventory: false,
+    conditions: false,
+    skills: false,
+  };
+  let hideZeroResources = false;
+  let hideZeroSkills = false;
+
   function renderResources(resources: Record<string, number>) {
     const visibleResources = store.data.resourceTypes.filter(
-      (resourceType) => (resources[resourceType] ?? 0) > 0,
+      (resourceType) =>
+        !hideZeroResources || (resources[resourceType] ?? 0) > 0,
     );
     return visibleResources.length
       ? `<ul class="resource-list">${visibleResources
@@ -726,9 +736,9 @@ function render(
   }
 
   function renderSkills(skills: Record<string, number>) {
-    const visibleSkills = Object.entries(skills).sort(([a], [b]) =>
-      a.localeCompare(b),
-    );
+    const visibleSkills = Object.entries(skills)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .filter(([, value]) => !hideZeroSkills || value !== 0);
     return visibleSkills.length
       ? `<ul class="skill-list">${visibleSkills
           .map(([name, value]) => `<li>${esc(name)}: ${esc(value)}</li>`)
@@ -736,8 +746,43 @@ function render(
       : `<p class="skill-empty">None</p>`;
   }
 
+  function renderSummarySection(
+    key: keyof typeof collapsedSummarySections,
+    title: string,
+    body: string,
+  ) {
+    const collapsed = collapsedSummarySections[key];
+    return `<section class="summary-section ${collapsed ? "collapsed" : "expanded"}" data-summary-section="${esc(key)}"><div class="summary-section-header"><span>${esc(title)}</span><button class="summary-toggle" type="button" data-summary-toggle="${esc(key)}" aria-label="${collapsed ? "Expand" : "Collapse"} ${esc(title)}">${collapsed ? "+" : "−"}</button></div><div class="summary-section-body">${body}</div></section>`;
+  }
+
   function renderSummary() {
-    stats.innerHTML = `<dl><div><dt>Name</dt><dd>${esc(player.name)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${player.maxHealth}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div class="resources-row"><dt>Resources</dt><dd>${renderResources(player.resources)}</dd></div><div><dt>Speed</dt><dd>${player.speed}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div><div class="inventory-row"><dt>Inventory</dt><dd>${renderInventory(player.inventory)}</dd></div><div class="conditions-row"><dt>Conditions</dt><dd>${renderConditions(player.conditions)}</dd></div><div class="skills-row"><dt>Skills</dt><dd>${renderSkills(player.skills)}</dd></div></dl>`;
+    stats.innerHTML = `<div class="summary-basic"><div><dd>${esc(player.name)}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${player.maxHealth}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div><dt>Speed</dt><dd>${player.speed}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div></div>${renderSummarySection("resources", "Resources", `<label class="skills-filter"><input type="checkbox" id="hide-zero-resources"${hideZeroResources ? " checked" : ""}/> hide 0 resources</label>${renderResources(player.resources)}`)}${renderSummarySection("inventory", "Inventory", renderInventory(player.inventory))}${renderSummarySection("conditions", "Conditions", renderConditions(player.conditions))}${renderSummarySection("skills", "Skills", `<label class="skills-filter"><input type="checkbox" id="hide-zero-skills"${hideZeroSkills ? " checked" : ""}/> hide 0 skills</label>${renderSkills(player.skills)}`)}`;
+    stats
+      .querySelectorAll<HTMLButtonElement>("[data-summary-toggle]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const key = button.dataset.summaryToggle as
+            keyof typeof collapsedSummarySections | undefined;
+          if (!key) return;
+          collapsedSummarySections = {
+            ...collapsedSummarySections,
+            [key]: !collapsedSummarySections[key],
+          };
+          renderSummary();
+        });
+      });
+    stats
+      .querySelector("#hide-zero-resources")
+      ?.addEventListener("change", (event) => {
+        hideZeroResources = (event.target as HTMLInputElement).checked;
+        renderSummary();
+      });
+    stats
+      .querySelector("#hide-zero-skills")
+      ?.addEventListener("change", (event) => {
+        hideZeroSkills = (event.target as HTMLInputElement).checked;
+        renderSummary();
+      });
   }
 
   function showGenericCard(

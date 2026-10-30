@@ -452,31 +452,16 @@ button {
   color: #f4ead7;
 }
 
-.character-summary dl {
-  margin: 0;
+.summary-basic {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px 12px;
 }
 
-.character-summary dl > div {
+.summary-basic > div {
   display: flex;
   justify-content: space-between;
   gap: 14px;
-}
-
-.character-summary .resources-row,
-.character-summary .inventory-row,
-.character-summary .conditions-row,
-.character-summary .skills-row {
-  grid-column: 1 / -1;
-  display: block;
-}
-
-.character-summary .resources-row dd,
-.character-summary .inventory-row dd,
-.character-summary .conditions-row dd {
-  text-align: left;
 }
 
 .character-summary dt {
@@ -490,6 +475,59 @@ button {
   color: #fff;
 }
 
+.summary-section {
+  margin-top: 12px;
+  border: 1px solid #596273;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #202731;
+}
+
+.summary-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #323b48;
+  color: #f4ead7;
+  font-weight: 800;
+}
+
+.summary-toggle {
+  width: 24px;
+  height: 24px;
+  border: 1px solid #778293;
+  border-radius: 999px;
+  background: #404957;
+  color: #fff;
+  font-weight: 900;
+  line-height: 1;
+  padding: 0;
+}
+
+.summary-section-body {
+  padding: 10px 12px 12px;
+}
+
+.summary-section.collapsed .summary-section-body {
+  display: none;
+}
+
+.skills-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #cdd5df;
+}
+
+.skills-filter input {
+  width: 16px;
+  height: 16px;
+}
+
 .resource-list,
 .inventory-list,
 .condition-list,
@@ -501,7 +539,7 @@ button {
 }
 
 .skill-list {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
 }
 
 .resource-empty,
