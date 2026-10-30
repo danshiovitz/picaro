@@ -4,7 +4,7 @@ import {
   PlayerEntity,
   SectionType,
   SelectionChoice,
-  ActionResponse,
+  ActivityResult,
   SelectionView,
 } from "./types.js";
 import { skillNames } from "./data.js";
@@ -132,24 +132,26 @@ export function makeSelection(
   state: ApiState,
   player: PlayerEntity,
   request: SelectionRequest,
-): ActionResponse {
+): ActivityResult {
   const selection = state.activeSelections.get(player.name);
   if (!selection || selection.id !== request.selectionId) {
     throw new RulesViolation("Selection not found");
   }
   validateSelectionIndexes(selection, request.selectedIndexes);
   state.activeSelections.delete(player.name);
-  selection.callback([...request.selectedIndexes]);
+  const callbackResult = selection.callback([...request.selectedIndexes]);
   const choices = selectedChoices(selection, request.selectedIndexes);
-  return {
-    updates: playerUpdates(player),
-    card: {
-      title: "Selection Results",
-      lines:
+  const nextSelection = getActiveSelection(state, player);
+  return (
+    callbackResult ?? {
+      flavorText:
         choices.length > 0
-          ? choices.map((choice) => choice.description)
-          : ["No selection made."],
-    },
-    tableauChanged: false,
-  };
+          ? choices.map((choice) => choice.description).join("\n")
+          : "No selection made.",
+      effects: [],
+      nextActive: nextSelection
+        ? { type: "selection", selection: nextSelection }
+        : undefined,
+    }
+  );
 }

@@ -1,5 +1,5 @@
 import {
-  ActionResponse,
+  ActivityResult,
   ActiveEncounter,
   ActiveEncounterSkillCheck,
   Condition,
@@ -27,13 +27,13 @@ import {
   resourceTypes,
   skillNames,
   terrainEncounterTemplates,
+  specialActions,
 } from "./data.js";
 import { hexDistance } from "./hexmap.js";
 import { instantiateEncounterTemplate } from "./encounter.js";
 import { computeEffectiveValue } from "./rule.js";
 import { RNG } from "./random.js";
-import { getActiveSelection, presentSelection } from "./selection.js";
-import { randomUUID } from "node:crypto";
+import { getActiveSelection } from "./selection.js";
 
 export class RulesViolation extends Error {
   constructor(message: string) {
@@ -42,85 +42,11 @@ export class RulesViolation extends Error {
   }
 }
 
-type SpecialActionDefinition = SpecialAction & {
-  availability: (player: PlayerEntity) => boolean;
-  execute: (state: ApiState, player: PlayerEntity) => Effect[];
-};
-
-function hasItemNamed(player: PlayerEntity, itemName: string) {
-  return player.inventory.some((item) => item.name === itemName);
-}
-
-const specialActions: SpecialActionDefinition[] = [
-  {
-    id: "medical-visit",
-    name: "Medical Visit",
-    locations: ["C10"],
-    cost: [{ type: EffectType.Gold, amount: 2 }],
-    availability: (player) =>
-      player.curHealth < computeEffectiveValue(player, SectionType.maxHealth),
-    execute: (_state, _player) => [{ type: EffectType.Health, amount: 2 }],
-  },
-  {
-    id: "drink",
-    name: "Drink",
-    cost: [],
-    availability: (player) => hasItemNamed(player, "can of coke"),
-    execute: (_state, player) => {
-      const itemIndex = player.inventory.findIndex(
-        (item) => item.name === "can of coke",
-      );
-      if (itemIndex >= 0) player.inventory.splice(itemIndex, 1);
-      return [];
-    },
-  },
-  {
-    id: "wish",
-    name: "Wish",
-    cost: [],
-    availability: () => true,
-    execute: (state, player) => {
-      const selection: Selection = {
-        id: randomUUID(),
-        title: "You Get Your Wish",
-        description: "What would you like?",
-        choices: [
-          { description: "1 gold", data: "gold", index: 0 },
-          { description: "1 luck", data: "luck", index: 1 },
-          { description: "1 Silk", data: "Silk", index: 2 },
-        ],
-        minChoices: 0,
-        maxChoices: 1,
-        callback: (indexes) => {
-          if (indexes.length === 0) return;
-          const choice = selection.choices.find(
-            (item) => item.index === indexes[0],
-          );
-          if (!choice) return;
-          switch (choice.data) {
-            case "gold":
-              player.gold += 1;
-              break;
-            case "luck":
-              player.curLuck = Math.min(player.maxLuck, player.curLuck + 1);
-              break;
-            default:
-              player.resources[choice.data] =
-                (player.resources[choice.data] ?? 0) + 1;
-              break;
-          }
-        },
-      };
-      presentSelection(state, player, selection);
-      return [];
-    },
-  },
-];
-
 export type ApiState = {
   hexes: Hex[];
   hexByName: Map<string, Hex>;
   tokens: { id: string; entityName: string; icon: string }[];
+  items: Map<string, Item>;
   players: Map<string, PlayerEntity>;
   activeEncounters: Map<string, ActiveEncounter>;
   activeSelections: Map<string, Selection>;
@@ -368,6 +294,11 @@ function adjustResource(
   player.resources[resourceType] = Math.max(0, current + amount);
 }
 
+function removeItems(player: PlayerEntity, itemIds: string[]) {
+  const ids = new Set(itemIds);
+  player.inventory = player.inventory.filter((item) => !ids.has(item.id));
+}
+
 function adjustTurns(player: PlayerEntity, amount: number) {
   player.turns = Math.max(0, player.turns + amount);
 }
@@ -394,6 +325,10 @@ function canAfford(player: PlayerEntity, cost: Effect[]) {
         return player.curLuck >= effect.amount;
       case EffectType.Resource:
         return (player.resources[effect.resourceType] ?? 0) >= effect.amount;
+      case EffectType.RemoveItems: {
+        const inventoryIds = new Set(player.inventory.map((item) => item.id));
+        return effect.itemIds.every((itemId) => inventoryIds.has(itemId));
+      }
     }
   });
 }
@@ -419,6 +354,9 @@ function applyEffects(player: PlayerEntity, effects: Effect[]) {
       case EffectType.Resource:
         adjustResource(player, effect.resourceType, effect.amount);
         break;
+      case EffectType.RemoveItems:
+        removeItems(player, effect.itemIds);
+        break;
     }
   }
 }
@@ -426,11 +364,18 @@ function applyEffects(player: PlayerEntity, effects: Effect[]) {
 function payCost(player: PlayerEntity, cost: Effect[]) {
   applyEffects(
     player,
-    cost.map((effect) => ({ ...effect, amount: -effect.amount })),
+    cost.map((effect) =>
+      effect.type === EffectType.RemoveItems
+        ? effect
+        : { ...effect, amount: -effect.amount },
+    ),
   );
 }
 
 function effectLabelLine(effect: Effect) {
+  if (effect.type === EffectType.RemoveItems) {
+    return `Remove items: ${effect.itemIds.join(", ") || "none"}`;
+  }
   return `${effect.amount >= 0 ? "+" : "-"}${Math.abs(effect.amount)} ${labelForEffect(effect.type)}`;
 }
 
@@ -535,6 +480,10 @@ export function getTokens(state: ApiState) {
   return allTokens(state.tokens);
 }
 
+export function getItem(state: ApiState, itemId: string) {
+  return state.items.get(itemId);
+}
+
 export function getTableau(state: ApiState): TableauData {
   return { encounters: state.tableau };
 }
@@ -560,7 +509,7 @@ export function performSpecialAction(
   state: ApiState,
   player: PlayerEntity,
   request: SpecialActionRequest,
-): ActionResponse {
+): ActivityResult {
   const action = specialActions.find(
     (item) => item.id === request.specialActionId,
   );
@@ -574,20 +523,13 @@ export function performSpecialAction(
   if (!canAfford(player, action.cost))
     throw new RulesViolation("You can't afford to perform this action.");
   payCost(player, action.cost);
-  const lines = effectsToLines(action.execute(state, player));
+  const effects = action.execute(state, player);
   player.location = locationForToken(state.hexes, player.tokenId);
   const selection = getActiveSelection(state, player);
-  return selection
-    ? {
-        updates: playerUpdates(player),
-        selection,
-        tableauChanged: false,
-      }
-    : {
-        updates: playerUpdates(player),
-        card: { title: "Action Results", lines },
-        tableauChanged: false,
-      };
+  return {
+    effects,
+    nextActive: selection ? { type: "selection", selection } : undefined,
+  };
 }
 
 export function getGame(state: ApiState) {
@@ -635,7 +577,10 @@ function endTurn(state: ApiState, player: PlayerEntity, reason: string) {
   return changed;
 }
 
-export function campEntity(state: ApiState, player: PlayerEntity) {
+export function campEntity(
+  state: ApiState,
+  player: PlayerEntity,
+): ActivityResult {
   const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
   state.travelContinuation.delete(player.name);
   state.travelContinuationRoute.delete(player.name);
@@ -644,18 +589,13 @@ export function campEntity(state: ApiState, player: PlayerEntity) {
   payCost(player, turnCost);
   adjustHealth(player, 1);
   player.location = locationForToken(state.hexes, player.tokenId);
-  const tableauChanged = endTurn(state, player, "camp");
+  endTurn(state, player, "camp");
+  const selection = getActiveSelection(state, player);
   return {
-    updates: {
-      curHealth: player.curHealth,
-      turns: player.turns,
-      location: player.location,
-      conditions: cloneConditions(player.conditions),
-    },
-    card: { title: "A Restful Night", lines: ["+1 Health", "-1 Turn"] },
-    selection: getActiveSelection(state, player),
-    tableauChanged,
-    tableau: tableauChanged ? getTableau(state) : undefined,
+    title: "A Restful Night",
+    effects: [{ type: EffectType.Health, amount: 1 }],
+    implicitEffects: [{ type: EffectType.Turns, amount: -1 }],
+    nextActive: selection ? { type: "selection", selection } : undefined,
   };
 }
 
@@ -663,7 +603,7 @@ export function travelEntity(
   state: ApiState,
   player: PlayerEntity,
   request: TravelRequest,
-) {
+): ActivityResult {
   const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
   const canContinueWithoutCost =
     state.travelContinuation.get(player.name) ?? false;
@@ -730,17 +670,17 @@ export function travelEntity(
       state.travelContinuation.set(player.name, true);
       state.travelContinuationRoute.set(player.name, resumeRoute);
     }
-    const tableauChanged = completesTrip
-      ? endTurn(state, player, "travel-encounter-destination")
-      : false;
+    if (completesTrip) {
+      endTurn(state, player, "travel-encounter-destination");
+      state.travelContinuation.delete(player.name);
+      state.travelContinuationRoute.delete(player.name);
+    }
     return {
-      updates: playerUpdates(player),
-      encounter: active,
-      travelRoute: completesTrip
-        ? undefined
-        : route.slice(route.indexOf(encounterHexName)),
-      tableauChanged,
-      tableau: tableauChanged ? getTableau(state) : undefined,
+      effects: [],
+      implicitEffects: canContinueWithoutCost
+        ? []
+        : [{ type: EffectType.Turns, amount: -1 }],
+      nextActive: { type: "encounter", encounter: active },
     };
   }
   moveToken(state.hexes, state.hexByName, player.tokenId, destination);
@@ -756,16 +696,16 @@ export function travelEntity(
     state.travelContinuation.delete(player.name);
     state.travelContinuationRoute.delete(player.name);
   }
-  let tableauChanged = false;
   if (!remainingRoute) {
-    tableauChanged = endTurn(state, player, "travel-complete");
+    endTurn(state, player, "travel-complete");
   }
+  const selection = getActiveSelection(state, player);
   return {
-    updates: playerUpdates(player),
-    selection: getActiveSelection(state, player),
-    travelRoute: remainingRoute,
-    tableauChanged,
-    tableau: tableauChanged ? getTableau(state) : undefined,
+    effects: [],
+    implicitEffects: canContinueWithoutCost
+      ? []
+      : [{ type: EffectType.Turns, amount: -1 }],
+    nextActive: selection ? { type: "selection", selection } : undefined,
   };
 }
 
@@ -773,7 +713,7 @@ export function runEncounter(
   state: ApiState,
   player: PlayerEntity,
   request: EncounterRequest,
-) {
+): ActivityResult {
   const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
   if (!canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
@@ -787,9 +727,9 @@ export function runEncounter(
   const active = activeEncounterFor(player, encounter, state.rng);
   state.activeEncounters.set(player.name, active);
   return {
-    encounter: active,
-    selection: getActiveSelection(state, player),
-    updates: playerUpdates(player),
+    effects: [],
+    implicitEffects: [{ type: EffectType.Turns, amount: -1 }],
+    nextActive: { type: "encounter", encounter: active },
   };
 }
 
@@ -797,7 +737,7 @@ export function continueEncounter(
   state: ApiState,
   player: PlayerEntity,
   request: EncounterRequest,
-) {
+): ActivityResult {
   const active = state.activeEncounters.get(player.name);
   if (!active || active.id !== request.encounterId)
     throw new RulesViolation("No active encounter to continue");
@@ -840,14 +780,17 @@ export function continueEncounter(
           state.rng,
         );
   }
-  return { encounter: active, updates: playerUpdates(player) };
+  return {
+    effects: [],
+    nextActive: { type: "encounter", encounter: active },
+  };
 }
 
 export function finishEncounter(
   state: ApiState,
   player: PlayerEntity,
   request: EncounterRequest & { conceding?: boolean },
-) {
+): ActivityResult {
   const active = state.activeEncounters.get(player.name);
   const encounterId = request.tableauId ?? request.encounterId;
   if (!active || active.id !== request.encounterId)
@@ -868,26 +811,14 @@ export function finishEncounter(
     request.conceding,
   );
   state.activeEncounters.delete(player.name);
-  const removedEncounterId = encounter
-    ? removeEncounterFromTableau(state, encounterId)
-      ? encounterId
-      : undefined
-    : undefined;
-  const travelRoute = state.travelContinuationRoute.get(player.name);
-  const tableauChanged = encounter
-    ? endTurn(state, player, "finish-encounter") || Boolean(removedEncounterId)
-    : false;
+  if (encounter) {
+    removeEncounterFromTableau(state, encounterId);
+    endTurn(state, player, "finish-encounter");
+  }
+  const selection = getActiveSelection(state, player);
   return {
-    updates: playerUpdates(player),
-    card: {
-      title: "Encounter Results",
-      lines: effectsToLines(effects),
-    },
-    selection: getActiveSelection(state, player),
-    travelRoute,
-    removedEncounterId,
-    tableauChanged,
-    tableau: tableauChanged ? getTableau(state) : undefined,
+    effects,
+    nextActive: selection ? { type: "selection", selection } : undefined,
   };
 }
 

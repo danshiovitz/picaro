@@ -1,6 +1,12 @@
 import http from "node:http";
 
-import { Item, PlayerEntity, TableauCard } from "./types.js";
+import {
+  ActiveEncounter,
+  Item,
+  PlayerEntity,
+  Selection,
+  TableauCard,
+} from "./types.js";
 import {
   makeConditionId,
   makeEmptyResources,
@@ -28,6 +34,7 @@ import {
   getTableau,
   getTerrain,
   getTokens,
+  getItem,
   performSpecialAction,
   runEncounter,
   travelEntity,
@@ -81,12 +88,15 @@ function locationForToken(tokenId: string) {
   return hexes.find((hex) => hex.tokens.includes(tokenId))?.name ?? "Unknown";
 }
 
+const items = new Map<string, Item>();
 const players = new Map<string, PlayerEntity>();
+function createItem(name: string): Item {
+  const item = { id: makeItemId(), name };
+  items.set(item.id, item);
+  return item;
+}
 function startingInventory(): Item[] {
-  return ["sword", "shield", "can of coke"].map((name) => ({
-    id: makeItemId(),
-    name,
-  }));
+  return ["sword", "shield", "can of coke"].map(createItem);
 }
 
 function startingConditions() {
@@ -120,11 +130,8 @@ for (const token of playerTokens) {
     skills: makeEmptySkills(),
   });
 }
-const activeEncounters = new Map<
-  string,
-  import("./types.js").ActiveEncounter
->();
-const activeSelections = new Map<string, import("./types.js").Selection>();
+const activeEncounters = new Map<string, ActiveEncounter>();
+const activeSelections = new Map<string, Selection>();
 const travelContinuation = new Map<string, boolean>();
 const travelContinuationRoute = new Map<string, string[]>();
 const tableau: TableauCard[] = [];
@@ -138,6 +145,7 @@ const apiState: ApiState = {
   hexes,
   hexByName,
   tokens: playerTokens,
+  items,
   players,
   activeEncounters,
   activeSelections,
@@ -199,6 +207,13 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, getGame(apiState));
     if (req.method === "GET" && path === "/api/special_actions")
       return sendJson(res, 200, getSpecialActionCatalog());
+
+    const itemMatch = path.match(/^\/api\/items\/([^/]+)$/);
+    if (itemMatch && req.method === "GET") {
+      const item = getItem(apiState, itemMatch[1]);
+      if (!item) return sendJson(res, 404, { error: "Item not found" });
+      return sendJson(res, 200, item);
+    }
 
     const specialActionsMatch = path.match(
       /^\/api\/entities\/([^/]+)\/special_actions$/,

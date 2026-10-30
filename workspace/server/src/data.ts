@@ -1,5 +1,6 @@
 import {
   Claim,
+  EffectType,
   EncounterTemplate,
   Item,
   PenaltyType,
@@ -9,8 +10,11 @@ import {
   Rule,
   RuleType,
   SectionType,
+  Selection,
+  SpecialActionDefinition,
   Token,
 } from "./types.js";
+import { computeEffectiveValue } from "./rule.js";
 
 export const terrainSpecs = [
   ["Forest", "#1a531e", "forest"],
@@ -325,6 +329,10 @@ function hasItem(player: PlayerEntity, itemName: string) {
   return player.inventory.some((item) => item.name === itemName);
 }
 
+function hasItemNamed(player: PlayerEntity, itemName: string) {
+  return hasItem(player, itemName);
+}
+
 addRule({
   id: "rule-speed-can-of-coke",
   name: "Can of Coke Speed Boost",
@@ -343,3 +351,91 @@ addRule({
   condition: (player) => hasItem(player, "shield"),
   value: () => 4,
 });
+
+export const specialActions: SpecialActionDefinition[] = [
+  {
+    id: "medical-visit",
+    name: "Medical Visit",
+    locations: ["C10"],
+    cost: [{ type: EffectType.Gold, amount: 2 }],
+    availability: (player) =>
+      player.curHealth < computeEffectiveValue(player, SectionType.maxHealth),
+    execute: (_state, _player) => [{ type: EffectType.Health, amount: 2 }],
+  },
+  {
+    id: "drink",
+    name: "Drink",
+    cost: [],
+    availability: (player) => hasItemNamed(player, "can of coke"),
+    execute: (_state, player) => {
+      const item = player.inventory.find((item) => item.name === "can of coke");
+      return item ? [{ type: EffectType.RemoveItems, itemIds: [item.id] }] : [];
+    },
+  },
+  {
+    id: "wish",
+    name: "Wish",
+    cost: [],
+    availability: () => true,
+    execute: (state, player) => {
+      const selection: Selection = {
+        id: `selection-wish-${Math.random().toString(36).slice(2)}`,
+        title: "You Get Your Wish",
+        description: "What would you like?",
+        choices: [
+          { description: "1 gold", data: "gold", index: 0 },
+          { description: "1 luck", data: "luck", index: 1 },
+          { description: "1 Silk", data: "Silk", index: 2 },
+        ],
+        minChoices: 0,
+        maxChoices: 1,
+        callback: (indexes) => {
+          if (indexes.length === 0)
+            return {
+              title: "Wish Granted",
+              effects: [],
+              flavorText: "No selection made.",
+            };
+          const choice = selection.choices.find(
+            (item) => item.index === indexes[0],
+          );
+          if (!choice)
+            return {
+              title: "Wish Granted",
+              effects: [],
+              flavorText: "No selection made.",
+            };
+          switch (choice.data) {
+            case "gold":
+              player.gold += 1;
+              return {
+                title: "Wish Granted",
+                effects: [{ type: EffectType.Gold, amount: 1 }],
+              };
+            case "luck":
+              player.curLuck = Math.min(player.maxLuck, player.curLuck + 1);
+              return {
+                title: "Wish Granted",
+                effects: [{ type: EffectType.Luck, amount: 1 }],
+              };
+            default:
+              player.resources[choice.data] =
+                (player.resources[choice.data] ?? 0) + 1;
+              return {
+                title: "Wish Granted",
+                effects: [
+                  {
+                    type: EffectType.Resource,
+                    resourceType: choice.data,
+                    amount: 1,
+                  },
+                ],
+              };
+          }
+        },
+      };
+      state.activeSelections.set(player.name, selection);
+      return [];
+    },
+  },
+];

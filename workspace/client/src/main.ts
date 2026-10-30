@@ -1,21 +1,24 @@
 import { GameStore } from "./store";
 import { EffectType } from "./types";
+import {
+  activityErrorTitle,
+  activityResultTitle,
+  renderActivityLines,
+  type ActivityKind,
+} from "./activity-ui";
 import type {
-  ActionResponse,
+  ActivityResult,
+  ActivityNextActive,
   ActiveEncounter,
-  ContinueEncounterResponse,
   Effect,
   EncounterSkillCheck,
-  FinishEncounterResponse,
   GameData,
   Hex,
   Condition,
   Item,
   PenaltyType,
   PlayerEntity,
-  PlayCard,
   RewardType,
-  RunEncounterResponse,
   Selection,
   SpecialAction,
   TableauCard,
@@ -97,15 +100,21 @@ function labelForType(type: string) {
 }
 
 function effectLabel(effect: Effect) {
-  return effect.type === EffectType.Resource
-    ? `${labelForType(effect.type)} (${effect.resourceType})`
-    : labelForType(effect.type);
+  if (effect.type === EffectType.Resource)
+    return `${labelForType(effect.type)} (${effect.resourceType})`;
+  if (effect.type === EffectType.RemoveItems)
+    return `Remove items (${effect.itemIds.join(", ") || "none"})`;
+  return labelForType(effect.type);
 }
 
 function formatEffects(effects: Effect[]) {
   return effects.length
     ? effects
-        .map((effect) => `-${effect.amount} ${effectLabel(effect)}`)
+        .map((effect) =>
+          effect.type === EffectType.RemoveItems
+            ? effectLabel(effect)
+            : `-${effect.amount} ${effectLabel(effect)}`,
+        )
         .join(", ")
     : "none";
 }
@@ -125,6 +134,10 @@ function canAffordEffects(player: PlayerEntity, effects: Effect[]) {
         return player.curLuck >= effect.amount;
       case EffectType.Resource:
         return (player.resources[effect.resourceType] ?? 0) >= effect.amount;
+      case EffectType.RemoveItems: {
+        const inventoryIds = new Set(player.inventory.map((item) => item.id));
+        return effect.itemIds.every((itemId) => inventoryIds.has(itemId));
+      }
     }
   });
 }
@@ -310,6 +323,8 @@ function render(
       (encounter) => [encounter.location, encounter] as const,
     ),
   );
+  const itemNameCache = new Map<string, string>();
+  for (const item of player.inventory) itemNameCache.set(item.id, item.name);
   app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button><button id="fit">Fit</button><button id="snap">Snap</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableauData.encounters.map(renderEncounterCard).join("")}</section></div></div></div><section class="character-panel"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><div class="action-buttons-row"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="attack" class="action-button" type="button"><img src="/images/actions/swords.svg" alt=""/><span>Attack</span></button></div><div id="special-actions" class="special-actions"></div></section></section></main><aside class="right-panel"><section class="activity-panel"><h2 id="activity-panel-title" hidden></h2><div id="activity-panel-content"></div></section></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div>`;
   const map = document.querySelector("#map") as HTMLElement;
   const mapScroll = document.querySelector("#map-scroll") as HTMLElement;
@@ -346,6 +361,7 @@ function render(
   let travelSpecialAction: { actionId: string; targetHex: string } | null =
     null;
   let activeSelection: Selection | null = null;
+  let activityBlocksControls = false;
   const mapBounds = store.data.hexes.reduce(
     (acc, hex) => {
       const { x, y } = hexCenter(hex);
@@ -360,8 +376,7 @@ function render(
   );
 
   function updateActionButtons() {
-    const hasPlay = activityPanelContent.innerHTML.trim().length > 0;
-    const disabled = busy || hasPlay;
+    const disabled = busy || activityBlocksControls;
     actionButtons.forEach((button) => (button.disabled = disabled));
     document
       .querySelectorAll<HTMLButtonElement>(
@@ -370,18 +385,57 @@ function render(
       .forEach((button) => (button.disabled = busy));
     renderSpecialActionList();
   }
-  function setActivityPanel(title: string | null, html: string) {
+  function setActivityPanel(
+    title: string | null,
+    html: string,
+    blocksControls = false,
+  ) {
+    activityBlocksControls = blocksControls;
     activityPanelTitle.hidden = !title;
     activityPanelTitle.textContent = title ?? "";
     activityPanelContent.innerHTML = html;
     updateActionButtons();
   }
-  function setPlay(html: string, title: string) {
-    setActivityPanel(title, html);
+  function setPlay(html: string, title: string, blocksControls = false) {
+    setActivityPanel(title, html, blocksControls);
   }
   function clearPlay() {
     activeSelection = null;
+    activityBlocksControls = false;
     setActivityPanel(null, "");
+  }
+
+  function clearPendingTravelState() {
+    pendingSpecialAction = null;
+    pendingTravelRoute = null;
+    travelContinuation = false;
+    travelSpecialAction = null;
+  }
+
+  function resumeTravelAfterActivity(
+    destination: string,
+    pendingAction: { actionId: string; targetHex: string } | null,
+    remainingRoute: string[] | null = pendingTravelRoute,
+  ) {
+    if (pendingAction && destination === pendingAction.targetHex) {
+      pendingTravelRoute = null;
+      travelContinuation = false;
+      const action = specialActionCatalog.find(
+        (item) => item.id === pendingAction.actionId,
+      );
+      if (action) showSpecialActionPrompt(action, pendingAction.targetHex);
+      return;
+    }
+    if (remainingRoute?.length) {
+      route = remainingRoute;
+      pendingSpecialAction = pendingAction;
+      travelContinuation = true;
+      map.classList.add("travel-mode");
+      showTravelCard();
+      draw();
+      return;
+    }
+    clearPendingTravelState();
   }
 
   function validateSelectionLocally(
@@ -401,52 +455,42 @@ function render(
 
   async function submitSelection(selectedIndexes: number[]) {
     if (!activeSelection) return;
-    busy = true;
-    updateActionButtons();
-    try {
-      const result = await apiJson<ActionResponse>(
-        `/api/entities/${encodeURIComponent(player.name)}/actions/make_selection`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            selectionId: activeSelection.id,
-            selectedIndexes,
-          }),
-        },
-      );
-      Object.assign(player, result.updates);
-      activeSelection = null;
-      pendingSpecialAction = null;
-      pendingTravelRoute = null;
-      travelContinuation = false;
-      travelSpecialAction = null;
-      renderSummary();
-      await refreshSpecialActions();
-      if (result.tableauChanged && result.tableau) syncTableau(result.tableau);
-      if (result.selection) showSelection(result.selection);
-      else if (result.card)
-        showGenericCard(result.card, "OK", clearPlay, "Selection Results");
-    } catch (err) {
-      console.error(err);
-      showGenericCard(
-        {
-          title: "Selection Error",
-          lines: [err instanceof Error ? err.message : String(err)],
-        },
-        "OK",
-        clearPlay,
-        "Selection Error",
-      );
-    } finally {
-      busy = false;
-      updateActionButtons();
-    }
+    const selectionId = activeSelection.id;
+    activeSelection = null;
+    const destination = player.location;
+    const pendingAction = travelSpecialAction;
+    const remainingRoute = pendingTravelRoute;
+    await executeActivity(
+      "Selection",
+      () =>
+        apiJson<ActivityResult>(
+          `/api/entities/${encodeURIComponent(player.name)}/actions/make_selection`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              selectionId,
+              selectedIndexes,
+            }),
+          },
+        ),
+      (result) => {
+        return showActivityResult("Selection", result, () => {
+          if (!launchResultNextActive(result))
+            resumeTravelAfterActivity(
+              destination,
+              pendingAction,
+              remainingRoute,
+            );
+        });
+      },
+    );
   }
 
   function showSelection(selection: Selection) {
+    activeEncounterId = null;
     activeSelection = selection;
-    setActivityPanel("Selection", renderSelectionCard(selection));
+    setActivityPanel("Selection", renderSelectionCard(selection), true);
     const errorEl = document.querySelector(
       ".selection-error",
     ) as HTMLElement | null;
@@ -528,7 +572,7 @@ function render(
 
   function renderSpecialActionList() {
     const actions = visibleSpecialActions();
-    const disabled = busy || activityPanelContent.innerHTML.trim().length > 0;
+    const disabled = busy || activityBlocksControls;
     specialActionsEl.innerHTML = actions.length
       ? `<div class="special-actions-list">${actions
           .map((action) => {
@@ -561,6 +605,7 @@ function render(
     setPlay(
       `<article class="play-card special-action-card"><h3>${esc(action.name)}</h3><div class="play-card-body"><p>${esc(specialActionTitle(action, hexName))}</p><p class="special-action-cost">Cost: ${esc(formatEffects(action.cost ?? []))}</p></div></article><div class="special-action-controls"><button id="special-action-ok" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You can\'t afford to perform this action." aria-disabled="true"'}>OK</button><button id="special-action-cancel" class="card-ok" type="button">Cancel</button></div>`,
       action.name,
+      true,
     );
     document
       .querySelector("#special-action-cancel")!
@@ -599,43 +644,24 @@ function render(
   }
 
   async function performSpecialAction(specialActionId: string) {
-    busy = true;
-    updateActionButtons();
-    try {
-      const result = await apiJson<ActionResponse>(
-        `/api/entities/${encodeURIComponent(player.name)}/actions/special_action`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ specialActionId }),
-        },
-      );
-      Object.assign(player, result.updates);
-      pendingSpecialAction = null;
-      pendingTravelRoute = null;
-      travelContinuation = false;
-      travelSpecialAction = null;
-      renderSummary();
-      if (result.tableauChanged && result.tableau) syncTableau(result.tableau);
-      await refreshSpecialActions();
-      if (result.selection) showSelection(result.selection);
-      else if (result.card)
-        showGenericCard(result.card, "OK", clearPlay, "Action Results");
-    } catch (err) {
-      console.error(err);
-      showGenericCard(
-        {
-          title: "Action Error",
-          lines: [err instanceof Error ? err.message : String(err)],
-        },
-        "OK",
-        clearPlay,
-        "Action Error",
-      );
-    } finally {
-      busy = false;
-      updateActionButtons();
-    }
+    await executeActivity(
+      "Action",
+      () =>
+        apiJson<ActivityResult>(
+          `/api/entities/${encodeURIComponent(player.name)}/actions/special_action`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ specialActionId }),
+          },
+        ),
+      (result) => {
+        clearPendingTravelState();
+        return showActivityResult("Action", result, () =>
+          launchResultNextActive(result),
+        );
+      },
+    );
   }
 
   specialActionsEl.addEventListener("click", (e) => {
@@ -653,20 +679,24 @@ function render(
       return `<div class="encounter-controls"><button id="encounter-continue" class="card-ok" type="button">Continue</button><button id="encounter-concede" class="card-ok" type="button">Concede</button></div>`;
     if (card.state === "succeeded")
       return `<div class="encounter-controls"><button id="encounter-continue" class="card-ok" type="button">Continue</button><button id="encounter-finish" class="card-ok" type="button">Finish</button></div>`;
-    if (card.state === "lost" || card.state === "critical")
-      return `<div class="encounter-controls"><button id="encounter-finish" class="card-ok" type="button">Ok</button></div>`;
+    if (card.state === "lost" || card.state == "critical")
+      return `<div class="encounter-controls"><button id="encounter-finish" class="card-ok" type="button">Finish</button></div>`;
     return "";
   }
 
   function setEncounterPanel(card: ActiveEncounter | null) {
     if (!card) {
       activeEncounterId = null;
+      syncTableau(tableauData);
       clearPlay();
       return;
     }
+    activeEncounterId = card.tableauId ?? card.id;
+    syncTableau(tableauData);
     setActivityPanel(
       "Encounter",
       `${renderEncounterSummary(card)}${renderActiveEncounterCard(card)}${renderEncounterResults(card)}${encounterButtons(card)}`,
+      true,
     );
     document
       .querySelector("#encounter-continue")
@@ -785,17 +815,67 @@ function render(
       });
   }
 
-  function showGenericCard(
-    card: PlayCard,
-    buttonText = "OK",
-    onClick = clearPlay,
-    title = card.title,
-  ) {
+  function showActivityError(kind: ActivityKind, message: string) {
+    const title = activityErrorTitle(kind);
     setPlay(
-      `<article class="play-card"><h3>${esc(card.title)}</h3><div class="play-card-body">${card.lines.map((line) => `<p>${esc(line)}</p>`).join("")}</div></article><button id="card-ok" class="card-ok" type="button">${esc(buttonText)}</button>`,
+      `<article class="play-card error-card"><h3>${esc(title)}</h3><div class="play-card-body"><p>${esc(message)}</p></div></article><button id="card-ok" class="card-ok" type="button">OK</button>`,
       title,
+      false,
     );
-    document.querySelector("#card-ok")!.addEventListener("click", onClick);
+    document.querySelector("#card-ok")!.addEventListener("click", clearPlay);
+  }
+
+  async function showActivityResult(
+    kind: ActivityKind,
+    result: ActivityResult,
+    onClosed?: () => void,
+  ) {
+    const shouldRenderCard =
+      Boolean(result.flavorText) ||
+      result.effects.length > 0 ||
+      !result.nextActive;
+    const title = activityResultTitle(kind, result);
+    if (!shouldRenderCard) {
+      clearPlay();
+      onClosed?.();
+      return;
+    }
+    const lines = await renderActivityLines(result, async (itemId) => {
+      const cached = itemNameCache.get(itemId);
+      if (cached) return cached;
+      try {
+        const item = await apiJson<Item>(
+          `/api/items/${encodeURIComponent(itemId)}`,
+          undefined,
+          20,
+        );
+        itemNameCache.set(itemId, item.name);
+        return item.name;
+      } catch {
+        return undefined;
+      }
+    });
+    setPlay(
+      `<article class="play-card"><h3>${esc(title)}</h3><div class="play-card-body">${lines
+        .map((line) => `<p>${esc(line)}</p>`)
+        .join(
+          "",
+        )}</div></article><button id="card-ok" class="card-ok" type="button">OK</button>`,
+      title,
+      Boolean(result.nextActive),
+    );
+    document.querySelector("#card-ok")!.addEventListener("click", () => {
+      clearPlay();
+      onClosed?.();
+    });
+  }
+
+  function launchResultNextActive(result: ActivityResult) {
+    if (result.nextActive) {
+      launchNextActive(result.nextActive);
+      return true;
+    }
+    return false;
   }
 
   function syncTableau(next: TableauData) {
@@ -815,6 +895,47 @@ function render(
       .join("");
   }
 
+  async function refreshActivityState(previousLocation = player.location) {
+    const updatedPlayer = await apiJson<PlayerEntity>(
+      `/api/entities/${encodeURIComponent(player.name)}`,
+      undefined,
+      20,
+    );
+    Object.assign(player, updatedPlayer);
+    for (const item of updatedPlayer.inventory)
+      itemNameCache.set(item.id, item.name);
+    if (updatedPlayer.location !== previousLocation)
+      moveLocalPlayerToken(previousLocation, updatedPlayer.location);
+    const updatedTableau = await apiJson<TableauData>(
+      "/api/tableau",
+      undefined,
+      20,
+    );
+    syncTableau(updatedTableau);
+    renderSummary();
+    await refreshSpecialActions();
+  }
+
+  async function executeActivity(
+    kind: string,
+    request: () => Promise<ActivityResult>,
+    onComplete: (result: ActivityResult) => void,
+  ) {
+    busy = true;
+    updateActionButtons();
+    try {
+      const result = await request();
+      await refreshActivityState();
+      await onComplete(result);
+    } catch (err) {
+      console.error(err);
+      showActivityError(kind, err instanceof Error ? err.message : String(err));
+    } finally {
+      busy = false;
+      updateActionButtons();
+    }
+  }
+
   function showEncounterPreview(card: EncounterCard) {
     const canAfford = canAffordEffects(player, [
       { type: EffectType.Turns, amount: 1 },
@@ -822,6 +943,7 @@ function render(
     setPlay(
       `${renderEncounterCard(card)}<div class="encounter-controls"><button id="encounter-ok" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You\'re out of turns." aria-disabled="true"'}>OK</button><button id="encounter-cancel" class="card-ok" type="button">Cancel</button></div>`,
       "Encounter",
+      true,
     );
     document
       .querySelector("#encounter-cancel")!
@@ -837,138 +959,87 @@ function render(
     setEncounterPanel(card);
   }
 
-  function showEncounterError(message: string) {
-    showGenericCard(
-      { title: "Encounter Error", lines: [message] },
-      "OK",
-      clearPlay,
-    );
-  }
-
-  function showEncounterResults(card: PlayCard, onOk = clearPlay) {
-    showGenericCard(card, "OK", onOk, "Encounter");
+  function launchNextActive(nextActive: ActivityNextActive) {
+    if (nextActive.type === "selection") showSelection(nextActive.selection);
+    else showActiveEncounter(nextActive.encounter);
   }
 
   async function runEncounter(encounterId: string) {
-    busy = true;
-    updateActionButtons();
-    try {
-      const result = await apiJson<RunEncounterResponse>(
-        `/api/entities/${encodeURIComponent(player.name)}/actions/run_encounter`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ encounterId, tableauId: encounterId }),
-        },
-      );
-      activeEncounterId = result.encounter.id;
-      if (result.updates) Object.assign(player, result.updates);
-      syncTableau(tableauData);
-      renderSummary();
-      if (result.selection) showSelection(result.selection);
-      else showActiveEncounter(result.encounter);
-    } catch (err) {
-      console.error(err);
-      showEncounterError(err instanceof Error ? err.message : String(err));
-    } finally {
-      busy = false;
-      updateActionButtons();
-    }
+    await executeActivity(
+      "Encounter",
+      () =>
+        apiJson<ActivityResult>(
+          `/api/entities/${encodeURIComponent(player.name)}/actions/run_encounter`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ encounterId, tableauId: encounterId }),
+          },
+        ),
+      (result) => {
+        return showActivityResult("Encounter", result, () =>
+          launchResultNextActive(result),
+        );
+      },
+    );
   }
 
   async function continueEncounter(encounterId: string) {
-    busy = true;
-    updateActionButtons();
-    try {
-      const result = await apiJson<ContinueEncounterResponse>(
-        `/api/entities/${encodeURIComponent(player.name)}/actions/continue_encounter`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ encounterId, tableauId: encounterId }),
-        },
-      );
-      setEncounterPanel(result.encounter);
-    } catch (err) {
-      console.error(err);
-      showEncounterError(err instanceof Error ? err.message : String(err));
-    } finally {
-      busy = false;
-      updateActionButtons();
-    }
+    await executeActivity(
+      "Encounter",
+      () =>
+        apiJson<ActivityResult>(
+          `/api/entities/${encodeURIComponent(player.name)}/actions/continue_encounter`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ encounterId, tableauId: encounterId }),
+          },
+        ),
+      (result) => {
+        return showActivityResult("Encounter", result, () =>
+          launchResultNextActive(result),
+        );
+      },
+    );
   }
 
   async function finishEncounter(encounterId: string, conceding = false) {
-    busy = true;
-    updateActionButtons();
-    try {
-      const result = await apiJson<FinishEncounterResponse>(
-        `/api/entities/${encodeURIComponent(player.name)}/actions/finish_encounter`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            encounterId,
-            tableauId: encounterId,
-            conceding,
-          }),
-        },
-      );
-      if (result.encounter) {
-        activeEncounterId = result.encounter.id;
-        setEncounterPanel(result.encounter);
-      } else {
-        if (result.updates) Object.assign(player, result.updates);
+    const destination = player.location;
+    const pendingAction = travelSpecialAction;
+    const remainingRoute = pendingTravelRoute;
+    await executeActivity(
+      "Encounter",
+      () =>
+        apiJson<ActivityResult>(
+          `/api/entities/${encodeURIComponent(player.name)}/actions/finish_encounter`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              encounterId,
+              tableauId: encounterId,
+              conceding,
+            }),
+          },
+        ),
+      (result) => {
         activeEncounterId = null;
         setEncounterPanel(null);
-        if (result.tableauChanged && result.tableau)
-          syncTableau(result.tableau);
-        renderSummary();
-        await refreshSpecialActions();
-        if (result.card) {
-          const routeAfterEncounter = result.travelRoute ?? pendingTravelRoute;
-          const destination = result.updates?.location ?? player.location;
-          const pendingAction = travelSpecialAction;
-          showEncounterResults(result.card, () => {
-            clearPlay();
-            if (routeAfterEncounter?.length) {
-              route = routeAfterEncounter;
-              pendingTravelRoute = null;
-              pendingSpecialAction = pendingAction;
-              travelContinuation = true;
-              map.classList.add("travel-mode");
-              showTravelCard();
-              draw();
-            } else if (
-              pendingAction &&
-              destination === pendingAction.targetHex
-            ) {
-              pendingTravelRoute = null;
-              travelContinuation = false;
-              const action = specialActionCatalog.find(
-                (item) => item.id === pendingAction.actionId,
-              );
-              if (action)
-                showSpecialActionPrompt(action, pendingAction.targetHex);
-            } else {
-              pendingTravelRoute = null;
-              travelContinuation = false;
-            }
-            travelSpecialAction = null;
-          });
-        }
-      }
-    } catch (err) {
-      console.error(err);
-      showEncounterError(err instanceof Error ? err.message : String(err));
-    } finally {
-      busy = false;
-      updateActionButtons();
-    }
+        return showActivityResult("Encounter", result, () => {
+          if (!launchResultNextActive(result))
+            resumeTravelAfterActivity(
+              destination,
+              pendingAction,
+              remainingRoute,
+            );
+        });
+      },
+    );
   }
 
   function enterTravelMode() {
-    if (busy || activityPanelContent.innerHTML.trim().length > 0) return;
+    if (busy || activityBlocksControls) return;
     route = [player.location];
     pendingTravelRoute = null;
     travelContinuation = false;
@@ -985,6 +1056,7 @@ function render(
     setPlay(
       `<article class="play-card camp-card"><h3>Camp</h3><div class="play-card-body"><img src="/images/actions/campfire.svg" alt="Campfire" style="width:120px;height:120px;object-fit:contain"/></div></article><div class="travel-controls"><button id="camp-go" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You\'re out of turns." aria-disabled="true"'}>OK</button><button id="camp-cancel" class="card-ok" type="button">Cancel</button></div>`,
       "Camp",
+      true,
     );
     document
       .querySelector("#camp-cancel")!
@@ -1010,6 +1082,7 @@ function render(
     setPlay(
       `<article class="play-card travel-card"><h3>Travel</h3><div class="play-card-body route-body"><p>${travelRouteHtml()}</p></div></article><div class="travel-controls"><button id="travel-go" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You\'re out of turns." aria-disabled="true"'}>Go</button><button id="travel-cancel" class="card-ok" type="button">Cancel</button></div>`,
       "Travel",
+      true,
     );
     document
       .querySelector("#travel-cancel")!
@@ -1018,50 +1091,21 @@ function render(
       document.querySelector("#travel-go")!.addEventListener("click", goTravel);
   }
 
-  function showTravelError(message: string) {
-    pendingSpecialAction = null;
-    pendingTravelRoute = null;
-    travelContinuation = false;
-    travelSpecialAction = null;
-    setPlay(
-      `<article class="play-card error-card"><h3>Travel Error</h3><div class="play-card-body route-body"><p>${esc(message)}</p></div></article><button id="card-ok" class="card-ok" type="button">OK</button>`,
-      "Travel Error",
-    );
-    document.querySelector("#card-ok")!.addEventListener("click", clearPlay);
-  }
-
   async function goCamp() {
-    busy = true;
-    updateActionButtons();
-    try {
-      const result = await apiJson<ActionResponse>(
-        `/api/entities/${encodeURIComponent(player.name)}/actions/camp`,
-        { method: "POST" },
-      );
-      Object.assign(player, result.updates);
-      pendingTravelRoute = null;
-      travelContinuation = false;
-      travelSpecialAction = null;
-      renderSummary();
-      await refreshSpecialActions();
-      if (result.selection) showSelection(result.selection);
-      else if (result.card)
-        showGenericCard(result.card, "OK", clearPlay, "Camp");
-    } catch (err) {
-      console.error(err);
-      showGenericCard(
-        {
-          title: "Camp Error",
-          lines: [err instanceof Error ? err.message : String(err)],
-        },
-        "OK",
-        clearPlay,
-        "Camp Error",
-      );
-    } finally {
-      busy = false;
-      updateActionButtons();
-    }
+    await executeActivity(
+      "Camp",
+      () =>
+        apiJson<ActivityResult>(
+          `/api/entities/${encodeURIComponent(player.name)}/actions/camp`,
+          { method: "POST" },
+        ),
+      (result) => {
+        clearPendingTravelState();
+        return showActivityResult("Camp", result, () =>
+          launchResultNextActive(result),
+        );
+      },
+    );
   }
 
   function exitTravelMode() {
@@ -1134,68 +1178,38 @@ function render(
     route = null;
     pendingSpecialAction = null;
     map.classList.remove("travel-mode");
-    busy = true;
-    updateActionButtons();
     draw();
-    try {
-      const result = await apiJson<ActionResponse>(
-        `/api/entities/${encodeURIComponent(player.name)}/actions/travel`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ route: submittedRoute }),
-        },
-      );
-      const oldLocation = player.location;
-      Object.assign(player, result.updates);
-      if (result.updates.location && result.updates.location !== oldLocation)
-        moveLocalPlayerToken(oldLocation, result.updates.location);
-      if (result.tableauChanged && result.tableau) syncTableau(result.tableau);
-      renderSummary();
-      await refreshSpecialActions();
-      if (result.selection) {
-        pendingTravelRoute = null;
-        travelContinuation = false;
-        travelSpecialAction = null;
-        showSelection(result.selection);
-      } else if (result.encounter) {
-        pendingTravelRoute = result.travelRoute ?? null;
-        travelContinuation = Boolean(result.travelRoute?.length);
-        showActiveEncounter(result.encounter);
-      } else {
-        const destination = result.updates.location ?? player.location;
-        const continueTravel = () => {
-          if (result.travelRoute?.length) {
-            route = result.travelRoute;
-            pendingSpecialAction = pendingAction;
-            travelContinuation = true;
-            map.classList.add("travel-mode");
-            showTravelCard();
-          } else {
-            travelContinuation = false;
-            pendingTravelRoute = null;
-            travelSpecialAction = null;
-            clearPlay();
-          }
-        };
-        if (pendingAction && destination === pendingAction.targetHex) {
-          const action = specialActionCatalog.find(
-            (item) => item.id === pendingAction.actionId,
-          );
-          if (action) showSpecialActionPrompt(action, pendingAction.targetHex);
-          else clearPlay();
-        } else {
-          continueTravel();
-        }
-      }
-      draw();
-    } catch (err) {
-      console.error(err);
-      showTravelError(err instanceof Error ? err.message : String(err));
-    } finally {
-      busy = false;
-      updateActionButtons();
-    }
+    await executeActivity(
+      "Travel",
+      () =>
+        apiJson<ActivityResult>(
+          `/api/entities/${encodeURIComponent(player.name)}/actions/travel`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ route: submittedRoute }),
+          },
+        ),
+      (result) => {
+        const destination = player.location;
+        const destinationIndex = submittedRoute.indexOf(destination);
+        const remainingRoute =
+          destinationIndex >= 0 && destinationIndex < submittedRoute.length - 1
+            ? submittedRoute.slice(destinationIndex)
+            : undefined;
+        pendingTravelRoute = remainingRoute ?? null;
+        travelContinuation = Boolean(remainingRoute?.length);
+        return showActivityResult("Travel", result, () => {
+          if (!launchResultNextActive(result))
+            resumeTravelAfterActivity(
+              destination,
+              pendingAction,
+              remainingRoute ?? null,
+            );
+        });
+        draw();
+      },
+    );
   }
 
   function moveLocalPlayerToken(from: string, to: string) {
@@ -1350,8 +1364,7 @@ function render(
 
   function showTip(hex: Hex, anchor: DOMRect) {
     const f = store.fullHex(hex.name)!;
-    const moveHereDisabled =
-      busy || activityPanelContent.innerHTML.trim().length > 0;
+    const moveHereDisabled = busy || activityBlocksControls;
     const claimsText = formatClaims(
       f.claimObjs
         .filter((claim): claim is NonNullable<typeof claim> => Boolean(claim))

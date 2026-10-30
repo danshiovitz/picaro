@@ -43,6 +43,7 @@ export enum EffectType {
   Turns = "turns",
   Luck = "luck",
   Resource = "resource",
+  RemoveItems = "remove_items",
 }
 export type Effect =
   | { type: EffectType.Gold; amount: number }
@@ -50,7 +51,8 @@ export type Effect =
   | { type: EffectType.Health; amount: number }
   | { type: EffectType.Turns; amount: number }
   | { type: EffectType.Luck; amount: number }
-  | { type: EffectType.Resource; resourceType: string; amount: number };
+  | { type: EffectType.Resource; resourceType: string; amount: number }
+  | { type: EffectType.RemoveItems; itemIds: string[] };
 export type EncounterSkillCheck = { name: string; target: number };
 export type EncounterTemplate = {
   title: string;
@@ -120,6 +122,16 @@ export type PlayerEntity = {
   skills: Record<string, number>;
 };
 export type PlayCard = { title: string; lines: string[] };
+export type ActivityNextActive =
+  | { type: "encounter"; encounter: ActiveEncounter }
+  | { type: "selection"; selection: Selection };
+export type ActivityResult = {
+  title?: string;
+  flavorText?: string;
+  effects: Effect[];
+  implicitEffects?: Effect[];
+  nextActive?: ActivityNextActive;
+};
 export type ActiveEncounter = {
   id: string;
   tableauId?: string;
@@ -136,28 +148,4 @@ export type ActiveEncounter = {
   penalties: PenaltyType[];
   skillChecks: ActiveEncounterSkillCheck[];
   skillCheckTemplate: EncounterSkillCheck[];
-};
-export type ActionResponse = {
-  updates: Partial<PlayerEntity>;
-  card?: PlayCard;
-  encounter?: ActiveEncounter;
-  selection?: Selection;
-  travelRoute?: string[];
-  tableauChanged: boolean;
-  tableau?: TableauData;
-};
-export type RunEncounterResponse = {
-  encounter: ActiveEncounter;
-  selection?: Selection;
-  updates?: Partial<PlayerEntity>;
-};
-export type ContinueEncounterResponse = { encounter: ActiveEncounter };
-export type FinishEncounterResponse = {
-  updates?: Partial<PlayerEntity>;
-  card?: PlayCard;
-  encounter?: ActiveEncounter;
-  travelRoute?: string[];
-  removedEncounterId?: string;
-  tableauChanged: boolean;
-  tableau?: TableauData;
 };

@@ -79,6 +79,7 @@ export enum EffectType {
   Turns = "turns",
   Luck = "luck",
   Resource = "resource",
+  RemoveItems = "remove_items",
 }
 export type Effect =
   | { type: EffectType.Gold; amount: number }
@@ -86,7 +87,8 @@ export type Effect =
   | { type: EffectType.Health; amount: number }
   | { type: EffectType.Turns; amount: number }
   | { type: EffectType.Luck; amount: number }
-  | { type: EffectType.Resource; resourceType: string; amount: number };
+  | { type: EffectType.Resource; resourceType: string; amount: number }
+  | { type: EffectType.RemoveItems; itemIds: string[] };
 export type EncounterSkillCheck = { name: string; target: number };
 export type EncounterTemplate = {
   title: string;
@@ -126,6 +128,15 @@ export type SpecialAction = {
   locations?: string[];
   cost: Effect[];
 };
+export type SpecialActionState = {
+  activeSelections: Map<string, Selection>;
+};
+export type SpecialActionDefinition<
+  TState extends SpecialActionState = SpecialActionState,
+> = SpecialAction & {
+  availability: (player: PlayerEntity) => boolean;
+  execute: (state: TState, player: PlayerEntity) => Effect[];
+};
 export type SelectionChoice = {
   description: string;
   data: string;
@@ -150,24 +161,20 @@ export type Selection = {
   choices: SelectionChoice[];
   minChoices?: number;
   maxChoices?: number;
-  callback: (indexes: number[]) => void;
+  callback: (indexes: number[]) => ActivityResult | void;
 };
 export type PlayCard = { title: string; lines: string[] };
-export type ActionResponse = {
-  updates: Partial<PlayerEntity>;
-  card?: PlayCard;
-  encounter?: ActiveEncounter;
-  selection?: SelectionView;
-  travelRoute?: string[];
-  tableauChanged: boolean;
-  tableau?: TableauData;
+export type ActivityNextActive =
+  | { type: "encounter"; encounter: ActiveEncounter }
+  | { type: "selection"; selection: SelectionView };
+export type ActivityResult = {
+  title?: string;
+  flavorText?: string;
+  effects: Effect[];
+  implicitEffects?: Effect[];
+  nextActive?: ActivityNextActive;
 };
 export type SpecialActionRequest = { specialActionId: string };
-export type RunEncounterResponse = {
-  encounter: ActiveEncounter;
-  selection?: SelectionView;
-  updates?: Partial<PlayerEntity>;
-};
 export type ActiveEncounter = {
   id: string;
   tableauId?: string;
