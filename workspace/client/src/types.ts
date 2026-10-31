@@ -15,12 +15,14 @@ export type Hex = {
   claims: string[];
   tokens: string[];
 };
+export type PlayerSummary = { id: string; name: string };
 export type GameData = {
   hexes: Hex[];
   terrains: Terrain[];
   regions: Region[];
   claims: Claim[];
   tokens: Token[];
+  players: PlayerSummary[];
   resourceTypes: string[];
 };
 export enum RewardType {
@@ -105,6 +107,7 @@ export type Selection = {
   maxChoices?: number;
 };
 export type PlayerEntity = {
+  id: string;
   name: string;
   tokenId: string;
   curHealth: number;

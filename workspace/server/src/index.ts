@@ -111,13 +111,24 @@ function startingResources() {
   return resources;
 }
 
-for (const token of playerTokens) {
-  players.set(token.entityName, {
+function startingSkills() {
+  const skills = makeEmptySkills();
+  const skillKeys = Object.keys(skills) as Array<string>;
+  for (let i = 0; i < 30; i++) {
+    const randomIndex = Math.floor(Math.random() * skillKeys.length);
+    skills[skillKeys[randomIndex]]++;
+  }
+  return skills;
+}
+
+for (const [index, token] of playerTokens.entries()) {
+  players.set(token.id, {
+    id: token.id,
     name: token.entityName,
     tokenId: token.id,
-    curHealth: 6 + Number(token.id.split("-")[1]) - 1,
+    curHealth: 10,
     maxHealth: 10,
-    curLuck: 1,
+    curLuck: 3,
     maxLuck: 3,
     speed: 3,
     gold: 0,
@@ -127,19 +138,21 @@ for (const token of playerTokens) {
     resources: startingResources(),
     inventory: startingInventory(),
     conditions: startingConditions(),
-    skills: makeEmptySkills(),
+    skills: startingSkills(),
   });
 }
 const activeEncounters = new Map<string, ActiveEncounter>();
 const activeSelections = new Map<string, Selection>();
 const travelContinuation = new Map<string, boolean>();
 const travelContinuationRoute = new Map<string, string[]>();
-const tableau: TableauCard[] = [];
+const tableau = new Map<string, TableauCard[]>();
 const encounterRng = new RNG(`${defaultSeed}:encounters`);
 setEncounterContext({ hexes, rng: encounterRng });
-const firstPlayer = players.values().next().value as PlayerEntity | undefined;
-if (firstPlayer)
-  fillTableau(tableau, encounterTemplates, firstPlayer, encounterRng);
+for (const player of players.values()) {
+  const playerTableau: TableauCard[] = [];
+  fillTableau(playerTableau, encounterTemplates, player, encounterRng);
+  tableau.set(player.id, playerTableau);
+}
 
 const apiState: ApiState = {
   hexes,
@@ -201,8 +214,13 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, getClaims());
     if (req.method === "GET" && path === "/api/tokens")
       return sendJson(res, 200, getTokens(apiState));
-    if (req.method === "GET" && path === "/api/tableau")
-      return sendJson(res, 200, getTableau(apiState));
+    if (req.method === "GET" && path === "/api/tableau") {
+      const playerId = url.searchParams.get("player");
+      if (!playerId) return sendJson(res, 400, { error: "Player id required" });
+      const player = players.get(playerId);
+      if (!player) return sendJson(res, 404, { error: "Entity not found" });
+      return sendJson(res, 200, getTableau(apiState, player));
+    }
     if (req.method === "GET" && path === "/api/game")
       return sendJson(res, 200, getGame(apiState));
     if (req.method === "GET" && path === "/api/special_actions")
@@ -219,7 +237,8 @@ const server = http.createServer(async (req, res) => {
       /^\/api\/entities\/([^/]+)\/special_actions$/,
     );
     if (specialActionsMatch) {
-      const player = players.get(specialActionsMatch[1]);
+      const playerId = url.searchParams.get("player") ?? specialActionsMatch[1];
+      const player = players.get(playerId);
       if (!player) return sendJson(res, 404, { error: "Entity not found" });
       if (req.method === "GET")
         return sendJson(res, 200, getSpecialActions(apiState, player));
@@ -229,7 +248,8 @@ const server = http.createServer(async (req, res) => {
       /^\/api\/entities\/([^/]+)(?:\/actions\/(camp|travel|run_encounter|continue_encounter|finish_encounter|special_action|make_selection))?$/,
     );
     if (entityMatch) {
-      const player = players.get(entityMatch[1]);
+      const playerId = url.searchParams.get("player") ?? entityMatch[1];
+      const player = players.get(playerId);
       if (!player) return sendJson(res, 404, { error: "Entity not found" });
       const action = entityMatch[2];
 

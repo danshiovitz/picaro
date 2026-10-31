@@ -17,6 +17,7 @@ export type Hex = {
   tokens: string[];
 };
 export type PlayerEntity = {
+  id: string;
   name: string;
   tokenId: string;
   curHealth: number;

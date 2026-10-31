@@ -434,7 +434,7 @@ export const specialActions: SpecialActionDefinition[] = [
           }
         },
       };
-      state.activeSelections.set(player.name, selection);
+      state.activeSelections.set(player.id, selection);
       return [];
     },
   },

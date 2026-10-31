@@ -52,7 +52,7 @@ export type ApiState = {
   activeSelections: Map<string, Selection>;
   travelContinuation: Map<string, boolean>;
   travelContinuationRoute: Map<string, string[]>;
-  tableau: TableauCard[];
+  tableau: Map<string, TableauCard[]>;
   rng: RNG;
 };
 
@@ -80,6 +80,12 @@ function moveToken(
   const fromHex = hexes.find((hex) => hex.tokens.includes(tokenId));
   if (fromHex) fromHex.tokens = fromHex.tokens.filter((id) => id !== tokenId);
   hexByName.get(to)?.tokens.push(tokenId);
+}
+
+function getPlayerTableau(state: ApiState, player: PlayerEntity) {
+  const tableau = state.tableau.get(player.id);
+  if (!tableau) throw new RulesViolation("Tableau not found");
+  return tableau;
 }
 
 function encounterState(
@@ -484,8 +490,8 @@ export function getItem(state: ApiState, itemId: string) {
   return state.items.get(itemId);
 }
 
-export function getTableau(state: ApiState): TableauData {
-  return { encounters: state.tableau };
+export function getTableau(state: ApiState, player: PlayerEntity): TableauData {
+  return { encounters: getPlayerTableau(state, player) };
 }
 
 export function getSpecialActionCatalog(): SpecialAction[] {
@@ -514,8 +520,8 @@ export function performSpecialAction(
     (item) => item.id === request.specialActionId,
   );
   if (!action) throw new RulesViolation("Special action not found");
-  state.travelContinuation.delete(player.name);
-  state.travelContinuationRoute.delete(player.name);
+  state.travelContinuation.delete(player.id);
+  state.travelContinuationRoute.delete(player.id);
   if (!action.availability(player))
     throw new RulesViolation("Special action is unavailable");
   if (action.locations?.length && !action.locations.includes(player.location))
@@ -524,6 +530,7 @@ export function performSpecialAction(
     throw new RulesViolation("You can't afford to perform this action.");
   payCost(player, action.cost);
   const effects = action.execute(state, player);
+  applyEffects(player, effects);
   player.location = locationForToken(state.hexes, player.tokenId);
   const selection = getActiveSelection(state, player);
   return {
@@ -539,6 +546,10 @@ export function getGame(state: ApiState) {
     regions,
     claims,
     tokens: allTokens(state.tokens),
+    players: Array.from(state.players.values()).map(({ id, name }) => ({
+      id,
+      name,
+    })),
     resourceTypes,
   };
 }
@@ -547,10 +558,13 @@ export function getEntity(state: ApiState, player: PlayerEntity) {
   return playerDto(state.hexes, player);
 }
 
-function removeEncounterFromTableau(state: ApiState, encounterId: string) {
-  const index = state.tableau.findIndex((card) => card.id === encounterId);
+function removeEncounterFromTableau(
+  tableau: TableauCard[],
+  encounterId: string,
+) {
+  const index = tableau.findIndex((card) => card.id === encounterId);
   if (index === -1) return false;
-  state.tableau.splice(index, 1);
+  tableau.splice(index, 1);
   return true;
 }
 
@@ -562,18 +576,23 @@ function endTurn(state: ApiState, player: PlayerEntity, reason: string) {
   );
   const currentHex = state.hexByName.get(player.location);
   let changed = false;
+  const tableau = getPlayerTableau(state, player);
   if (currentHex) {
     const speed = computeEffectiveValue(player, SectionType.speed);
-    const before = state.tableau.length;
-    state.tableau = state.tableau.filter((card) => {
+    const before = tableau.length;
+    const filtered = tableau.filter((card) => {
       const hex = state.hexByName.get(card.location);
       return hex ? hexDistance(currentHex, hex) <= 2 * speed : true;
     });
-    if (state.tableau.length !== before) changed = true;
+    if (filtered.length !== before) {
+      state.tableau.set(player.id, filtered);
+      changed = true;
+    }
   }
-  const beforeFill = state.tableau.length;
-  fillTableau(state.tableau, encounterTemplates, player, state.rng);
-  if (state.tableau.length !== beforeFill) changed = true;
+  const nextTableau = getPlayerTableau(state, player);
+  const beforeFill = nextTableau.length;
+  fillTableau(nextTableau, encounterTemplates, player, state.rng);
+  if (nextTableau.length !== beforeFill) changed = true;
   return changed;
 }
 
@@ -582,8 +601,8 @@ export function campEntity(
   player: PlayerEntity,
 ): ActivityResult {
   const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
-  state.travelContinuation.delete(player.name);
-  state.travelContinuationRoute.delete(player.name);
+  state.travelContinuation.delete(player.id);
+  state.travelContinuationRoute.delete(player.id);
   if (!canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
   payCost(player, turnCost);
@@ -606,12 +625,12 @@ export function travelEntity(
 ): ActivityResult {
   const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
   const canContinueWithoutCost =
-    state.travelContinuation.get(player.name) ?? false;
+    state.travelContinuation.get(player.id) ?? false;
   if (!canContinueWithoutCost && !canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
   if (!canContinueWithoutCost) payCost(player, turnCost);
   const route = request.route;
-  const storedContinuation = state.travelContinuationRoute.get(player.name);
+  const storedContinuation = state.travelContinuationRoute.get(player.id);
   if (storedContinuation) {
     const sameRoute =
       storedContinuation.length === route.length &&
@@ -659,21 +678,21 @@ export function travelEntity(
       ...activeEncounterFor(player, encounterCard, state.rng),
       tableauId: undefined,
     };
-    state.activeEncounters.set(player.name, active);
+    state.activeEncounters.set(player.id, active);
     const tripDestination = route[route.length - 1];
     const completesTrip = encounterHexName === tripDestination;
     if (completesTrip) {
-      state.travelContinuation.delete(player.name);
-      state.travelContinuationRoute.delete(player.name);
+      state.travelContinuation.delete(player.id);
+      state.travelContinuationRoute.delete(player.id);
     } else {
       const resumeRoute = route.slice(route.indexOf(encounterHexName));
-      state.travelContinuation.set(player.name, true);
-      state.travelContinuationRoute.set(player.name, resumeRoute);
+      state.travelContinuation.set(player.id, true);
+      state.travelContinuationRoute.set(player.id, resumeRoute);
     }
     if (completesTrip) {
       endTurn(state, player, "travel-encounter-destination");
-      state.travelContinuation.delete(player.name);
-      state.travelContinuationRoute.delete(player.name);
+      state.travelContinuation.delete(player.id);
+      state.travelContinuationRoute.delete(player.id);
     }
     return {
       effects: [],
@@ -690,11 +709,11 @@ export function travelEntity(
       ? route.slice(travelPath.length - 1)
       : undefined;
   if (remainingRoute) {
-    state.travelContinuation.set(player.name, true);
-    state.travelContinuationRoute.set(player.name, remainingRoute);
+    state.travelContinuation.set(player.id, true);
+    state.travelContinuationRoute.set(player.id, remainingRoute);
   } else {
-    state.travelContinuation.delete(player.name);
-    state.travelContinuationRoute.delete(player.name);
+    state.travelContinuation.delete(player.id);
+    state.travelContinuationRoute.delete(player.id);
   }
   if (!remainingRoute) {
     endTurn(state, player, "travel-complete");
@@ -718,14 +737,13 @@ export function runEncounter(
   if (!canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
   payCost(player, turnCost);
-  state.travelContinuation.delete(player.name);
-  state.travelContinuationRoute.delete(player.name);
-  const encounter = state.tableau.find(
-    (card) => card.id === request.encounterId,
-  );
+  state.travelContinuation.delete(player.id);
+  state.travelContinuationRoute.delete(player.id);
+  const tableau = getPlayerTableau(state, player);
+  const encounter = tableau.find((card) => card.id === request.encounterId);
   if (!encounter) throw new RulesViolation("Encounter not found");
   const active = activeEncounterFor(player, encounter, state.rng);
-  state.activeEncounters.set(player.name, active);
+  state.activeEncounters.set(player.id, active);
   return {
     effects: [],
     implicitEffects: [{ type: EffectType.Turns, amount: -1 }],
@@ -738,13 +756,14 @@ export function continueEncounter(
   player: PlayerEntity,
   request: EncounterRequest,
 ): ActivityResult {
-  const active = state.activeEncounters.get(player.name);
+  const active = state.activeEncounters.get(player.id);
   if (!active || active.id !== request.encounterId)
     throw new RulesViolation("No active encounter to continue");
   if (active.state !== "active" && active.state !== "succeeded")
     throw new RulesViolation("Encounter cannot be continued");
+  const tableau = getPlayerTableau(state, player);
   const encounter = active.tableauId
-    ? state.tableau.find((card) => card.id === request.encounterId)
+    ? tableau.find((card) => card.id === request.encounterId)
     : undefined;
   if (active.tableauId && !encounter)
     throw new RulesViolation("Encounter not found");
@@ -791,12 +810,13 @@ export function finishEncounter(
   player: PlayerEntity,
   request: EncounterRequest & { conceding?: boolean },
 ): ActivityResult {
-  const active = state.activeEncounters.get(player.name);
+  const active = state.activeEncounters.get(player.id);
   const encounterId = request.tableauId ?? request.encounterId;
   if (!active || active.id !== request.encounterId)
     throw new RulesViolation("No active encounter to finish");
+  const tableau = getPlayerTableau(state, player);
   const encounter = active.tableauId
-    ? state.tableau.find((card) => card.id === request.encounterId)
+    ? tableau.find((card) => card.id === request.encounterId)
     : undefined;
   if (active.tableauId && !encounter)
     throw new RulesViolation("Encounter not found");
@@ -810,9 +830,9 @@ export function finishEncounter(
     state.rng,
     request.conceding,
   );
-  state.activeEncounters.delete(player.name);
+  state.activeEncounters.delete(player.id);
   if (encounter) {
-    removeEncounterFromTableau(state, encounterId);
+    removeEncounterFromTableau(tableau, encounterId);
     endTurn(state, player, "finish-encounter");
   }
   const selection = getActiveSelection(state, player);

@@ -26,11 +26,25 @@ import type {
 } from "./types";
 
 const API = import.meta.env.VITE_API_URL ?? "";
-const PLAYER_NAME = "Player 1";
+const url = new URL(window.location.href);
+let playerId = url.searchParams.get("player") ?? "";
 const app = document.querySelector("#app")!;
 let activeEncounterId: string | null = null;
 
 type Point = { x: number; y: number };
+
+function withPlayerParam(path: string) {
+  const hashIndex = path.indexOf("#");
+  const hash = hashIndex >= 0 ? path.slice(hashIndex) : "";
+  const base = hashIndex >= 0 ? path.slice(0, hashIndex) : path;
+  const queryIndex = base.indexOf("?");
+  const pathname = queryIndex >= 0 ? base.slice(0, queryIndex) : base;
+  const search = queryIndex >= 0 ? base.slice(queryIndex + 1) : "";
+  const params = new URLSearchParams(search);
+  if (playerId) params.set("player", playerId);
+  const query = params.toString();
+  return `${pathname}${query ? `?${query}` : ""}${hash}`;
+}
 
 async function apiJson<T>(
   path: string,
@@ -40,7 +54,7 @@ async function apiJson<T>(
   let lastError: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
-      const r = await fetch(`${API}${path}`, init);
+      const r = await fetch(`${API}${withPlayerParam(path)}`, init);
       if (!r.ok) {
         let message = `API request failed: ${r.status}`;
         try {
@@ -59,34 +73,45 @@ async function apiJson<T>(
   throw lastError;
 }
 
-Promise.all([
-  apiJson<GameData>("/api/game", undefined, 20),
-  apiJson<PlayerEntity>(
-    `/api/entities/${encodeURIComponent(PLAYER_NAME)}`,
-    undefined,
-    20,
-  ),
-  apiJson<TableauData>("/api/tableau", undefined, 20),
-  apiJson<SpecialAction[]>("/api/special_actions", undefined, 20),
-  apiJson<SpecialAction[]>(
-    `/api/entities/${encodeURIComponent(PLAYER_NAME)}/special_actions`,
-    undefined,
-    20,
-  ),
-])
-  .then(([d, player, tableau, specialActionCatalog, specialActions]) =>
+(async () => {
+  try {
+    const game = await apiJson<GameData>("/api/game", undefined, 20);
+    if (!playerId) {
+      playerId = game.players[0]?.id ?? "";
+      if (!playerId) throw new Error("No players available");
+      url.searchParams.set("player", playerId);
+      history.replaceState(null, "", url);
+    }
+    if (!game.players.some((player) => player.id === playerId)) {
+      throw new Error(`Player not found: ${playerId}`);
+    }
+    const [player, tableau, specialActionCatalog, specialActions] =
+      await Promise.all([
+        apiJson<PlayerEntity>(
+          `/api/entities/${encodeURIComponent(playerId)}`,
+          undefined,
+          20,
+        ),
+        apiJson<TableauData>("/api/tableau", undefined, 20),
+        apiJson<SpecialAction[]>("/api/special_actions", undefined, 20),
+        apiJson<SpecialAction[]>(
+          `/api/entities/${encodeURIComponent(playerId)}/special_actions`,
+          undefined,
+          20,
+        ),
+      ]);
     render(
-      new GameStore(d),
+      new GameStore(game),
       player,
       tableau,
       specialActionCatalog,
       specialActions,
-    ),
-  )
-  .catch((err) => {
+    );
+  } catch (err) {
     console.error(err);
     app.innerHTML = `<main style="padding:24px"><h2>Unable to load game data</h2><p>${err instanceof Error ? err.message : String(err)}</p><p>Check that the API server is running on port 3001.</p></main>`;
-  });
+  }
+})();
 
 function esc(value: unknown) {
   return String(value).replace(
@@ -464,7 +489,7 @@ function render(
       "Selection",
       () =>
         apiJson<ActivityResult>(
-          `/api/entities/${encodeURIComponent(player.name)}/actions/make_selection`,
+          `/api/entities/${encodeURIComponent(player.id)}/actions/make_selection`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -586,7 +611,7 @@ function render(
   async function refreshSpecialActions() {
     try {
       specialActions = await apiJson<SpecialAction[]>(
-        `/api/entities/${encodeURIComponent(player.name)}/special_actions`,
+        `/api/entities/${encodeURIComponent(player.id)}/special_actions`,
         undefined,
         20,
       );
@@ -648,7 +673,7 @@ function render(
       "Action",
       () =>
         apiJson<ActivityResult>(
-          `/api/entities/${encodeURIComponent(player.name)}/actions/special_action`,
+          `/api/entities/${encodeURIComponent(player.id)}/actions/special_action`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -897,7 +922,7 @@ function render(
 
   async function refreshActivityState(previousLocation = player.location) {
     const updatedPlayer = await apiJson<PlayerEntity>(
-      `/api/entities/${encodeURIComponent(player.name)}`,
+      `/api/entities/${encodeURIComponent(player.id)}`,
       undefined,
       20,
     );
@@ -969,7 +994,7 @@ function render(
       "Encounter",
       () =>
         apiJson<ActivityResult>(
-          `/api/entities/${encodeURIComponent(player.name)}/actions/run_encounter`,
+          `/api/entities/${encodeURIComponent(player.id)}/actions/run_encounter`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -989,7 +1014,7 @@ function render(
       "Encounter",
       () =>
         apiJson<ActivityResult>(
-          `/api/entities/${encodeURIComponent(player.name)}/actions/continue_encounter`,
+          `/api/entities/${encodeURIComponent(player.id)}/actions/continue_encounter`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1012,7 +1037,7 @@ function render(
       "Encounter",
       () =>
         apiJson<ActivityResult>(
-          `/api/entities/${encodeURIComponent(player.name)}/actions/finish_encounter`,
+          `/api/entities/${encodeURIComponent(player.id)}/actions/finish_encounter`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1096,7 +1121,7 @@ function render(
       "Camp",
       () =>
         apiJson<ActivityResult>(
-          `/api/entities/${encodeURIComponent(player.name)}/actions/camp`,
+          `/api/entities/${encodeURIComponent(player.id)}/actions/camp`,
           { method: "POST" },
         ),
       (result) => {
@@ -1183,7 +1208,7 @@ function render(
       "Travel",
       () =>
         apiJson<ActivityResult>(
-          `/api/entities/${encodeURIComponent(player.name)}/actions/travel`,
+          `/api/entities/${encodeURIComponent(player.id)}/actions/travel`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },

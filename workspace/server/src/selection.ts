@@ -115,7 +115,7 @@ export function presentSelection(
   player: PlayerEntity,
   selection: Selection,
 ) {
-  state.activeSelections.set(player.name, selection);
+  state.activeSelections.set(player.id, selection);
   return selectionDto(selection);
 }
 
@@ -123,8 +123,8 @@ export function getActiveSelection(
   state: ApiState,
   player: PlayerEntity,
 ): SelectionView | undefined {
-  return state.activeSelections.has(player.name)
-    ? selectionDto(state.activeSelections.get(player.name)!)
+  return state.activeSelections.has(player.id)
+    ? selectionDto(state.activeSelections.get(player.id)!)
     : undefined;
 }
 
@@ -133,12 +133,12 @@ export function makeSelection(
   player: PlayerEntity,
   request: SelectionRequest,
 ): ActivityResult {
-  const selection = state.activeSelections.get(player.name);
+  const selection = state.activeSelections.get(player.id);
   if (!selection || selection.id !== request.selectionId) {
     throw new RulesViolation("Selection not found");
   }
   validateSelectionIndexes(selection, request.selectedIndexes);
-  state.activeSelections.delete(player.name);
+  state.activeSelections.delete(player.id);
   const callbackResult = selection.callback([...request.selectedIndexes]);
   const choices = selectedChoices(selection, request.selectedIndexes);
   const nextSelection = getActiveSelection(state, player);
