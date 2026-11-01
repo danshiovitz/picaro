@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  EncounterSkillCheck,
   EncounterTemplate,
   Hex,
   PlayerEntity,
@@ -20,12 +21,12 @@ export function setEncounterContext(context: { hexes: Hex[]; rng: RNG }) {
   encounterRng = context.rng;
 }
 
-function randomPick<T>(items: T[]) {
-  return encounterRng.pick(items);
+function randomPick<T>(items: T[], rng = encounterRng) {
+  return rng.pick(items);
 }
 
-function difficultySwing() {
-  return randomPick([0, 0, 0, 0, 0, 0, 1, 1, -1, -1, 2, -2]);
+function difficultySwing(rng = encounterRng) {
+  return randomPick([0, 0, 0, 0, 0, 0, 1, 1, -1, -1, 2, -2], rng);
 }
 
 function hexesNearPlayer(player: PlayerEntity) {
@@ -36,6 +37,21 @@ function hexesNearPlayer(player: PlayerEntity) {
     (hex) => hexDistance(origin, hex) <= speed,
   );
   return nearby.length > 0 ? nearby : [...encounterHexes];
+}
+
+export function rollEncounterSkillChecks(
+  skillSource: string[],
+  difficulty: number,
+  rng = encounterRng,
+): EncounterSkillCheck[] {
+  return [0, 1, 2].map(() => {
+    const skillPool = rng.next() < 0.9 ? skillSource : skillNames;
+    const target = 4 + difficulty + difficultySwing(rng);
+    return {
+      name: randomPick(skillPool, rng),
+      target,
+    };
+  });
 }
 
 export function instantiateEncounterTemplate(
@@ -65,13 +81,7 @@ export function instantiateEncounterTemplate(
     rewards: [...template.rewards],
     criticalRewards: [...template.criticalRewards],
     penalties: [...template.penalties],
-    skillChecks: [0, 1, 2].map(() => {
-      const skillPool = encounterRng.next() < 0.9 ? skillSource : skillNames;
-      const target = 4 + difficulty + difficultySwing();
-      return {
-        name: randomPick(skillPool),
-        target,
-      };
-    }),
+    skillSource: [...skillSource],
+    skillChecks: rollEncounterSkillChecks(skillSource, difficulty),
   };
 }

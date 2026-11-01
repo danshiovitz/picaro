@@ -25,6 +25,8 @@ export async function renderEffectText(
 ) {
   if (effect.type === EffectType.Resource)
     return `${effect.amount >= 0 ? "+" : "-"}${Math.abs(effect.amount)} ${labelForType(effect.type)} (${effect.resourceType})`;
+  if (effect.type === EffectType.SkillXp)
+    return `${effect.amount >= 0 ? "+" : "-"}${Math.abs(effect.amount)} xp for ${effect.skill}${effect.newLevel ? ` (now level ${effect.newLevel})` : ""}`;
   if (effect.type === EffectType.RemoveItems) {
     const names = await Promise.all(
       effect.itemIds.map(

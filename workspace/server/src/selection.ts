@@ -28,6 +28,10 @@ function cloneResources(resources: PlayerEntity["resources"]) {
   return { ...resources };
 }
 
+function cloneSkillXp(skill_xp: PlayerEntity["skill_xp"]) {
+  return { ...skill_xp };
+}
+
 function effectiveSkills(player: PlayerEntity) {
   return Object.fromEntries(
     skillNames.map(
@@ -51,11 +55,12 @@ function playerUpdates(player: PlayerEntity) {
     maxHealth: computeEffectiveValue(player, SectionType.maxHealth),
     speed: computeEffectiveValue(player, SectionType.speed),
     location: player.location,
+    skill_xp: cloneSkillXp(player.skill_xp),
     skills: effectiveSkills(player),
     resources: cloneResources(player.resources),
     inventory: cloneInventory(player.inventory),
     conditions: cloneConditions(player.conditions),
-  } satisfies Partial<PlayerEntity>;
+  } satisfies Partial<PlayerEntity> & { skills: Record<string, number> };
 }
 
 function selectionChoiceDto(choice: SelectionChoice) {

@@ -112,13 +112,13 @@ function startingResources() {
 }
 
 function startingSkills() {
-  const skills = makeEmptySkills();
-  const skillKeys = Object.keys(skills) as Array<string>;
+  const skill_xp = makeEmptySkills();
+  const skillKeys = Object.keys(skill_xp) as Array<string>;
   for (let i = 0; i < 30; i++) {
     const randomIndex = Math.floor(Math.random() * skillKeys.length);
-    skills[skillKeys[randomIndex]]++;
+    skill_xp[skillKeys[randomIndex]] += 20;
   }
-  return skills;
+  return skill_xp;
 }
 
 for (const [index, token] of playerTokens.entries()) {
@@ -138,7 +138,7 @@ for (const [index, token] of playerTokens.entries()) {
     resources: startingResources(),
     inventory: startingInventory(),
     conditions: startingConditions(),
-    skills: startingSkills(),
+    skill_xp: startingSkills(),
   });
 }
 const activeEncounters = new Map<string, ActiveEncounter>();

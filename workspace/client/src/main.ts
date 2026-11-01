@@ -124,9 +124,37 @@ function labelForType(type: string) {
   return type[0].toUpperCase() + type.slice(1);
 }
 
+function skillXpThresholds() {
+  return [0, 10, 30, 50, 75, 100, 130];
+}
+
+function skillLevelFromXp(xp: number) {
+  let level = 0;
+  for (const threshold of skillXpThresholds()) {
+    if (xp >= threshold) level += 1;
+  }
+  return Math.max(0, level - 1);
+}
+
+function skillXpDisplay(xp: number) {
+  const thresholds = skillXpThresholds();
+  const level = skillLevelFromXp(xp);
+  const current = thresholds[level] ?? thresholds[thresholds.length - 1];
+  const next = thresholds[level + 1];
+  return {
+    level,
+    current,
+    next: next ?? current,
+    text: next ? `${xp}/${next}` : `${xp}/${current}+`,
+    fill: next && next > current ? (xp - current) / (next - current) : 1,
+  };
+}
+
 function effectLabel(effect: Effect) {
   if (effect.type === EffectType.Resource)
     return `${labelForType(effect.type)} (${effect.resourceType})`;
+  if (effect.type === EffectType.SkillXp)
+    return `xp for ${effect.skill}${effect.newLevel ? ` (now level ${effect.newLevel})` : ""}`;
   if (effect.type === EffectType.RemoveItems)
     return `Remove items (${effect.itemIds.join(", ") || "none"})`;
   return labelForType(effect.type);
@@ -159,6 +187,8 @@ function canAffordEffects(player: PlayerEntity, effects: Effect[]) {
         return player.curLuck >= effect.amount;
       case EffectType.Resource:
         return (player.resources[effect.resourceType] ?? 0) >= effect.amount;
+      case EffectType.SkillXp:
+        return (player.skill_xp[effect.skill] ?? 0) >= effect.amount;
       case EffectType.RemoveItems: {
         const inventoryIds = new Set(player.inventory.map((item) => item.id));
         return effect.itemIds.every((itemId) => inventoryIds.has(itemId));
@@ -222,6 +252,7 @@ function renderActiveEncounterCard(card: ActiveEncounter) {
   const nextPenalty = card.nextPenalty
     ? `<p class="encounter-next-penalty">Next penalty: -${esc(labelForType(card.nextPenalty))}</p>`
     : "";
+  const skillChecks = card.currentSkillChecks;
   return `<article class="play-card encounter-card active-encounter-card" data-encounter-id="${esc(card.id)}">
   <div class="encounter-header">
    <div class="encounter-title-row">
@@ -231,8 +262,7 @@ function renderActiveEncounterCard(card: ActiveEncounter) {
   <div class="play-card-body encounter-body">
    <p>${esc(outcomeLine(card.rewards, card.criticalRewards, card.penalties))}</p>
    <div class="encounter-spacer"></div>
-   ${card.skillChecks
-     .filter((check) => !check.old)
+   ${skillChecks
      .map(
        (check) =>
          `<p class="encounter-check">${esc(`${check.name} vs ${check.target}`)}</p>`,
@@ -292,8 +322,8 @@ function renderEncounterSummary(card: ActiveEncounter) {
 }
 
 function renderEncounterResults(card: ActiveEncounter) {
-  return `<div class="encounter-results">${card.skillChecks
-    .filter((check) => !check.old)
+  const skillChecks = card.currentSkillChecks;
+  return `<div class="encounter-results">${skillChecks
     .map(
       (check) =>
         `<p class="encounter-result-line">${esc(`1d10 (${check.roll}) + ${check.modifier} = ${check.total} .. ${check.success ? "Success!" : "Failure!"}`)}</p>`,
@@ -790,13 +820,21 @@ function render(
       : `<p class="condition-empty">None</p>`;
   }
 
-  function renderSkills(skills: Record<string, number>) {
+  function renderSkills(
+    skills: Record<string, number>,
+    skillXp: Record<string, number>,
+  ) {
     const visibleSkills = Object.entries(skills)
       .sort(([a], [b]) => a.localeCompare(b))
       .filter(([, value]) => !hideZeroSkills || value !== 0);
     return visibleSkills.length
       ? `<ul class="skill-list">${visibleSkills
-          .map(([name, value]) => `<li>${esc(name)}: ${esc(value)}</li>`)
+          .map(([name, value]) => {
+            const xp = skillXp[name] ?? 0;
+            const progress = skillXpDisplay(xp);
+            const fill = Math.max(0, Math.min(1, progress.fill));
+            return `<li class="skill-row"><div class="skill-top-row"><span class="skill-name">${esc(name)}</span><span class="skill-value">${esc(value)}</span></div><div class="skill-bottom-row"><span class="skill-bar" aria-hidden="true"><span class="skill-bar-fill" style="width: ${Math.round(fill * 100)}%"></span></span><span class="skill-xp-text">${esc(progress.text)}</span></div></li>`;
+          })
           .join("")}</ul>`
       : `<p class="skill-empty">None</p>`;
   }
@@ -811,7 +849,7 @@ function render(
   }
 
   function renderSummary() {
-    stats.innerHTML = `<div class="summary-basic"><div><dd>${esc(player.name)}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${player.maxHealth}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div><dt>Speed</dt><dd>${player.speed}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div></div>${renderSummarySection("resources", "Resources", `<label class="skills-filter"><input type="checkbox" id="hide-zero-resources"${hideZeroResources ? " checked" : ""}/> hide 0 resources</label>${renderResources(player.resources)}`)}${renderSummarySection("inventory", "Inventory", renderInventory(player.inventory))}${renderSummarySection("conditions", "Conditions", renderConditions(player.conditions))}${renderSummarySection("skills", "Skills", `<label class="skills-filter"><input type="checkbox" id="hide-zero-skills"${hideZeroSkills ? " checked" : ""}/> hide 0 skills</label>${renderSkills(player.skills)}`)}`;
+    stats.innerHTML = `<div class="summary-basic"><div><dd>${esc(player.name)}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${player.maxHealth}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div><dt>Speed</dt><dd>${player.speed}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div></div>${renderSummarySection("resources", "Resources", `<label class="skills-filter"><input type="checkbox" id="hide-zero-resources"${hideZeroResources ? " checked" : ""}/> hide 0 resources</label>${renderResources(player.resources)}`)}${renderSummarySection("inventory", "Inventory", renderInventory(player.inventory))}${renderSummarySection("conditions", "Conditions", renderConditions(player.conditions))}${renderSummarySection("skills", "Skills", `<label class="skills-filter"><input type="checkbox" id="hide-zero-skills"${hideZeroSkills ? " checked" : ""}/> hide 0 skills</label>${renderSkills(player.skills, player.skill_xp)}`)}`;
     stats
       .querySelectorAll<HTMLButtonElement>("[data-summary-toggle]")
       .forEach((button) => {

@@ -45,6 +45,7 @@ export enum EffectType {
   Turns = "turns",
   Luck = "luck",
   Resource = "resource",
+  SkillXp = "skill_xp",
   RemoveItems = "remove_items",
 }
 export type Effect =
@@ -54,6 +55,12 @@ export type Effect =
   | { type: EffectType.Turns; amount: number }
   | { type: EffectType.Luck; amount: number }
   | { type: EffectType.Resource; resourceType: string; amount: number }
+  | {
+      type: EffectType.SkillXp;
+      skill: string;
+      amount: number;
+      newLevel?: number;
+    }
   | { type: EffectType.RemoveItems; itemIds: string[] };
 export type EncounterSkillCheck = { name: string; target: number };
 export type EncounterTemplate = {
@@ -72,7 +79,6 @@ export type ActiveEncounterSkillCheck = {
   modifier: number;
   total: number;
   success: boolean;
-  old?: boolean;
 };
 export type TableauCard = {
   id: string;
@@ -85,6 +91,7 @@ export type TableauCard = {
   rewards: RewardType[];
   criticalRewards: RewardType[];
   penalties: PenaltyType[];
+  skillSource: string[];
   skillChecks: EncounterSkillCheck[];
 };
 export type TableauData = { encounters: TableauCard[] };
@@ -122,6 +129,7 @@ export type PlayerEntity = {
   resources: Record<string, number>;
   inventory: Item[];
   conditions: Condition[];
+  skill_xp: Record<string, number>;
   skills: Record<string, number>;
 };
 export type PlayCard = { title: string; lines: string[] };
@@ -143,6 +151,7 @@ export type ActiveEncounter = {
   successThreshold: number;
   criticalThreshold?: number;
   failureThreshold: number;
+  difficulty: number;
   numSuccesses: number;
   numFailures: number;
   nextPenalty?: PenaltyType;
@@ -150,5 +159,6 @@ export type ActiveEncounter = {
   criticalRewards: RewardType[];
   penalties: PenaltyType[];
   skillChecks: ActiveEncounterSkillCheck[];
-  skillCheckTemplate: EncounterSkillCheck[];
+  skillSource: string[];
+  currentSkillChecks: ActiveEncounterSkillCheck[];
 };

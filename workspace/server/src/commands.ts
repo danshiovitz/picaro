@@ -30,7 +30,10 @@ import {
   specialActions,
 } from "./data.js";
 import { hexDistance } from "./hexmap.js";
-import { instantiateEncounterTemplate } from "./encounter.js";
+import {
+  instantiateEncounterTemplate,
+  rollEncounterSkillChecks,
+} from "./encounter.js";
 import { computeEffectiveValue } from "./rule.js";
 import { RNG } from "./random.js";
 import { getActiveSelection } from "./selection.js";
@@ -111,11 +114,10 @@ function randomPenalty(card: TableauCard, rng: RNG) {
 
 function rollSkillChecks(
   player: PlayerEntity,
-  cards: { name: string; target: number }[],
+  checks: { name: string; target: number }[],
   rng: RNG,
-  old = false,
 ) {
-  return cards.map((check): ActiveEncounterSkillCheck => {
+  return checks.map((check): ActiveEncounterSkillCheck => {
     const roll = rng.d10();
     const modifier = computeEffectiveValue(
       player,
@@ -130,7 +132,6 @@ function rollSkillChecks(
       modifier,
       total,
       success: total >= check.target,
-      old,
     };
   });
 }
@@ -158,6 +159,7 @@ function activeEncounterFor(
     successThreshold: card.successThreshold,
     criticalThreshold: card.criticalThreshold,
     failureThreshold: card.failureThreshold,
+    difficulty: card.difficulty,
     numSuccesses,
     numFailures,
     nextPenalty:
@@ -168,7 +170,8 @@ function activeEncounterFor(
     criticalRewards: card.criticalRewards,
     penalties: card.penalties,
     skillChecks,
-    skillCheckTemplate: card.skillChecks,
+    skillSource: [...card.skillSource],
+    currentSkillChecks: skillChecks,
   };
 }
 
@@ -182,6 +185,10 @@ function cloneConditions(conditions: Condition[]) {
 
 function cloneResources(resources: Record<string, number>) {
   return { ...resources };
+}
+
+function cloneSkillXp(skill_xp: Record<string, number>) {
+  return { ...skill_xp };
 }
 
 function resourceEffect(resourceType: string, amount: number): Effect {
@@ -204,17 +211,20 @@ function effectiveSkills(player: PlayerEntity) {
   );
 }
 
+type PlayerDto = PlayerEntity & { skills: Record<string, number> };
+
 function playerDto(hexes: Hex[], player: PlayerEntity) {
   player.location = locationForToken(hexes, player.tokenId);
   return {
     ...player,
+    skill_xp: cloneSkillXp(player.skill_xp),
     maxHealth: computeEffectiveValue(player, SectionType.maxHealth),
     speed: computeEffectiveValue(player, SectionType.speed),
     skills: effectiveSkills(player),
     resources: cloneResources(player.resources),
     inventory: cloneInventory(player.inventory),
     conditions: cloneConditions(player.conditions),
-  };
+  } satisfies PlayerDto;
 }
 
 function playerUpdates(player: PlayerEntity) {
@@ -228,11 +238,22 @@ function playerUpdates(player: PlayerEntity) {
     maxHealth: computeEffectiveValue(player, SectionType.maxHealth),
     speed: computeEffectiveValue(player, SectionType.speed),
     location: player.location,
+    skill_xp: cloneSkillXp(player.skill_xp),
     skills: effectiveSkills(player),
     resources: cloneResources(player.resources),
     inventory: cloneInventory(player.inventory),
     conditions: cloneConditions(player.conditions),
-  } satisfies Partial<PlayerEntity>;
+  } satisfies Partial<PlayerEntity> & { skills: Record<string, number> };
+}
+
+const skillXpThresholds = [0, 10, 30, 50, 75, 100, 130];
+
+function skillLevelFromXp(xp: number) {
+  let level = 0;
+  for (let i = 0; i < skillXpThresholds.length; i++) {
+    if (xp >= skillXpThresholds[i]) level = i;
+  }
+  return level;
 }
 
 function resolveEncounterEffects(
@@ -263,6 +284,41 @@ function resolveEncounterEffects(
   }
   for (const penalty of active.penalties)
     effects.push(...computePenalty(penalty, active.numFailures, player, rng));
+
+  const failedChecks = active.skillChecks.filter((check) => !check.success);
+  const succeededChecks = active.skillChecks.filter((check) => check.success);
+  const selectedFailedChecks =
+    failedChecks.length >= 3
+      ? failedChecks.length === 3
+        ? failedChecks
+        : rng.shuffle(failedChecks).slice(0, 3)
+      : failedChecks;
+  const selectedSucceededChecks =
+    failedChecks.length >= 3
+      ? []
+      : rng.shuffle(succeededChecks).slice(0, 3 - failedChecks.length);
+
+  const xpEffects: Effect[] = [];
+  const runningSkillXp = { ...player.skill_xp };
+  for (const check of [...selectedFailedChecks, ...selectedSucceededChecks]) {
+    const amount = check.success ? 1 : 2;
+    const currentXp = runningSkillXp[check.name] ?? 0;
+    const currentLevel = skillLevelFromXp(currentXp);
+    const nextXp = currentXp + amount;
+    const nextLevel = skillLevelFromXp(nextXp);
+    runningSkillXp[check.name] = nextXp;
+    xpEffects.push(
+      nextLevel > currentLevel
+        ? {
+            type: EffectType.SkillXp,
+            skill: check.name,
+            amount,
+            newLevel: nextLevel,
+          }
+        : { type: EffectType.SkillXp, skill: check.name, amount },
+    );
+  }
+  effects.push(...xpEffects);
   applyEffects(player, effects);
   return effects;
 }
@@ -272,6 +328,7 @@ function labelForReward(type: RewardType | PenaltyType) {
 }
 
 function labelForEffect(type: EffectType) {
+  if (type === EffectType.SkillXp) return "Skill XP";
   return type[0].toUpperCase() + type.slice(1);
 }
 
@@ -331,12 +388,19 @@ function canAfford(player: PlayerEntity, cost: Effect[]) {
         return player.curLuck >= effect.amount;
       case EffectType.Resource:
         return (player.resources[effect.resourceType] ?? 0) >= effect.amount;
+      case EffectType.SkillXp:
+        return (player.skill_xp[effect.skill] ?? 0) >= effect.amount;
       case EffectType.RemoveItems: {
         const inventoryIds = new Set(player.inventory.map((item) => item.id));
         return effect.itemIds.every((itemId) => inventoryIds.has(itemId));
       }
     }
   });
+}
+
+function adjustSkillXp(player: PlayerEntity, skill: string, amount: number) {
+  const current = player.skill_xp[skill] ?? 0;
+  player.skill_xp[skill] = Math.max(0, current + amount);
 }
 
 function applyEffects(player: PlayerEntity, effects: Effect[]) {
@@ -360,6 +424,9 @@ function applyEffects(player: PlayerEntity, effects: Effect[]) {
       case EffectType.Resource:
         adjustResource(player, effect.resourceType, effect.amount);
         break;
+      case EffectType.SkillXp:
+        adjustSkillXp(player, effect.skill, effect.amount);
+        break;
       case EffectType.RemoveItems:
         removeItems(player, effect.itemIds);
         break;
@@ -382,7 +449,11 @@ function effectLabelLine(effect: Effect) {
   if (effect.type === EffectType.RemoveItems) {
     return `Remove items: ${effect.itemIds.join(", ") || "none"}`;
   }
-  return `${effect.amount >= 0 ? "+" : "-"}${Math.abs(effect.amount)} ${labelForEffect(effect.type)}`;
+  const label =
+    effect.type === EffectType.SkillXp
+      ? `${labelForEffect(effect.type)} (${effect.skill})`
+      : labelForEffect(effect.type);
+  return `${effect.amount >= 0 ? "+" : "-"}${Math.abs(effect.amount)} ${label}`;
 }
 
 function effectsToLines(effects: Effect[]) {
@@ -767,19 +838,30 @@ export function continueEncounter(
     : undefined;
   if (active.tableauId && !encounter)
     throw new RulesViolation("Encounter not found");
-  const encounterSkillChecks =
-    encounter?.skillChecks ?? active.skillCheckTemplate;
   if (active.nextPenalty) {
     active.penalties = [...active.penalties, active.nextPenalty];
     active.nextPenalty = undefined;
   }
-  active.skillChecks = active.skillChecks.map((check) => ({
-    ...check,
-    old: true,
-  }));
-  active.skillChecks.push(
-    ...rollSkillChecks(player, encounterSkillChecks, state.rng),
+  const nextSkillTemplates = rollEncounterSkillChecks(
+    active.skillSource,
+    active.difficulty,
+    state.rng,
   );
+  const nextSkillChecks = rollSkillChecks(
+    player,
+    nextSkillTemplates,
+    state.rng,
+  );
+  console.log(
+    `[continueEncounter] ${player.name} ${active.id} new checks: ${nextSkillChecks
+      .map(
+        (check) =>
+          `${check.name} vs ${check.target} (roll ${check.roll} + ${check.modifier} = ${check.total})`,
+      )
+      .join("; ")}`,
+  );
+  active.skillChecks.push(...nextSkillChecks);
+  active.currentSkillChecks = nextSkillChecks;
   active.numSuccesses = active.skillChecks.filter(
     (check) => check.success,
   ).length;
