@@ -1,12 +1,14 @@
-import type { ApiState } from "./commands.js";
 import {
+  ApiState,
   Selection,
   PlayerEntity,
   SectionType,
   SelectionChoice,
   ActivityResult,
   SelectionView,
+  PendingActivity,
 } from "./types.js";
+import { nextActiveForPlayer } from "./commands.js";
 import { skillNames } from "./data.js";
 import { computeEffectiveValue } from "./rule.js";
 import { RulesViolation } from "./commands.js";
@@ -16,59 +18,12 @@ export type SelectionRequest = {
   selectedIndexes: number[];
 };
 
-function cloneInventory(inventory: PlayerEntity["inventory"]) {
-  return inventory.map((item) => ({ ...item }));
-}
-
-function cloneConditions(conditions: PlayerEntity["conditions"]) {
-  return conditions.map((condition) => ({ ...condition }));
-}
-
-function cloneResources(resources: PlayerEntity["resources"]) {
-  return { ...resources };
-}
-
-function cloneSkillXp(skill_xp: PlayerEntity["skill_xp"]) {
-  return { ...skill_xp };
-}
-
-function effectiveSkills(player: PlayerEntity) {
-  return Object.fromEntries(
-    skillNames.map(
-      (skill) =>
-        [
-          skill,
-          computeEffectiveValue(player, SectionType.skill, skill),
-        ] as const,
-    ),
-  );
-}
-
-function playerUpdates(player: PlayerEntity) {
-  return {
-    curHealth: player.curHealth,
-    curLuck: player.curLuck,
-    maxLuck: player.maxLuck,
-    gold: player.gold,
-    reputation: player.reputation,
-    turns: player.turns,
-    maxHealth: computeEffectiveValue(player, SectionType.maxHealth),
-    speed: computeEffectiveValue(player, SectionType.speed),
-    location: player.location,
-    skill_xp: cloneSkillXp(player.skill_xp),
-    skills: effectiveSkills(player),
-    resources: cloneResources(player.resources),
-    inventory: cloneInventory(player.inventory),
-    conditions: cloneConditions(player.conditions),
-  } satisfies Partial<PlayerEntity> & { skills: Record<string, number> };
-}
-
 function selectionChoiceDto(choice: SelectionChoice) {
   const { data: _data, ...dto } = choice;
   return dto;
 }
 
-function selectionDto(selection: Selection): SelectionView {
+export function selectionDto(selection: Selection): SelectionView {
   const { callback: _callback, ...dto } = selection;
   return {
     ...dto,
@@ -115,38 +70,23 @@ function selectedChoices(selection: Selection, selectedIndexes: number[]) {
     .filter((choice): choice is SelectionChoice => Boolean(choice));
 }
 
-export function presentSelection(
-  state: ApiState,
-  player: PlayerEntity,
-  selection: Selection,
-) {
-  state.activeSelections.set(player.id, selection);
-  return selectionDto(selection);
-}
-
-export function getActiveSelection(
-  state: ApiState,
-  player: PlayerEntity,
-): SelectionView | undefined {
-  return state.activeSelections.has(player.id)
-    ? selectionDto(state.activeSelections.get(player.id)!)
-    : undefined;
-}
-
 export function makeSelection(
   state: ApiState,
   player: PlayerEntity,
   request: SelectionRequest,
 ): ActivityResult {
-  const selection = state.activeSelections.get(player.id);
+  const curActivity = state.currentActivities.get(player.id);
+  const selection =
+    curActivity && curActivity.type == "selection"
+      ? curActivity.selection
+      : undefined;
   if (!selection || selection.id !== request.selectionId) {
     throw new RulesViolation("Selection not found");
   }
   validateSelectionIndexes(selection, request.selectedIndexes);
-  state.activeSelections.delete(player.id);
+  state.currentActivities.delete(player.id);
   const callbackResult = selection.callback([...request.selectedIndexes]);
   const choices = selectedChoices(selection, request.selectedIndexes);
-  const nextSelection = getActiveSelection(state, player);
   return (
     callbackResult ?? {
       flavorText:
@@ -154,9 +94,7 @@ export function makeSelection(
           ? choices.map((choice) => choice.description).join("\n")
           : "No selection made.",
       effects: [],
-      nextActive: nextSelection
-        ? { type: "selection", selection: nextSelection }
-        : undefined,
+      nextActive: nextActiveForPlayer(state, player),
     }
   );
 }

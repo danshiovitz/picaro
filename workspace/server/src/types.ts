@@ -1,3 +1,5 @@
+import { RNG } from "./random.js";
+
 export type Terrain = { name: string; color: string; icon: string };
 export type Region = { name: string };
 export type Claim = { name: string; icon: string };
@@ -130,20 +132,28 @@ export type TableauCard = {
   skillChecks: EncounterSkillCheck[];
 };
 export type TableauData = { encounters: TableauCard[] };
+
+export type ApiState = {
+  hexes: Hex[];
+  hexByName: Map<string, Hex>;
+  tokens: { id: string; entityName: string; icon: string }[];
+  items: Map<string, Item>;
+  players: Map<string, PlayerEntity>;
+  currentActivities: Map<string, PendingActivity>;
+  pendingWork: Map<string, PendingActivity[]>;
+  tableau: Map<string, TableauCard[]>;
+  rng: RNG;
+};
+
 export type SpecialAction = {
   id: string;
   name: string;
   locations?: string[];
   cost: Effect[];
 };
-export type SpecialActionState = {
-  activeSelections: Map<string, Selection>;
-};
-export type SpecialActionDefinition<
-  TState extends SpecialActionState = SpecialActionState,
-> = SpecialAction & {
+export type SpecialActionDefinition = SpecialAction & {
   availability: (player: PlayerEntity) => boolean;
-  execute: (state: TState, player: PlayerEntity) => Effect[];
+  execute: (state: ApiState, player: PlayerEntity) => Effect[];
 };
 export type SelectionChoice = {
   description: string;
@@ -171,6 +181,11 @@ export type Selection = {
   maxChoices?: number;
   callback: (indexes: number[]) => ActivityResult | void;
 };
+
+export type PendingActivity =
+  | { type: "encounter"; encounter: ActiveEncounter }
+  | { type: "selection"; selection: Selection };
+
 export type PlayCard = { title: string; lines: string[] };
 export type ActivityNextActive =
   | { type: "encounter"; encounter: ActiveEncounter }

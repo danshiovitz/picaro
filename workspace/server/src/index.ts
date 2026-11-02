@@ -2,7 +2,9 @@ import http from "node:http";
 
 import {
   ActiveEncounter,
+  ApiState,
   Item,
+  PendingActivity,
   PlayerEntity,
   Selection,
   TableauCard,
@@ -18,7 +20,6 @@ import {
 import { loadOrGenerateWorld, MapGeneratorName } from "./map_generator.js";
 import { RNG } from "./random.js";
 import {
-  ApiState,
   RulesViolation,
   campEntity,
   fillTableau,
@@ -141,10 +142,7 @@ for (const [index, token] of playerTokens.entries()) {
     skill_xp: startingSkills(),
   });
 }
-const activeEncounters = new Map<string, ActiveEncounter>();
-const activeSelections = new Map<string, Selection>();
-const travelContinuation = new Map<string, boolean>();
-const travelContinuationRoute = new Map<string, string[]>();
+const pendingWork = new Map<string, PendingActivity[]>();
 const tableau = new Map<string, TableauCard[]>();
 const encounterRng = new RNG(`${defaultSeed}:encounters`);
 setEncounterContext({ hexes, rng: encounterRng });
@@ -153,6 +151,7 @@ for (const player of players.values()) {
   fillTableau(playerTableau, encounterTemplates, player, encounterRng);
   tableau.set(player.id, playerTableau);
 }
+const currentActivities = new Map<string, PendingActivity>();
 
 const apiState: ApiState = {
   hexes,
@@ -160,10 +159,8 @@ const apiState: ApiState = {
   tokens: playerTokens,
   items,
   players,
-  activeEncounters,
-  activeSelections,
-  travelContinuation,
-  travelContinuationRoute,
+  currentActivities,
+  pendingWork,
   tableau,
   rng: encounterRng,
 };

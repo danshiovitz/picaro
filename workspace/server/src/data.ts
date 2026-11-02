@@ -15,6 +15,7 @@ import {
   Token,
 } from "./types.js";
 import { computeEffectiveValue } from "./rule.js";
+import { queuePendingWork } from "./commands.js";
 
 export const terrainSpecs = [
   ["Forest", "#1a531e", "forest"],
@@ -434,7 +435,10 @@ export const specialActions: SpecialActionDefinition[] = [
           }
         },
       };
-      state.activeSelections.set(player.id, selection);
+      queuePendingWork(state, player, {
+        type: "selection",
+        selection: selection,
+      });
       return [];
     },
   },

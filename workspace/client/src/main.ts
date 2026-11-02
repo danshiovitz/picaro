@@ -409,12 +409,12 @@ function render(
   let centerPlayerAfterDraw = false;
   let specialActions = initialSpecialActions;
   let specialActionCatalog = initialSpecialActionCatalog;
-  let pendingSpecialAction: { actionId: string; targetHex: string } | null =
-    null;
-  let pendingTravelRoute: string[] | null = null;
-  let travelContinuation = false;
-  let travelSpecialAction: { actionId: string; targetHex: string } | null =
-    null;
+
+  type OngoingTravelData = {
+    route: string[];
+    specialActionId: string | null;
+  };
+  let ongoingTravel: OngoingTravelData | null = null;
   let activeSelection: Selection | null = null;
   let activityBlocksControls = false;
   const mapBounds = store.data.hexes.reduce(
@@ -460,37 +460,42 @@ function render(
     setActivityPanel(null, "");
   }
 
-  function clearPendingTravelState() {
-    pendingSpecialAction = null;
-    pendingTravelRoute = null;
-    travelContinuation = false;
-    travelSpecialAction = null;
+  function clearOngoingTravel() {
+    ongoingTravel = null;
   }
 
-  function resumeTravelAfterActivity(
-    destination: string,
-    pendingAction: { actionId: string; targetHex: string } | null,
-    remainingRoute: string[] | null = pendingTravelRoute,
-  ) {
-    if (pendingAction && destination === pendingAction.targetHex) {
-      pendingTravelRoute = null;
-      travelContinuation = false;
-      const action = specialActionCatalog.find(
-        (item) => item.id === pendingAction.actionId,
-      );
-      if (action) showSpecialActionPrompt(action, pendingAction.targetHex);
-      return;
+  function maybeContinueOngoingTravel() {
+    if (!ongoingTravel) return false;
+    // Find where on the path they are
+    const ridx = ongoingTravel.route.findIndex((h) => h == player.location);
+    if (ridx == -1) {
+      ongoingTravel = null;
+      return false;
     }
-    if (remainingRoute?.length) {
-      route = remainingRoute;
-      pendingSpecialAction = pendingAction;
-      travelContinuation = true;
-      map.classList.add("travel-mode");
-      showTravelCard();
-      draw();
-      return;
+
+    // If arrived in destination hex
+    if (ridx == ongoingTravel.route.length - 1) {
+      if (ongoingTravel.specialActionId) {
+        const action = specialActionCatalog.find(
+          (item) => item.id === ongoingTravel.specialActionId,
+        );
+        if (!action) return false;
+        showSpecialActionPrompt(action, player.location);
+        ongoingTravel = null;
+        return true;
+      } else {
+        ongoingTravel = null;
+        return false;
+      }
     }
-    clearPendingTravelState();
+
+    ongoingTravel.route = ongoingTravel.route.slice(
+      ridx,
+      ongoingTravel.route.length,
+    );
+    route = ongoingTravel.route;
+    showTravelCard();
+    return true;
   }
 
   function validateSelectionLocally(
@@ -512,9 +517,6 @@ function render(
     if (!activeSelection) return;
     const selectionId = activeSelection.id;
     activeSelection = null;
-    const destination = player.location;
-    const pendingAction = travelSpecialAction;
-    const remainingRoute = pendingTravelRoute;
     await executeActivity(
       "Selection",
       () =>
@@ -531,12 +533,7 @@ function render(
         ),
       (result) => {
         return showActivityResult("Selection", result, () => {
-          if (!launchResultNextActive(result))
-            resumeTravelAfterActivity(
-              destination,
-              pendingAction,
-              remainingRoute,
-            );
+          if (!launchResultNextActive(result)) maybeContinueOngoingTravel();
         });
       },
     );
@@ -681,7 +678,10 @@ function render(
       showSpecialActionPrompt(action, targetHex);
       return;
     }
-    pendingSpecialAction = { actionId: action.id, targetHex };
+    ongoingTravel = {
+      specialActionId: action.id,
+      route: shortestPath(player.location, targetHex),
+    };
     enterTravelMode();
     const hex = store.hexes.get(targetHex);
     if (hex) selectRouteHex(hex);
@@ -711,10 +711,9 @@ function render(
           },
         ),
       (result) => {
-        clearPendingTravelState();
-        return showActivityResult("Action", result, () =>
-          launchResultNextActive(result),
-        );
+        return showActivityResult("Action", result, () => {
+          if (!launchResultNextActive(result)) maybeContinueOngoingTravel();
+        });
       },
     );
   }
@@ -977,6 +976,7 @@ function render(
     syncTableau(updatedTableau);
     renderSummary();
     await refreshSpecialActions();
+    draw();
   }
 
   async function executeActivity(
@@ -1068,9 +1068,6 @@ function render(
   }
 
   async function finishEncounter(encounterId: string, conceding = false) {
-    const destination = player.location;
-    const pendingAction = travelSpecialAction;
-    const remainingRoute = pendingTravelRoute;
     await executeActivity(
       "Encounter",
       () =>
@@ -1090,12 +1087,7 @@ function render(
         activeEncounterId = null;
         setEncounterPanel(null);
         return showActivityResult("Encounter", result, () => {
-          if (!launchResultNextActive(result))
-            resumeTravelAfterActivity(
-              destination,
-              pendingAction,
-              remainingRoute,
-            );
+          if (!launchResultNextActive(result)) maybeContinueOngoingTravel();
         });
       },
     );
@@ -1104,8 +1096,6 @@ function render(
   function enterTravelMode() {
     if (busy || activityBlocksControls) return;
     route = [player.location];
-    pendingTravelRoute = null;
-    travelContinuation = false;
     map.classList.add("travel-mode");
     tip.style.display = "none";
     showTravelCard();
@@ -1139,9 +1129,9 @@ function render(
   }
 
   function showTravelCard() {
-    const canAfford = travelContinuation
-      ? true
-      : canAffordEffects(player, [{ type: EffectType.Turns, amount: 1 }]);
+    const canAfford = canAffordEffects(player, [
+      { type: EffectType.Turns, amount: 1 },
+    ]);
     setPlay(
       `<article class="play-card travel-card"><h3>Travel</h3><div class="play-card-body route-body"><p>${travelRouteHtml()}</p></div></article><div class="travel-controls"><button id="travel-go" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You\'re out of turns." aria-disabled="true"'}>Go</button><button id="travel-cancel" class="card-ok" type="button">Cancel</button></div>`,
       "Travel",
@@ -1163,20 +1153,16 @@ function render(
           { method: "POST" },
         ),
       (result) => {
-        clearPendingTravelState();
-        return showActivityResult("Camp", result, () =>
-          launchResultNextActive(result),
-        );
+        return showActivityResult("Camp", result, () => {
+          if (!launchResultNextActive(result)) maybeContinueOngoingTravel();
+        });
       },
     );
   }
 
   function exitTravelMode() {
     route = null;
-    pendingSpecialAction = null;
-    pendingTravelRoute = null;
-    travelContinuation = false;
-    travelSpecialAction = null;
+    clearOngoingTravel();
     map.classList.remove("travel-mode");
     clearPlay();
     draw();
@@ -1235,11 +1221,13 @@ function render(
 
   async function goTravel() {
     if (!route) return;
-    const pendingAction = pendingSpecialAction;
-    travelSpecialAction = pendingAction;
-    const submittedRoute = [...route];
+    const submittedRoute = route.slice(0, player.speed + 1);
+    const destination = route[route.length - 1];
+    const remainingRoute =
+      route.length > submittedRoute.length
+        ? route.slice(submittedRoute.length - 1)
+        : undefined;
     route = null;
-    pendingSpecialAction = null;
     map.classList.remove("travel-mode");
     draw();
     await executeActivity(
@@ -1254,23 +1242,15 @@ function render(
           },
         ),
       (result) => {
-        const destination = player.location;
-        const destinationIndex = submittedRoute.indexOf(destination);
-        const remainingRoute =
-          destinationIndex >= 0 && destinationIndex < submittedRoute.length - 1
-            ? submittedRoute.slice(destinationIndex)
-            : undefined;
-        pendingTravelRoute = remainingRoute ?? null;
-        travelContinuation = Boolean(remainingRoute?.length);
+        const arrivedHex = player.location;
+        if (remainingRoute?.length) {
+          ongoingTravel = {
+            route: remainingRoute,
+          };
+        }
         return showActivityResult("Travel", result, () => {
-          if (!launchResultNextActive(result))
-            resumeTravelAfterActivity(
-              destination,
-              pendingAction,
-              remainingRoute ?? null,
-            );
+          if (!launchResultNextActive(result)) maybeContinueOngoingTravel();
         });
-        draw();
       },
     );
   }
