@@ -1,5 +1,5 @@
 import { GameStore } from "./store";
-import { EffectType } from "./types";
+import { EffectType, RewardType } from "./types";
 import {
   activityErrorTitle,
   activityResultTitle,
@@ -18,7 +18,6 @@ import type {
   Item,
   PenaltyType,
   PlayerEntity,
-  RewardType,
   Selection,
   SpecialAction,
   TableauCard,
@@ -121,6 +120,8 @@ function esc(value: unknown) {
 }
 
 function labelForType(type: string) {
+  if (type === RewardType.FreeXp) return "Free XP";
+  if (type === RewardType.ControlledTeleport) return "Controlled Teleport";
   return type[0].toUpperCase() + type.slice(1);
 }
 
@@ -153,6 +154,9 @@ function skillXpDisplay(xp: number) {
 function effectLabel(effect: Effect) {
   if (effect.type === EffectType.Resource)
     return `${labelForType(effect.type)} (${effect.resourceType})`;
+  if (effect.type === EffectType.FreeXp) return labelForType(effect.type);
+  if (effect.type === EffectType.ControlledTeleport)
+    return `${labelForType(effect.type)} (radius ${effect.radius})`;
   if (effect.type === EffectType.SkillXp)
     return `xp for ${effect.skill}${effect.newLevel ? ` (now level ${effect.newLevel})` : ""}`;
   if (effect.type === EffectType.RemoveItems)
@@ -164,7 +168,8 @@ function formatEffects(effects: Effect[]) {
   return effects.length
     ? effects
         .map((effect) =>
-          effect.type === EffectType.RemoveItems
+          effect.type === EffectType.RemoveItems ||
+          effect.type === EffectType.ControlledTeleport
             ? effectLabel(effect)
             : `-${effect.amount} ${effectLabel(effect)}`,
         )
@@ -175,6 +180,8 @@ function formatEffects(effects: Effect[]) {
 function canAffordEffects(player: PlayerEntity, effects: Effect[]) {
   return effects.every((effect) => {
     switch (effect.type) {
+      case EffectType.FreeXp:
+        return false;
       case EffectType.Gold:
         return player.gold >= effect.amount;
       case EffectType.Reputation:
@@ -333,7 +340,6 @@ function renderEncounterResults(card: ActiveEncounter) {
 
 function renderSelectionCard(selection: Selection, error = "") {
   const maxChoices = selection.maxChoices ?? 1;
-  const inputType = maxChoices === 1 ? "radio" : "checkbox";
   const instruction =
     selection.minChoices === 0
       ? maxChoices === 1
@@ -342,15 +348,23 @@ function renderSelectionCard(selection: Selection, error = "") {
       : selection.minChoices === maxChoices
         ? `Choose ${maxChoices} option${maxChoices === 1 ? "" : "s"}.`
         : `Choose between ${selection.minChoices ?? 1} and ${maxChoices} options.`;
-  const choices = selection.choices
-    .map(
-      (choice) => `
+  const choices = selection.useDropdown
+    ? `<label class="selection-choice selection-dropdown"><select id="selection-dropdown-${esc(selection.id)}" name="selection-${esc(selection.id)}">${selection.minChoices === 0 ? '<option value="">Choose an option</option>' : ""}${selection.choices
+        .map(
+          (choice) =>
+            `<option value="${esc(choice.index)}">${esc(choice.description)}</option>`,
+        )
+        .join("")}</select></label>`
+    : selection.choices
+        .map((choice) => {
+          const inputType = maxChoices === 1 ? "radio" : "checkbox";
+          return `
         <label class="selection-choice">
           <input type="${inputType}" name="selection-${esc(selection.id)}" value="${esc(choice.index)}" data-choice-index="${esc(choice.index)}" />
           <span>${esc(choice.description)}</span>
-        </label>`,
-    )
-    .join("");
+        </label>`;
+        })
+        .join("");
   const description = selection.description
     ? `<p class="selection-description">${esc(selection.description)}</p>`
     : "";
@@ -417,6 +431,17 @@ function render(
   let ongoingTravel: OngoingTravelData | null = null;
   let activeSelection: Selection | null = null;
   let activityBlocksControls = false;
+
+  function isHexSelectionActive() {
+    return Boolean(activeSelection?.hexSelection);
+  }
+
+  function updateMapCursor() {
+    map.classList.toggle(
+      "travel-mode",
+      Boolean(route) || isHexSelectionActive(),
+    );
+  }
   const mapBounds = store.data.hexes.reduce(
     (acc, hex) => {
       const { x, y } = hexCenter(hex);
@@ -433,6 +458,7 @@ function render(
   function updateActionButtons() {
     const disabled = busy || activityBlocksControls;
     actionButtons.forEach((button) => (button.disabled = disabled));
+    tableauEl.classList.toggle("disabled", disabled);
     document
       .querySelectorAll<HTMLButtonElement>(
         "#selection-select, #selection-cancel",
@@ -457,6 +483,7 @@ function render(
   function clearPlay() {
     activeSelection = null;
     activityBlocksControls = false;
+    updateMapCursor();
     setActivityPanel(null, "");
   }
 
@@ -510,13 +537,56 @@ function render(
     ) {
       return `Select between ${minChoices} and ${maxChoices} choices.`;
     }
+    if (selection.hexSelection) {
+      const origin = store.hexes.get(selection.hexSelection.originHex);
+      if (!origin) return "Selected origin hex is not valid.";
+      const choice = selection.choices.find(
+        (item) => item.index === selectedIndexes[0],
+      );
+      if (!choice) return "Selection choice not found.";
+      const target = store.hexes.get(choice.data);
+      if (!target) return "Selected hex is not valid.";
+      if (store.distance(origin, target) > selection.hexSelection.radius) {
+        return "Selected hex is out of range.";
+      }
+    }
     return null;
+  }
+
+  function selectedSelectionHexName() {
+    if (!activeSelection?.hexSelection) return undefined;
+    const dropdown = document.querySelector(
+      `#selection-dropdown-${CSS.escape(activeSelection.id)}`,
+    ) as HTMLSelectElement | null;
+    const value = dropdown?.value ?? "";
+    if (!value) return undefined;
+    const choice = activeSelection.choices.find(
+      (item) => String(item.index) === value,
+    );
+    return choice?.data;
+  }
+
+  function selectSelectionHex(hexName: string) {
+    if (!activeSelection?.hexSelection) return;
+    const choice = activeSelection.choices.find(
+      (item) => item.data === hexName,
+    );
+    if (!choice) return;
+    const dropdown = document.querySelector(
+      `#selection-dropdown-${CSS.escape(activeSelection.id)}`,
+    ) as HTMLSelectElement | null;
+    if (dropdown) {
+      dropdown.value = String(choice.index);
+      dropdown.dispatchEvent(new Event("change", { bubbles: true }));
+      draw();
+    }
   }
 
   async function submitSelection(selectedIndexes: number[]) {
     if (!activeSelection) return;
     const selectionId = activeSelection.id;
     activeSelection = null;
+    updateMapCursor();
     await executeActivity(
       "Selection",
       () =>
@@ -543,6 +613,7 @@ function render(
     activeEncounterId = null;
     activeSelection = selection;
     setActivityPanel("Selection", renderSelectionCard(selection), true);
+    updateMapCursor();
     const errorEl = document.querySelector(
       ".selection-error",
     ) as HTMLElement | null;
@@ -552,23 +623,38 @@ function render(
     const cancelButton = document.querySelector(
       "#selection-cancel",
     ) as HTMLButtonElement | null;
+    const dropdown = document.querySelector(
+      `#selection-dropdown-${CSS.escape(selection.id)}`,
+    ) as HTMLSelectElement | null;
     const clearError = () => {
       if (errorEl) errorEl.textContent = "";
     };
-    document
-      .querySelectorAll<HTMLInputElement>(
-        `input[name="selection-${CSS.escape(selection.id)}"]`,
-      )
-      .forEach((input) => input.addEventListener("change", clearError));
+    if (selection.useDropdown) {
+      dropdown?.addEventListener("change", () => {
+        clearError();
+        draw();
+      });
+    } else {
+      document
+        .querySelectorAll<HTMLInputElement>(
+          `input[name="selection-${CSS.escape(selection.id)}"]`,
+        )
+        .forEach((input) => input.addEventListener("change", clearError));
+    }
     cancelButton?.addEventListener("click", () => {
       void submitSelection([]);
     });
     selectButton?.addEventListener("click", () => {
-      const selectedIndexes = [
-        ...document.querySelectorAll<HTMLInputElement>(
-          `.selection-card input[name="selection-${CSS.escape(selection.id)}"]:checked`,
-        ),
-      ].map((input) => Number(input.value));
+      const selectedIndexes = selection.useDropdown
+        ? (() => {
+            const value = dropdown?.value ?? "";
+            return value === "" ? [] : [Number(value)];
+          })()
+        : [
+            ...document.querySelectorAll<HTMLInputElement>(
+              `.selection-card input[name="selection-${CSS.escape(selection.id)}"]:checked`,
+            ),
+          ].map((input) => Number(input.value));
       const validationError = validateSelectionLocally(
         selection,
         selectedIndexes,
@@ -1096,7 +1182,7 @@ function render(
   function enterTravelMode() {
     if (busy || activityBlocksControls) return;
     route = [player.location];
-    map.classList.add("travel-mode");
+    updateMapCursor();
     tip.style.display = "none";
     showTravelCard();
     draw();
@@ -1163,7 +1249,7 @@ function render(
   function exitTravelMode() {
     route = null;
     clearOngoingTravel();
-    map.classList.remove("travel-mode");
+    updateMapCursor();
     clearPlay();
     draw();
   }
@@ -1325,11 +1411,14 @@ function render(
       defs.innerHTML += `<pattern id="p-${t.icon}" width="12" height="12" patternUnits="userSpaceOnUse"><image href="/images/terrain/${t.icon}.svg" width="12" height="12"/></pattern>`;
     });
     svg.append(defs);
+    const highlightedSelectionHex = selectedSelectionHexName();
     for (const hex of store.data.hexes) {
       const { x: cx, y: cy } = hexCenter(hex);
       const terr = store.terrains.get(hex.terrain);
       const g = document.createElementNS(svgNS, "g");
       g.classList.add("hex");
+      if (highlightedSelectionHex === hex.name)
+        g.classList.add("selected-selection-hex");
       g.dataset.name = hex.name;
       const pts = [0, 1, 2, 3, 4, 5]
         .map((i) => {
@@ -1359,12 +1448,18 @@ function render(
         g.innerHTML += `<text x="${cx}" y="${cy + 10}" text-anchor="middle" class="encounter-star" aria-hidden="true">★</text>`;
       g.onclick = (e) => {
         e.stopPropagation();
+        if (isHexSelectionActive()) {
+          selectSelectionHex(hex.name);
+          return;
+        }
+        if (activityBlocksControls || busy) return;
         route ? selectRouteHex(hex) : showTip(hex, g.getBoundingClientRect());
       };
       let timer: any;
       g.onmouseenter = () =>
         (timer = setTimeout(() => {
-          if (!route) showTip(hex, g.getBoundingClientRect());
+          if (!route && !isHexSelectionActive() && !activityBlocksControls)
+            showTip(hex, g.getBoundingClientRect());
         }, 700));
       g.onmouseleave = () => clearTimeout(timer);
       svg.append(g);
@@ -1525,6 +1620,7 @@ function render(
   }
 
   tableauEl.addEventListener("click", (e) => {
+    if (busy || activityBlocksControls) return;
     const card = (e.target as HTMLElement).closest(
       ".tableau-encounter",
     ) as HTMLElement | null;

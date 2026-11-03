@@ -30,6 +30,8 @@ export enum RewardType {
   Reputation = "reputation",
   Luck = "luck",
   Resource = "resource",
+  FreeXp = "free_xp",
+  ControlledTeleport = "controlled_teleport",
 }
 export enum PenaltyType {
   Gold = "gold",
@@ -45,6 +47,8 @@ export enum EffectType {
   Turns = "turns",
   Luck = "luck",
   Resource = "resource",
+  FreeXp = "free_xp",
+  ControlledTeleport = "controlled_teleport",
   SkillXp = "skill_xp",
   RemoveItems = "remove_items",
 }
@@ -55,6 +59,8 @@ export type Effect =
   | { type: EffectType.Turns; amount: number }
   | { type: EffectType.Luck; amount: number }
   | { type: EffectType.Resource; resourceType: string; amount: number }
+  | { type: EffectType.FreeXp; amount: number }
+  | { type: EffectType.ControlledTeleport; radius: number }
   | {
       type: EffectType.SkillXp;
       skill: string;
@@ -103,6 +109,7 @@ export type SpecialAction = {
 };
 export type SelectionChoice = {
   description: string;
+  data: string;
   index: number;
 };
 export type Selection = {
@@ -112,6 +119,8 @@ export type Selection = {
   choices: SelectionChoice[];
   minChoices?: number;
   maxChoices?: number;
+  useDropdown?: boolean;
+  hexSelection?: { originHex: string; radius: number };
 };
 export type PlayerEntity = {
   id: string;

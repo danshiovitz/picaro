@@ -228,7 +228,7 @@ export const encounterTemplates: EncounterTemplate[] = [
   {
     title: "Ancient Ruins",
     base_difficulty: 3,
-    rewards: [RewardType.Gold],
+    rewards: [RewardType.FreeXp],
     criticalRewards: [RewardType.Gold],
     penalties: [PenaltyType.Health],
     skills: [
@@ -242,8 +242,8 @@ export const encounterTemplates: EncounterTemplate[] = [
   },
   {
     title: "Court Intrigue",
-    base_difficulty: 5,
-    rewards: [RewardType.Gold],
+    base_difficulty: 2,
+    rewards: [RewardType.ControlledTeleport],
     criticalRewards: [],
     penalties: [PenaltyType.Health],
     skills: [

@@ -19,8 +19,7 @@ export type SelectionRequest = {
 };
 
 function selectionChoiceDto(choice: SelectionChoice) {
-  const { data: _data, ...dto } = choice;
-  return dto;
+  return { ...choice };
 }
 
 export function selectionDto(selection: Selection): SelectionView {

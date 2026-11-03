@@ -22,6 +22,7 @@ import {
   TableauCard,
   TableauData,
 } from "./types.js";
+import { hexDistance } from "./hexmap.js";
 import {
   terrainSpecs,
   regions,
@@ -33,7 +34,6 @@ import {
   terrainEncounterTemplates,
   specialActions,
 } from "./data.js";
-import { hexDistance } from "./hexmap.js";
 import {
   instantiateEncounterTemplate,
   rollEncounterSkillChecks,
@@ -98,9 +98,11 @@ export function queuePendingWork(
   state: ApiState,
   player: PlayerEntity,
   work: PendingActivity,
+  front = false,
 ) {
   const queue = pendingWorkFor(state, player);
-  queue.push(work);
+  if (front) queue.unshift(work);
+  else queue.push(work);
   state.pendingWork.set(player.id, queue);
 }
 
@@ -239,6 +241,112 @@ function resourceEffect(resourceType: string, amount: number): Effect {
   return { type: EffectType.Resource, resourceType, amount };
 }
 
+function controlledTeleportSelection(
+  state: ApiState,
+  player: PlayerEntity,
+  radius: number,
+): Selection {
+  const originHex = state.hexByName.get(player.location);
+  if (!originHex) throw new RulesViolation("Origin hex not found");
+  const choices = state.hexes
+    .filter((hex) => hexDistance(originHex, hex) <= radius)
+    .map((hex, index) => ({
+      description: hex.name,
+      data: hex.name,
+      index,
+    }));
+  const selection: Selection = {
+    id: `selection-controlled-teleport-${Math.random().toString(36).slice(2)}`,
+    title: "Controlled Teleport",
+    description: `Choose a hex within ${radius} hexes of ${player.location}.`,
+    choices,
+    minChoices: 1,
+    maxChoices: 1,
+    useDropdown: true,
+    hexSelection: { originHex: player.location, radius },
+    callback: (indexes) => {
+      const choice = selection.choices.find(
+        (item: SelectionChoice) => item.index === indexes[0],
+      );
+      if (!choice) {
+        return {
+          title: "Controlled Teleport",
+          flavorText: "No selection made.",
+          effects: [],
+        };
+      }
+      const origin = state.hexByName.get(selection.hexSelection!.originHex);
+      if (!origin) throw new RulesViolation("Origin hex not found");
+      const target = state.hexByName.get(choice.data);
+      if (!target) throw new RulesViolation("Selected hex not found");
+      if (hexDistance(origin, target) > selection.hexSelection!.radius) {
+        throw new RulesViolation("Selected hex is out of range");
+      }
+      moveToken(state.hexes, state.hexByName, player.tokenId, target.name);
+      player.location = target.name;
+      return {
+        title: "Controlled Teleport",
+        flavorText: `Teleported to ${target.name}.`,
+        effects: [],
+      };
+    },
+  };
+  return selection;
+}
+
+function freeXpSelection(
+  state: ApiState,
+  player: PlayerEntity,
+  amount: number,
+): Selection {
+  const selection: Selection = {
+    id: `selection-free-xp-${Math.random().toString(36).slice(2)}`,
+    title: "Free XP",
+    description: `Choose a skill to gain ${amount} xp in.`,
+    choices: skillNames.map((skill, index) => ({
+      description: skill,
+      data: skill,
+      index,
+    })),
+    minChoices: 1,
+    maxChoices: 1,
+    useDropdown: true,
+    callback: (indexes) => {
+      const choice = selection.choices.find(
+        (item: SelectionChoice) => item.index === indexes[0],
+      );
+      if (!choice) {
+        return {
+          title: "Free XP",
+          flavorText: "No selection made.",
+          effects: [],
+        };
+      }
+      const currentXp = player.skill_xp[choice.data] ?? 0;
+      const nextXp = currentXp + amount;
+      const effect =
+        skillLevelFromXp(nextXp) > skillLevelFromXp(currentXp)
+          ? ({
+              type: EffectType.SkillXp,
+              skill: choice.data,
+              amount,
+              newLevel: skillLevelFromXp(nextXp),
+            } satisfies Effect)
+          : ({
+              type: EffectType.SkillXp,
+              skill: choice.data,
+              amount,
+            } satisfies Effect);
+      applyEffects(state, player, [effect]);
+      return {
+        title: "Free XP",
+        effects: [effect],
+      };
+    },
+  };
+  return selection;
+}
+
 function randomResourceType(rng: RNG) {
   return rng.pick(resourceTypes);
 }
@@ -301,6 +409,7 @@ function skillLevelFromXp(xp: number) {
 }
 
 function resolveEncounterEffects(
+  state: ApiState,
   player: PlayerEntity,
   active: ActiveEncounter,
   rng: RNG,
@@ -363,15 +472,19 @@ function resolveEncounterEffects(
     );
   }
   effects.push(...xpEffects);
-  applyEffects(player, effects);
+  applyEffects(state, player, effects);
   return effects;
 }
 
 function labelForReward(type: RewardType | PenaltyType) {
+  if (type === RewardType.FreeXp) return "Free XP";
+  if (type === RewardType.ControlledTeleport) return "Controlled Teleport";
   return type[0].toUpperCase() + type.slice(1);
 }
 
 function labelForEffect(type: EffectType) {
+  if (type === EffectType.FreeXp) return "Free XP";
+  if (type === EffectType.ControlledTeleport) return "Controlled Teleport";
   if (type === EffectType.SkillXp) return "Skill XP";
   return type[0].toUpperCase() + type.slice(1);
 }
@@ -418,28 +531,41 @@ function adjustLuck(player: PlayerEntity, amount: number) {
 }
 
 function canAfford(player: PlayerEntity, cost: Effect[]) {
-  return cost.every((effect) => {
+  for (const effect of cost) {
     switch (effect.type) {
+      case EffectType.FreeXp:
+        throw new RulesViolation("Free XP cannot be used as a cost.");
       case EffectType.Gold:
-        return player.gold >= effect.amount;
+        if (player.gold < effect.amount) return false;
+        break;
       case EffectType.Reputation:
-        return player.reputation >= effect.amount;
+        if (player.reputation < effect.amount) return false;
+        break;
       case EffectType.Health:
-        return player.curHealth >= effect.amount;
+        if (player.curHealth < effect.amount) return false;
+        break;
       case EffectType.Turns:
-        return player.turns >= effect.amount;
+        if (player.turns < effect.amount) return false;
+        break;
       case EffectType.Luck:
-        return player.curLuck >= effect.amount;
+        if (player.curLuck < effect.amount) return false;
+        break;
       case EffectType.Resource:
-        return (player.resources[effect.resourceType] ?? 0) >= effect.amount;
+        if ((player.resources[effect.resourceType] ?? 0) < effect.amount)
+          return false;
+        break;
       case EffectType.SkillXp:
-        return (player.skill_xp[effect.skill] ?? 0) >= effect.amount;
+        if ((player.skill_xp[effect.skill] ?? 0) < effect.amount) return false;
+        break;
       case EffectType.RemoveItems: {
         const inventoryIds = new Set(player.inventory.map((item) => item.id));
-        return effect.itemIds.every((itemId) => inventoryIds.has(itemId));
+        if (!effect.itemIds.every((itemId) => inventoryIds.has(itemId)))
+          return false;
+        break;
       }
     }
-  });
+  }
+  return true;
 }
 
 function adjustSkillXp(player: PlayerEntity, skill: string, amount: number) {
@@ -447,9 +573,26 @@ function adjustSkillXp(player: PlayerEntity, skill: string, amount: number) {
   player.skill_xp[skill] = Math.max(0, current + amount);
 }
 
-function applyEffects(player: PlayerEntity, effects: Effect[]) {
+function applyEffects(
+  state: ApiState,
+  player: PlayerEntity,
+  effects: Effect[],
+) {
+  const frontQueue: PendingActivity[] = [];
   for (const effect of effects) {
     switch (effect.type) {
+      case EffectType.FreeXp:
+        frontQueue.push({
+          type: "selection",
+          selection: freeXpSelection(state, player, effect.amount),
+        });
+        break;
+      case EffectType.ControlledTeleport:
+        frontQueue.push({
+          type: "selection",
+          selection: controlledTeleportSelection(state, player, effect.radius),
+        });
+        break;
       case EffectType.Gold:
         adjustGold(player, effect.amount);
         break;
@@ -476,13 +619,20 @@ function applyEffects(player: PlayerEntity, effects: Effect[]) {
         break;
     }
   }
+  if (frontQueue.length > 0) {
+    const queue = pendingWorkFor(state, player);
+    queue.unshift(...frontQueue);
+    state.pendingWork.set(player.id, queue);
+  }
 }
 
-function payCost(player: PlayerEntity, cost: Effect[]) {
+function payCost(state: ApiState, player: PlayerEntity, cost: Effect[]) {
   applyEffects(
+    state,
     player,
     cost.map((effect) =>
-      effect.type === EffectType.RemoveItems
+      effect.type === EffectType.RemoveItems ||
+      effect.type === EffectType.ControlledTeleport
         ? effect
         : { ...effect, amount: -effect.amount },
     ),
@@ -492,6 +642,9 @@ function payCost(player: PlayerEntity, cost: Effect[]) {
 function effectLabelLine(effect: Effect) {
   if (effect.type === EffectType.RemoveItems) {
     return `Remove items: ${effect.itemIds.join(", ") || "none"}`;
+  }
+  if (effect.type === EffectType.ControlledTeleport) {
+    return `${labelForEffect(effect.type)} (radius ${effect.radius})`;
   }
   const label =
     effect.type === EffectType.SkillXp
@@ -514,6 +667,10 @@ function computeReward(rewardType: RewardType, rng: RNG): Effect[] {
       return [{ type: EffectType.Luck, amount: 1 }];
     case RewardType.Resource:
       return [resourceEffect(randomResourceType(rng), 1)];
+    case RewardType.FreeXp:
+      return [{ type: EffectType.FreeXp, amount: 5 }];
+    case RewardType.ControlledTeleport:
+      return [{ type: EffectType.ControlledTeleport, radius: 5 }];
   }
 }
 
@@ -527,6 +684,10 @@ function computeCriticalReward(rewardType: RewardType, rng: RNG): Effect[] {
       return [{ type: EffectType.Luck, amount: 1 }];
     case RewardType.Resource:
       return [resourceEffect(randomResourceType(rng), 2)];
+    case RewardType.FreeXp:
+      return [{ type: EffectType.FreeXp, amount: 5 }];
+    case RewardType.ControlledTeleport:
+      return [{ type: EffectType.ControlledTeleport, radius: 5 }];
   }
 }
 
@@ -642,9 +803,9 @@ export function performSpecialAction(
     throw new RulesViolation("Special action cannot be performed here");
   if (!canAfford(player, action.cost))
     throw new RulesViolation("You can't afford to perform this action.");
-  payCost(player, action.cost);
+  payCost(state, player, action.cost);
   const effects = action.execute(state, player);
-  applyEffects(player, effects);
+  applyEffects(state, player, effects);
   player.location = locationForToken(state.hexes, player.tokenId);
   return {
     effects,
@@ -717,7 +878,7 @@ export function campEntity(
   assertNoPendingWork(state, player);
   if (!canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
-  payCost(player, turnCost);
+  payCost(state, player, turnCost);
   adjustHealth(player, 1);
   player.location = locationForToken(state.hexes, player.tokenId);
   endTurn(state, player, "camp");
@@ -756,7 +917,7 @@ export function travelEntity(
   const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
   if (!canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
-  payCost(player, turnCost);
+  payCost(state, player, turnCost);
 
   const destination = route[route.length - 1];
   const encounterRoute = route.slice(1);
@@ -852,7 +1013,7 @@ export function runEncounter(
   assertNoPendingWork(state, player);
   if (!canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
-  payCost(player, turnCost);
+  payCost(state, player, turnCost);
   const tableau = getPlayerTableau(state, player);
   const encounter = tableau.find((card) => card.id === request.encounterId);
   if (!encounter) throw new RulesViolation("Encounter not found");
@@ -961,6 +1122,7 @@ export function finishEncounter(
     active.nextPenalty = undefined;
   }
   const effects = resolveEncounterEffects(
+    state,
     player,
     active,
     state.rng,

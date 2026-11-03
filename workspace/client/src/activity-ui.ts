@@ -25,6 +25,10 @@ export async function renderEffectText(
 ) {
   if (effect.type === EffectType.Resource)
     return `${effect.amount >= 0 ? "+" : "-"}${Math.abs(effect.amount)} ${labelForType(effect.type)} (${effect.resourceType})`;
+  if (effect.type === EffectType.FreeXp)
+    return `${effect.amount >= 0 ? "+" : "-"}${Math.abs(effect.amount)} ${labelForType(effect.type)}`;
+  if (effect.type === EffectType.ControlledTeleport)
+    return `${labelForType(effect.type)} (radius ${effect.radius})`;
   if (effect.type === EffectType.SkillXp)
     return `${effect.amount >= 0 ? "+" : "-"}${Math.abs(effect.amount)} xp for ${effect.skill}${effect.newLevel ? ` (now level ${effect.newLevel})` : ""}`;
   if (effect.type === EffectType.RemoveItems) {
@@ -61,5 +65,7 @@ export async function renderActivityLines(
 }
 
 function labelForType(type: string) {
+  if (type === EffectType.FreeXp) return "Free XP";
+  if (type === EffectType.ControlledTeleport) return "Controlled Teleport";
   return type[0].toUpperCase() + type.slice(1);
 }
