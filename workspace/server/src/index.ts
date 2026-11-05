@@ -56,6 +56,7 @@ const world = await loadOrGenerateWorld({
 });
 const hexes = world.hexes;
 const hexByName = world.hexByName;
+const regions = world.regions;
 
 const playerTokens = [1, 2, 3, 4].map((i) => ({
   id: makeTokenId(),
@@ -145,7 +146,7 @@ for (const [index, token] of playerTokens.entries()) {
 const pendingWork = new Map<string, PendingActivity[]>();
 const tableau = new Map<string, TableauCard[]>();
 const encounterRng = new RNG(`${defaultSeed}:encounters`);
-setEncounterContext({ hexes, rng: encounterRng });
+setEncounterContext({ hexes, regions, rng: encounterRng });
 for (const player of players.values()) {
   const playerTableau: TableauCard[] = [];
   fillTableau(playerTableau, encounterTemplates, player, encounterRng);
@@ -156,6 +157,7 @@ const currentActivities = new Map<string, PendingActivity>();
 const apiState: ApiState = {
   hexes,
   hexByName,
+  regions,
   tokens: playerTokens,
   items,
   players,
@@ -206,7 +208,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && path === "/api/terrain")
       return sendJson(res, 200, getTerrain());
     if (req.method === "GET" && path === "/api/regions")
-      return sendJson(res, 200, getRegions());
+      return sendJson(res, 200, getRegions(apiState));
     if (req.method === "GET" && path === "/api/claims")
       return sendJson(res, 200, getClaims());
     if (req.method === "GET" && path === "/api/tokens")

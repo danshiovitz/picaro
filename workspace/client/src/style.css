@@ -63,6 +63,7 @@ main {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .bar button {
@@ -72,6 +73,26 @@ main {
   background: #404957;
   color: #fff;
   font-weight: 700;
+}
+
+.map-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid #778293;
+  border-radius: 6px;
+  background: #2f3845;
+  color: #f2f5f8;
+  font-size: 13px;
+  font-weight: 700;
+  user-select: none;
+}
+
+.map-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
 }
 
 button {
@@ -413,6 +434,20 @@ button {
   cursor:
     url("/images/actions/boots.svg") 8 8,
     pointer;
+}
+
+.region-border-overlay {
+  pointer-events: none;
+}
+
+.region-border {
+  stroke: #f7efb6;
+  stroke-width: 4px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.95;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.85));
 }
 
 .encounter-star {

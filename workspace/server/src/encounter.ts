@@ -5,6 +5,7 @@ import {
   EncounterTemplate,
   Hex,
   PlayerEntity,
+  Region,
   SectionType,
   TableauCard,
 } from "./types.js";
@@ -14,10 +15,16 @@ import { computeEffectiveValue } from "./rule.js";
 import { RNG } from "./random.js";
 
 let encounterHexes: Hex[] = [];
+let encounterRegions: Region[] = [];
 let encounterRng = new RNG("encounter");
 
-export function setEncounterContext(context: { hexes: Hex[]; rng: RNG }) {
+export function setEncounterContext(context: {
+  hexes: Hex[];
+  regions: Region[];
+  rng: RNG;
+}) {
   encounterHexes = context.hexes;
+  encounterRegions = context.regions;
   encounterRng = context.rng;
 }
 
@@ -39,6 +46,14 @@ function hexesNearPlayer(player: PlayerEntity) {
   return nearby.length > 0 ? nearby : [...encounterHexes];
 }
 
+function regionDifficultyForHex(hex: Hex | undefined) {
+  if (!hex) return 0;
+  return (
+    encounterRegions.find((region) => region.id === hex.region_id)
+      ?.base_difficulty ?? 0
+  );
+}
+
 export function rollEncounterSkillChecks(
   skillSource: string[],
   difficulty: number,
@@ -58,22 +73,27 @@ export function instantiateEncounterTemplate(
   template: EncounterTemplate,
   player: PlayerEntity,
 ): TableauCard {
-  const difficulty = template.base_difficulty + difficultySwing();
   const nearbyHexes = hexesNearPlayer(player);
   const skillSource = template.skills.length > 0 ? template.skills : skillNames;
 
   const locationCandidates =
     nearbyHexes.length > 0 ? nearbyHexes : encounterHexes;
+  const location =
+    locationCandidates.length > 0
+      ? randomPick(locationCandidates).name
+      : player.location;
+  const locationHex = encounterHexes.find((hex) => hex.name === location);
+  const difficulty =
+    regionDifficultyForHex(locationHex) +
+    template.difficulty_mod +
+    difficultySwing();
   const successThreshold = 2;
   const criticalThreshold = 3;
   const failureThreshold = 3;
   return {
     id: randomUUID(),
     title: template.title,
-    location:
-      locationCandidates.length > 0
-        ? randomPick(locationCandidates).name
-        : player.location,
+    location,
     difficulty,
     successThreshold,
     criticalThreshold,

@@ -13,7 +13,7 @@ export class GameStore {
     });
     data.tokens.forEach((t) => this.tokens.set(t.id, t));
     data.terrains.forEach((t) => this.terrains.set(t.name, t));
-    data.regions.forEach((r) => this.regions.set(r.name, r));
+    data.regions.forEach((r) => this.regions.set(r.id, r));
     data.claims.forEach((c) => this.claims.set(c.name, c));
   }
   distance(a: Hex, b: Hex) {
@@ -38,7 +38,7 @@ export class GameStore {
       h && {
         ...h,
         terrainObj: this.terrains.get(h.terrain),
-        regionObj: this.regions.get(h.region),
+        regionObj: this.regions.get(h.region_id),
         claimObjs: h.claims.map((c) => this.claims.get(c)),
         tokenObjs: h.tokens.map((t) => this.tokens.get(t)),
       }

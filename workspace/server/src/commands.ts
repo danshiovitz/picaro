@@ -25,7 +25,6 @@ import {
 import { hexDistance } from "./hexmap.js";
 import {
   terrainSpecs,
-  regions,
   claims,
   cityTokens,
   encounterTemplates,
@@ -750,8 +749,8 @@ export function getTerrain() {
   return terrainSpecs;
 }
 
-export function getRegions() {
-  return regions;
+export function getRegions(state: ApiState) {
+  return state.regions;
 }
 
 export function getClaims() {
@@ -817,7 +816,7 @@ export function getGame(state: ApiState) {
   return {
     hexes: state.hexes,
     terrains: terrainSpecs,
-    regions,
+    regions: state.regions,
     claims,
     tokens: allTokens(state.tokens),
     players: Array.from(state.players.values()).map(({ id, name }) => ({

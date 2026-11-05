@@ -9,6 +9,7 @@ import {
   ActiveEncounterSkillCheck,
   TableauCard,
   ActiveEncounter,
+  AxialPoint,
 } from "./types.js";
 import { RNG } from "./random.js";
 
@@ -32,6 +33,8 @@ export function hexName(x: number, y: number) {
   return `${rowLabel(y)}${x + 1}`;
 }
 
+export type Point = { x: number; y: number };
+
 export function hexDirs() {
   return [
     [1, 0],
@@ -41,6 +44,68 @@ export function hexDirs() {
     [-1, 1],
     [0, 1],
   ] as const;
+}
+
+export function axialToPixel(
+  point: AxialPoint,
+  size: number,
+  origin: Point = { x: 0, y: 0 },
+): Point {
+  return {
+    x: Math.sqrt(3) * size * (point.q + point.r / 2) + origin.x,
+    y: size * 1.5 * point.r + origin.y,
+  };
+}
+
+export function hexCenter(
+  hex: AxialPoint,
+  size: number,
+  origin: Point = { x: 0, y: 0 },
+): Point {
+  return axialToPixel(hex, size, origin);
+}
+
+export function hexCorner(center: Point, size: number, corner: number): Point {
+  const angle = (Math.PI / 180) * (60 * corner - 30);
+  return {
+    x: center.x + size * Math.cos(angle),
+    y: center.y + size * Math.sin(angle),
+  };
+}
+
+export function hexCorners(center: Point, size: number): Point[] {
+  return [0, 1, 2, 3, 4, 5].map((corner) => hexCorner(center, size, corner));
+}
+
+export function hexPolygonPoints(
+  hex: AxialPoint,
+  size: number,
+  origin: Point = { x: 0, y: 0 },
+): string {
+  const center = hexCenter(hex, size, origin);
+  return hexCorners(center, size)
+    .map((point) => `${point.x},${point.y}`)
+    .join(" ");
+}
+
+export function sharedHexEdge(
+  a: AxialPoint,
+  b: AxialPoint,
+  size: number,
+  origin: Point = { x: 0, y: 0 },
+): [Point, Point] | null {
+  const aCorners = hexCorners(hexCenter(a, size, origin), size);
+  const bCorners = hexCorners(hexCenter(b, size, origin), size);
+  const shared: Point[] = [];
+  const epsilon = 1e-6;
+  for (const ac of aCorners) {
+    for (const bc of bCorners) {
+      if (Math.abs(ac.x - bc.x) < epsilon && Math.abs(ac.y - bc.y) < epsilon)
+        shared.push(ac);
+    }
+  }
+  if (shared.length < 2) return null;
+  return [shared[0], shared[1]];
 }
 
 export function getNeighborIndexes(

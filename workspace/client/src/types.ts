@@ -1,5 +1,5 @@
 export type Terrain = { name: string; color: string; icon: string };
-export type Region = { name: string };
+export type Region = { id: string; name: string; base_difficulty: number };
 export type Claim = { name: string; icon: string };
 export type Token = { id: string; entityName: string; icon: string };
 export type Item = { id: string; name: string };
@@ -11,7 +11,7 @@ export type Hex = {
   q: number;
   r: number;
   terrain: string;
-  region: string;
+  region_id: string;
   claims: string[];
   tokens: string[];
 };

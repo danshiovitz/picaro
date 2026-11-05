@@ -394,7 +394,7 @@ function render(
   );
   const itemNameCache = new Map<string, string>();
   for (const item of player.inventory) itemNameCache.set(item.id, item.name);
-  app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button><button id="fit">Fit</button><button id="snap">Snap</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableauData.encounters.map(renderEncounterCard).join("")}</section></div></div></div><section class="character-panel"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><div class="action-buttons-row"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="attack" class="action-button" type="button"><img src="/images/actions/swords.svg" alt=""/><span>Attack</span></button></div><div id="special-actions" class="special-actions"></div></section></section></main><aside class="right-panel"><section class="activity-panel"><h2 id="activity-panel-title" hidden></h2><div id="activity-panel-content"></div></section></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div>`;
+  app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button><label class="map-toggle"><input type="checkbox" id="show-region-borders"/> show region borders</label><button id="fit">Fit</button><button id="snap">Snap</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableauData.encounters.map(renderEncounterCard).join("")}</section></div></div></div><section class="character-panel"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><div class="action-buttons-row"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="attack" class="action-button" type="button"><img src="/images/actions/swords.svg" alt=""/><span>Attack</span></button></div><div id="special-actions" class="special-actions"></div></section></section></main><aside class="right-panel"><section class="activity-panel"><h2 id="activity-panel-title" hidden></h2><div id="activity-panel-content"></div></section></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div>`;
   const map = document.querySelector("#map") as HTMLElement;
   const mapScroll = document.querySelector("#map-scroll") as HTMLElement;
   const tip = document.querySelector("#tip") as HTMLElement;
@@ -442,6 +442,9 @@ function render(
       Boolean(route) || isHexSelectionActive(),
     );
   }
+  const indexByCoord = new Map(
+    store.data.hexes.map((hex, index) => [`${hex.q},${hex.r}`, index] as const),
+  );
   const mapBounds = store.data.hexes.reduce(
     (acc, hex) => {
       const { x, y } = hexCenter(hex);
@@ -854,6 +857,34 @@ function render(
       y: size * 1.5 * hex.r + 60,
     };
   }
+  function hexCorner(center: Point, corner: number): Point {
+    const angle = (Math.PI / 180) * (60 * corner - 30);
+    return {
+      x: center.x + size * Math.cos(angle),
+      y: center.y + size * Math.sin(angle),
+    };
+  }
+  function hexCorners(center: Point) {
+    return [0, 1, 2, 3, 4, 5].map((corner) => hexCorner(center, corner));
+  }
+  function regionBorderSegment(a: Hex, b: Hex) {
+    const aCorners = hexCorners(hexCenter(a));
+    const bCorners = hexCorners(hexCenter(b));
+    const matches: Point[] = [];
+    const epsilon = 1e-6;
+    for (const ac of aCorners) {
+      for (const bc of bCorners) {
+        if (
+          Math.abs(ac.x - bc.x) < epsilon &&
+          Math.abs(ac.y - bc.y) < epsilon
+        ) {
+          matches.push(ac);
+        }
+      }
+    }
+    if (matches.length < 2) return null;
+    return [matches[0], matches[1]] as const;
+  }
   function isAdjacent(a: Hex, b: Hex) {
     return store.distance(a, b) === 1;
   }
@@ -869,6 +900,7 @@ function render(
   };
   let hideZeroResources = false;
   let hideZeroSkills = false;
+  let showRegionBorders = false;
 
   function renderResources(resources: Record<string, number>) {
     const visibleResources = store.data.resourceTypes.filter(
@@ -1395,6 +1427,10 @@ function render(
 
   function draw() {
     document.querySelector("#z")!.textContent = `${Math.round(zoom * 100)}%`;
+    const borderCheckbox = document.querySelector(
+      "#show-region-borders",
+    ) as HTMLInputElement | null;
+    if (borderCheckbox) borderCheckbox.checked = showRegionBorders;
     map.innerHTML = "";
     const svg = document.createElementNS(svgNS, "svg");
     const padding = 90;
@@ -1412,7 +1448,7 @@ function render(
     });
     svg.append(defs);
     const highlightedSelectionHex = selectedSelectionHexName();
-    for (const hex of store.data.hexes) {
+    for (const [index, hex] of store.data.hexes.entries()) {
       const { x: cx, y: cy } = hexCenter(hex);
       const terr = store.terrains.get(hex.terrain);
       const g = document.createElementNS(svgNS, "g");
@@ -1463,6 +1499,36 @@ function render(
         }, 700));
       g.onmouseleave = () => clearTimeout(timer);
       svg.append(g);
+    }
+    if (showRegionBorders && zoom >= 0.45) {
+      const borderOverlay = document.createElementNS(svgNS, "g");
+      borderOverlay.classList.add("region-border-overlay");
+      for (const [index, hex] of store.data.hexes.entries()) {
+        for (const [dq, dr] of [
+          [1, 0],
+          [1, -1],
+          [0, -1],
+          [-1, 0],
+          [-1, 1],
+          [0, 1],
+        ] as const) {
+          const neighborIndex = indexByCoord.get(`${hex.q + dq},${hex.r + dr}`);
+          if (neighborIndex === undefined || neighborIndex <= index) continue;
+          const neighbor = store.data.hexes[neighborIndex];
+          if (!neighbor || hex.region_id === neighbor.region_id) continue;
+          const segment = regionBorderSegment(hex, neighbor);
+          if (!segment) continue;
+          const [start, end] = segment;
+          const line = document.createElementNS(svgNS, "line");
+          line.setAttribute("x1", String(start.x));
+          line.setAttribute("y1", String(start.y));
+          line.setAttribute("x2", String(end.x));
+          line.setAttribute("y2", String(end.y));
+          line.classList.add("region-border");
+          borderOverlay.append(line);
+        }
+      }
+      svg.append(borderOverlay);
     }
     if (route && route.length > 1) {
       const overlay = document.createElementNS(svgNS, "g");
@@ -1515,9 +1581,17 @@ function render(
     );
     const encounter = encounterByLocation.get(hex.name);
     const specialActionsHere = catalogSpecialActionsForHex(hex.name);
+    const regionStars = f.regionObj
+      ? "★".repeat(f.regionObj.base_difficulty)
+      : "";
     const lines: [string, string][] = [
       ["Terrain", esc(f.terrain)],
-      ["Region", esc(f.region)],
+      [
+        "Region",
+        esc(
+          `${f.regionObj?.name ?? ""}${regionStars ? ` ${regionStars}` : ""}`,
+        ),
+      ],
     ];
     if (claimsText) lines.push(["Claims", esc(claimsText)]);
     if (tokenText) lines.push(["Tokens", esc(tokenText)]);
@@ -1657,6 +1731,12 @@ function render(
     fitInitialZoom();
     draw();
   });
+  document
+    .querySelector("#show-region-borders")!
+    .addEventListener("change", (event) => {
+      showRegionBorders = (event.target as HTMLInputElement).checked;
+      draw();
+    });
   document.querySelector("#snap")!.addEventListener("click", () => {
     manualZoom = true;
     zoom = 1;

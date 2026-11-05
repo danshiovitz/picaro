@@ -5,7 +5,6 @@ import {
   Item,
   PenaltyType,
   PlayerEntity,
-  Region,
   RewardType,
   Rule,
   RuleType,
@@ -37,29 +36,6 @@ export const terrainSpecs = [
 export const terrainByName = new Map(
   terrainSpecs.map((terrain) => [terrain.name, terrain] as const),
 );
-
-export const regionNames = [
-  "Valley of Aardia",
-  "Domain of the Elves",
-  "Iron Marches",
-  "Sunspire Coast",
-  "Gloaming Fens",
-  "Kingdom of Roses",
-  "Storm Peaks",
-  "Amber Wastes",
-  "Silverwood",
-  "Riverlands",
-  "Crown Basin",
-  "Ashen Reach",
-  "Sapphire Isles",
-  "Old Empire",
-  "Whispering Downs",
-  "Dragonmere",
-  "Golden Steppe",
-  "Umbral Vale",
-  "Free Cities",
-];
-export let regions: Region[] = regionNames.map((name) => ({ name }));
 
 export const claimColors = [
   "red",
@@ -150,7 +126,7 @@ export const terrainEncounterTemplates: Record<string, EncounterTemplate[]> =
       [
         {
           title: `Beast of the ${terrain.name}`,
-          base_difficulty: 2,
+          difficulty_mod: 2,
           rewards: [RewardType.Gold],
           criticalRewards: [RewardType.Gold],
           penalties: [PenaltyType.Health],
@@ -167,7 +143,7 @@ export const terrainEncounterTemplates: Record<string, EncounterTemplate[]> =
 export const encounterTemplates: EncounterTemplate[] = [
   {
     title: "Dungeon Raid",
-    base_difficulty: 0,
+    difficulty_mod: 0,
     rewards: [RewardType.Gold],
     criticalRewards: [RewardType.Gold],
     penalties: [PenaltyType.Health],
@@ -182,7 +158,7 @@ export const encounterTemplates: EncounterTemplate[] = [
   },
   {
     title: "Parley",
-    base_difficulty: 4,
+    difficulty_mod: 2,
     rewards: [RewardType.Gold],
     criticalRewards: [],
     penalties: [PenaltyType.Health],
@@ -197,7 +173,7 @@ export const encounterTemplates: EncounterTemplate[] = [
   },
   {
     title: "Wandering Sage",
-    base_difficulty: 2,
+    difficulty_mod: 1,
     rewards: [RewardType.Gold],
     criticalRewards: [],
     penalties: [PenaltyType.Health],
@@ -212,7 +188,7 @@ export const encounterTemplates: EncounterTemplate[] = [
   },
   {
     title: "Bandit Ambush",
-    base_difficulty: 1,
+    difficulty_mod: 1,
     rewards: [RewardType.Gold],
     criticalRewards: [],
     penalties: [PenaltyType.Health],
@@ -227,7 +203,7 @@ export const encounterTemplates: EncounterTemplate[] = [
   },
   {
     title: "Ancient Ruins",
-    base_difficulty: 3,
+    difficulty_mod: 2,
     rewards: [RewardType.FreeXp],
     criticalRewards: [RewardType.Gold],
     penalties: [PenaltyType.Health],
@@ -242,7 +218,7 @@ export const encounterTemplates: EncounterTemplate[] = [
   },
   {
     title: "Court Intrigue",
-    base_difficulty: 2,
+    difficulty_mod: 1,
     rewards: [RewardType.ControlledTeleport],
     criticalRewards: [],
     penalties: [PenaltyType.Health],
