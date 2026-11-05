@@ -1,12 +1,24 @@
 import { RNG } from "./random.js";
+import type {
+  Entity as BaseEntity,
+  EntityOf,
+  EntitySchema,
+  FieldType,
+  SchemaField,
+  SchemaId,
+} from "./schemas.js";
 
 export type Terrain = { name: string; color: string; icon: string };
 export type Region = { id: string; name: string; base_difficulty: number };
+export type RegionEntity = EntityOf<"region">;
 export type Claim = { name: string; icon: string };
 export type Token = { id: string; entityName: string; icon: string };
-export type Item = { id: string; name: string };
-export type Condition = { id: string; name: string; duration: number };
 export type AxialPoint = { q: number; r: number };
+export type Entity = BaseEntity;
+export type CityEntity = EntityOf<"city">;
+export type Item = EntityOf<"item">;
+export type Condition = EntityOf<"condition">;
+export type PlayerEntity = EntityOf<"player">;
 export type Hex = {
   name: string;
   x: number;
@@ -18,24 +30,7 @@ export type Hex = {
   claims: string[];
   tokens: string[];
 };
-export type PlayerEntity = {
-  id: string;
-  name: string;
-  tokenId: string;
-  curHealth: number;
-  maxHealth: number;
-  curLuck: number;
-  maxLuck: number;
-  speed: number;
-  gold: number;
-  reputation: number;
-  turns: number;
-  location: string;
-  resources: Record<string, number>;
-  inventory: Item[];
-  conditions: Condition[];
-  skill_xp: Record<string, number>;
-};
+export type HexEntity = EntityOf<"hex">;
 export enum SectionType {
   speed = "speed",
   maxHealth = "max_health",
@@ -139,13 +134,14 @@ export type TableauCard = {
 };
 export type TableauData = { encounters: TableauCard[] };
 
+import type { EntityStore } from "./entity.js";
+
 export type ApiState = {
   hexes: Hex[];
   hexByName: Map<string, Hex>;
   regions: Region[];
   tokens: { id: string; entityName: string; icon: string }[];
-  items: Map<string, Item>;
-  players: Map<string, PlayerEntity>;
+  entities: EntityStore;
   currentActivities: Map<string, PendingActivity>;
   pendingWork: Map<string, PendingActivity[]>;
   tableau: Map<string, TableauCard[]>;

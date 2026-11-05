@@ -1,3 +1,4 @@
+import { entityEntries, getField, hydrateEntity, setField } from "./entity";
 import { GameStore } from "./store";
 import { EffectType, RewardType } from "./types";
 import {
@@ -84,7 +85,7 @@ async function apiJson<T>(
     if (!game.players.some((player) => player.id === playerId)) {
       throw new Error(`Player not found: ${playerId}`);
     }
-    const [player, tableau, specialActionCatalog, specialActions] =
+    const [playerRaw, tableau, specialActionCatalog, specialActions] =
       await Promise.all([
         apiJson<PlayerEntity>(
           `/api/entities/${encodeURIComponent(playerId)}`,
@@ -101,7 +102,7 @@ async function apiJson<T>(
       ]);
     render(
       new GameStore(game),
-      player,
+      hydrateEntity(playerRaw),
       tableau,
       specialActionCatalog,
       specialActions,
@@ -897,6 +898,7 @@ function render(
     inventory: false,
     conditions: false,
     skills: false,
+    extraFields: false,
   };
   let hideZeroResources = false;
   let hideZeroSkills = false;
@@ -965,8 +967,43 @@ function render(
     return `<section class="summary-section ${collapsed ? "collapsed" : "expanded"}" data-summary-section="${esc(key)}"><div class="summary-section-header"><span>${esc(title)}</span><button class="summary-toggle" type="button" data-summary-toggle="${esc(key)}" aria-label="${collapsed ? "Expand" : "Collapse"} ${esc(title)}">${collapsed ? "+" : "−"}</button></div><div class="summary-section-body">${body}</div></section>`;
   }
 
+  function renderExtraFields(entity: PlayerEntity) {
+    const known = new Set([
+      "id",
+      "schemaId",
+      "data",
+      "name",
+      "tokenId",
+      "curHealth",
+      "maxHealth",
+      "curLuck",
+      "maxLuck",
+      "speed",
+      "gold",
+      "reputation",
+      "turns",
+      "location",
+      "resources",
+      "inventory",
+      "conditions",
+      "skill_xp",
+      "skills",
+    ]);
+    const extra = entityEntries(entity)
+      .filter(([key]) => !known.has(key))
+      .sort(([a], [b]) => a.localeCompare(b));
+    return extra.length
+      ? `<ul class="extra-fields-list">${extra
+          .map(
+            ([key, value]) =>
+              `<li><span class="extra-field-name">${esc(key)}</span>: <span class="extra-field-value">${esc(JSON.stringify(value))}</span></li>`,
+          )
+          .join("")}</ul>`
+      : `<p class="extra-fields-empty">None</p>`;
+  }
+
   function renderSummary() {
-    stats.innerHTML = `<div class="summary-basic"><div><dd>${esc(player.name)}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${player.maxHealth}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div><dt>Speed</dt><dd>${player.speed}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div></div>${renderSummarySection("resources", "Resources", `<label class="skills-filter"><input type="checkbox" id="hide-zero-resources"${hideZeroResources ? " checked" : ""}/> hide 0 resources</label>${renderResources(player.resources)}`)}${renderSummarySection("inventory", "Inventory", renderInventory(player.inventory))}${renderSummarySection("conditions", "Conditions", renderConditions(player.conditions))}${renderSummarySection("skills", "Skills", `<label class="skills-filter"><input type="checkbox" id="hide-zero-skills"${hideZeroSkills ? " checked" : ""}/> hide 0 skills</label>${renderSkills(player.skills, player.skill_xp)}`)}`;
+    stats.innerHTML = `<div class="summary-basic"><div><dd>${esc(player.name)}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${player.maxHealth}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div><dt>Speed</dt><dd>${player.speed}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div></div>${renderSummarySection("resources", "Resources", `<label class="skills-filter"><input type="checkbox" id="hide-zero-resources"${hideZeroResources ? " checked" : ""}/> hide 0 resources</label>${renderResources(player.resources)}`)}${renderSummarySection("inventory", "Inventory", renderInventory(player.inventory))}${renderSummarySection("conditions", "Conditions", renderConditions(player.conditions))}${renderSummarySection("skills", "Skills", `<label class="skills-filter"><input type="checkbox" id="hide-zero-skills"${hideZeroSkills ? " checked" : ""}/> hide 0 skills</label>${renderSkills(player.skills, player.skill_xp)}`)}${renderSummarySection("extraFields", "Additional Fields", renderExtraFields(player))}`;
     stats
       .querySelectorAll<HTMLButtonElement>("[data-summary-toggle]")
       .forEach((button) => {
@@ -1076,16 +1113,23 @@ function render(
   }
 
   async function refreshActivityState(previousLocation = player.location) {
-    const updatedPlayer = await apiJson<PlayerEntity>(
-      `/api/entities/${encodeURIComponent(player.id)}`,
-      undefined,
-      20,
+    const updatedPlayer = hydrateEntity(
+      await apiJson<PlayerEntity>(
+        `/api/entities/${encodeURIComponent(player.id)}`,
+        undefined,
+        20,
+      ),
     );
-    Object.assign(player, updatedPlayer);
-    for (const item of updatedPlayer.inventory)
+    for (const [key, value] of entityEntries(updatedPlayer)) {
+      setField(player, key as keyof PlayerEntity, value as never);
+    }
+    for (const item of getField(updatedPlayer, "inventory"))
       itemNameCache.set(item.id, item.name);
-    if (updatedPlayer.location !== previousLocation)
-      moveLocalPlayerToken(previousLocation, updatedPlayer.location);
+    if (getField(updatedPlayer, "location") !== previousLocation)
+      moveLocalPlayerToken(
+        previousLocation,
+        getField(updatedPlayer, "location"),
+      );
     const updatedTableau = await apiJson<TableauData>(
       "/api/tableau",
       undefined,

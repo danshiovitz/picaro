@@ -1,4 +1,5 @@
 import { rulesBySection } from "./data.js";
+import { getField } from "./entity.js";
 import { PlayerEntity, RuleType, SectionType } from "./types.js";
 
 const skillXpThresholds = [0, 10, 30, 50, 75, 100, 130];
@@ -18,11 +19,13 @@ export function getFieldValue(
 ) {
   switch (section) {
     case SectionType.speed:
-      return player.speed;
+      return getField(player, "speed");
     case SectionType.maxHealth:
-      return player.maxHealth;
+      return getField(player, "maxHealth");
     case SectionType.skill:
-      return skillLevelFromXp(player.skill_xp[subsection ?? ""] ?? 0);
+      return skillLevelFromXp(
+        getField(player, "skill_xp")[subsection ?? ""] ?? 0,
+      );
     default: {
       const exhaustiveCheck: never = section;
       throw new Error(`Unsupported section: ${exhaustiveCheck}`);

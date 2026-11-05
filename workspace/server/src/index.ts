@@ -3,13 +3,17 @@ import http from "node:http";
 import {
   ActiveEncounter,
   ApiState,
+  Condition,
+  HexEntity,
   Item,
   PendingActivity,
   PlayerEntity,
   Selection,
   TableauCard,
 } from "./types.js";
+import { createEntity } from "./entity.js";
 import {
+  entityStore,
   makeConditionId,
   makeEmptyResources,
   makeEmptySkills,
@@ -57,6 +61,7 @@ const world = await loadOrGenerateWorld({
 const hexes = world.hexes;
 const hexByName = world.hexByName;
 const regions = world.regions;
+for (const entity of world.entities) entityStore.add(entity);
 
 const playerTokens = [1, 2, 3, 4].map((i) => ({
   id: makeTokenId(),
@@ -85,16 +90,18 @@ function placePlayersAfterLoad() {
   for (const token of playerTokens.slice(1)) place(token.id, undefined);
 }
 placePlayersAfterLoad();
+for (const hex of hexes) {
+  const entity = entityStore.getById<HexEntity>(hex.name);
+  if (entity) entity.tokens = [...hex.tokens];
+}
 
 function locationForToken(tokenId: string) {
   return hexes.find((hex) => hex.tokens.includes(tokenId))?.name ?? "Unknown";
 }
 
-const items = new Map<string, Item>();
-const players = new Map<string, PlayerEntity>();
 function createItem(name: string): Item {
-  const item = { id: makeItemId(), name };
-  items.set(item.id, item);
+  const item = createEntity<Item>("item", makeItemId(), { name });
+  entityStore.add(item);
   return item;
 }
 function startingInventory(): Item[] {
@@ -102,7 +109,12 @@ function startingInventory(): Item[] {
 }
 
 function startingConditions() {
-  return [{ id: makeConditionId(), name: "Flatulent", duration: 5 }];
+  return [
+    createEntity<Condition>("condition", makeConditionId(), {
+      name: "Flatulent",
+      duration: 5,
+    }),
+  ];
 }
 
 function startingResources() {
@@ -123,31 +135,32 @@ function startingSkills() {
   return skill_xp;
 }
 
-for (const [index, token] of playerTokens.entries()) {
-  players.set(token.id, {
-    id: token.id,
-    name: token.entityName,
-    tokenId: token.id,
-    curHealth: 10,
-    maxHealth: 10,
-    curLuck: 3,
-    maxLuck: 3,
-    speed: 3,
-    gold: 0,
-    reputation: 10,
-    turns: 20,
-    location: locationForToken(token.id),
-    resources: startingResources(),
-    inventory: startingInventory(),
-    conditions: startingConditions(),
-    skill_xp: startingSkills(),
-  });
+for (const token of playerTokens) {
+  entityStore.add(
+    createEntity<PlayerEntity>("player", token.id, {
+      name: token.entityName,
+      tokenId: token.id,
+      curHealth: 10,
+      maxHealth: 10,
+      curLuck: 3,
+      maxLuck: 3,
+      speed: 3,
+      gold: 0,
+      reputation: 10,
+      turns: 20,
+      location: locationForToken(token.id),
+      resources: startingResources(),
+      inventory: startingInventory(),
+      conditions: startingConditions(),
+      skill_xp: startingSkills(),
+    }),
+  );
 }
 const pendingWork = new Map<string, PendingActivity[]>();
 const tableau = new Map<string, TableauCard[]>();
 const encounterRng = new RNG(`${defaultSeed}:encounters`);
 setEncounterContext({ hexes, regions, rng: encounterRng });
-for (const player of players.values()) {
+for (const player of entityStore.getBySchema<PlayerEntity>("player")) {
   const playerTableau: TableauCard[] = [];
   fillTableau(playerTableau, encounterTemplates, player, encounterRng);
   tableau.set(player.id, playerTableau);
@@ -159,8 +172,7 @@ const apiState: ApiState = {
   hexByName,
   regions,
   tokens: playerTokens,
-  items,
-  players,
+  entities: entityStore,
   currentActivities,
   pendingWork,
   tableau,
@@ -216,7 +228,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && path === "/api/tableau") {
       const playerId = url.searchParams.get("player");
       if (!playerId) return sendJson(res, 400, { error: "Player id required" });
-      const player = players.get(playerId);
+      const player = entityStore.getById<PlayerEntity>(playerId);
       if (!player) return sendJson(res, 404, { error: "Entity not found" });
       return sendJson(res, 200, getTableau(apiState, player));
     }
@@ -237,7 +249,7 @@ const server = http.createServer(async (req, res) => {
     );
     if (specialActionsMatch) {
       const playerId = url.searchParams.get("player") ?? specialActionsMatch[1];
-      const player = players.get(playerId);
+      const player = entityStore.getById<PlayerEntity>(playerId);
       if (!player) return sendJson(res, 404, { error: "Entity not found" });
       if (req.method === "GET")
         return sendJson(res, 200, getSpecialActions(apiState, player));
@@ -248,7 +260,7 @@ const server = http.createServer(async (req, res) => {
     );
     if (entityMatch) {
       const playerId = url.searchParams.get("player") ?? entityMatch[1];
-      const player = players.get(playerId);
+      const player = entityStore.getById<PlayerEntity>(playerId);
       if (!player) return sendJson(res, 404, { error: "Entity not found" });
       const action = entityMatch[2];
 

@@ -21,12 +21,15 @@ import {
   SpecialActionRequest,
   TableauCard,
   TableauData,
+  CityEntity,
+  HexEntity,
+  Token,
 } from "./types.js";
+import { getField, serializeEntity, setField } from "./entity.js";
 import { hexDistance } from "./hexmap.js";
 import {
   terrainSpecs,
   claims,
-  cityTokens,
   encounterTemplates,
   resourceTypes,
   skillNames,
@@ -55,23 +58,27 @@ export type EncounterRequest = {
   conceding?: boolean;
 };
 
-function allTokens(tokens: ApiState["tokens"]) {
-  return [...tokens, ...cityTokens];
+function allTokens(state: ApiState) {
+  return [...state.tokens, ...state.entities.getBySchema<CityEntity>("city")];
 }
 
 function locationForToken(hexes: Hex[], tokenId: string) {
   return hexes.find((hex) => hex.tokens.includes(tokenId))?.name ?? "Unknown";
 }
 
-function moveToken(
-  hexes: Hex[],
-  hexByName: Map<string, Hex>,
-  tokenId: string,
-  to: string,
-) {
-  const fromHex = hexes.find((hex) => hex.tokens.includes(tokenId));
+function moveToken(state: ApiState, tokenId: string, to: string) {
+  const fromHex = state.hexes.find((hex) => hex.tokens.includes(tokenId));
   if (fromHex) fromHex.tokens = fromHex.tokens.filter((id) => id !== tokenId);
-  hexByName.get(to)?.tokens.push(tokenId);
+  const targetHex = state.hexByName.get(to);
+  targetHex?.tokens.push(tokenId);
+  if (fromHex) {
+    const entity = state.entities.getById<HexEntity>(fromHex.name);
+    if (entity) setField(entity, "tokens", [...fromHex.tokens]);
+  }
+  if (targetHex) {
+    const entity = state.entities.getById<HexEntity>(targetHex.name);
+    if (entity) setField(entity, "tokens", [...targetHex.tokens]);
+  }
 }
 
 function getPlayerTableau(state: ApiState, player: PlayerEntity) {
@@ -245,7 +252,7 @@ function controlledTeleportSelection(
   player: PlayerEntity,
   radius: number,
 ): Selection {
-  const originHex = state.hexByName.get(player.location);
+  const originHex = state.hexByName.get(getField(player, "location"));
   if (!originHex) throw new RulesViolation("Origin hex not found");
   const choices = state.hexes
     .filter((hex) => hexDistance(originHex, hex) <= radius)
@@ -257,12 +264,12 @@ function controlledTeleportSelection(
   const selection: Selection = {
     id: `selection-controlled-teleport-${Math.random().toString(36).slice(2)}`,
     title: "Controlled Teleport",
-    description: `Choose a hex within ${radius} hexes of ${player.location}.`,
+    description: `Choose a hex within ${radius} hexes of ${getField(player, "location")}.`,
     choices,
     minChoices: 1,
     maxChoices: 1,
     useDropdown: true,
-    hexSelection: { originHex: player.location, radius },
+    hexSelection: { originHex: getField(player, "location"), radius },
     callback: (indexes) => {
       const choice = selection.choices.find(
         (item: SelectionChoice) => item.index === indexes[0],
@@ -281,8 +288,8 @@ function controlledTeleportSelection(
       if (hexDistance(origin, target) > selection.hexSelection!.radius) {
         throw new RulesViolation("Selected hex is out of range");
       }
-      moveToken(state.hexes, state.hexByName, player.tokenId, target.name);
-      player.location = target.name;
+      moveToken(state, getField(player, "tokenId"), target.name);
+      setField(player, "location", target.name);
       return {
         title: "Controlled Teleport",
         flavorText: `Teleported to ${target.name}.`,
@@ -321,7 +328,7 @@ function freeXpSelection(
           effects: [],
         };
       }
-      const currentXp = player.skill_xp[choice.data] ?? 0;
+      const currentXp = getField(player, "skill_xp")[choice.data] ?? 0;
       const nextXp = currentXp + amount;
       const effect =
         skillLevelFromXp(nextXp) > skillLevelFromXp(currentXp)
@@ -365,35 +372,39 @@ function effectiveSkills(player: PlayerEntity) {
 type PlayerDto = PlayerEntity & { skills: Record<string, number> };
 
 function playerDto(hexes: Hex[], player: PlayerEntity) {
-  player.location = locationForToken(hexes, player.tokenId);
+  setField(
+    player,
+    "location",
+    locationForToken(hexes, getField(player, "tokenId")),
+  );
   return {
     ...player,
-    skill_xp: cloneSkillXp(player.skill_xp),
+    skill_xp: cloneSkillXp(getField(player, "skill_xp")),
     maxHealth: computeEffectiveValue(player, SectionType.maxHealth),
     speed: computeEffectiveValue(player, SectionType.speed),
     skills: effectiveSkills(player),
-    resources: cloneResources(player.resources),
-    inventory: cloneInventory(player.inventory),
-    conditions: cloneConditions(player.conditions),
+    resources: cloneResources(getField(player, "resources")),
+    inventory: cloneInventory(getField(player, "inventory")),
+    conditions: cloneConditions(getField(player, "conditions")),
   } satisfies PlayerDto;
 }
 
 function playerUpdates(player: PlayerEntity) {
   return {
-    curHealth: player.curHealth,
-    curLuck: player.curLuck,
-    maxLuck: player.maxLuck,
-    gold: player.gold,
-    reputation: player.reputation,
-    turns: player.turns,
+    curHealth: getField(player, "curHealth"),
+    curLuck: getField(player, "curLuck"),
+    maxLuck: getField(player, "maxLuck"),
+    gold: getField(player, "gold"),
+    reputation: getField(player, "reputation"),
+    turns: getField(player, "turns"),
     maxHealth: computeEffectiveValue(player, SectionType.maxHealth),
     speed: computeEffectiveValue(player, SectionType.speed),
-    location: player.location,
-    skill_xp: cloneSkillXp(player.skill_xp),
+    location: getField(player, "location"),
+    skill_xp: cloneSkillXp(getField(player, "skill_xp")),
     skills: effectiveSkills(player),
-    resources: cloneResources(player.resources),
-    inventory: cloneInventory(player.inventory),
-    conditions: cloneConditions(player.conditions),
+    resources: cloneResources(getField(player, "resources")),
+    inventory: cloneInventory(getField(player, "inventory")),
+    conditions: cloneConditions(getField(player, "conditions")),
   } satisfies Partial<PlayerEntity> & { skills: Record<string, number> };
 }
 
@@ -451,7 +462,7 @@ function resolveEncounterEffects(
       : rng.shuffle(succeededChecks).slice(0, 3 - failedChecks.length);
 
   const xpEffects: Effect[] = [];
-  const runningSkillXp = { ...player.skill_xp };
+  const runningSkillXp = { ...getField(player, "skill_xp") };
   for (const check of [...selectedFailedChecks, ...selectedSucceededChecks]) {
     const amount = check.success ? 1 : 2;
     const currentXp = runningSkillXp[check.name] ?? 0;
@@ -489,18 +500,23 @@ function labelForEffect(type: EffectType) {
 }
 
 function adjustGold(player: PlayerEntity, amount: number) {
-  player.gold = Math.max(0, player.gold + amount);
+  setField(player, "gold", Math.max(0, getField(player, "gold") + amount));
 }
 
 function adjustReputation(player: PlayerEntity, amount: number) {
-  player.reputation = Math.max(0, player.reputation + amount);
+  setField(
+    player,
+    "reputation",
+    Math.max(0, getField(player, "reputation") + amount),
+  );
 }
 
 function adjustHealth(player: PlayerEntity, amount: number) {
   const maxHealth = computeEffectiveValue(player, SectionType.maxHealth);
-  player.curHealth = Math.max(
-    0,
-    Math.min(maxHealth, player.curHealth + amount),
+  setField(
+    player,
+    "curHealth",
+    Math.max(0, Math.min(maxHealth, getField(player, "curHealth") + amount)),
   );
 }
 
@@ -509,23 +525,34 @@ function adjustResource(
   resourceType: string,
   amount: number,
 ) {
-  const current = player.resources[resourceType] ?? 0;
-  player.resources[resourceType] = Math.max(0, current + amount);
+  const current = getField(player, "resources")[resourceType] ?? 0;
+  getField(player, "resources")[resourceType] = Math.max(0, current + amount);
 }
 
 function removeItems(player: PlayerEntity, itemIds: string[]) {
   const ids = new Set(itemIds);
-  player.inventory = player.inventory.filter((item) => !ids.has(item.id));
+  setField(
+    player,
+    "inventory",
+    getField(player, "inventory").filter((item) => !ids.has(item.id)),
+  );
 }
 
 function adjustTurns(player: PlayerEntity, amount: number) {
-  player.turns = Math.max(0, player.turns + amount);
+  setField(player, "turns", Math.max(0, getField(player, "turns") + amount));
 }
 
 function adjustLuck(player: PlayerEntity, amount: number) {
-  player.curLuck = Math.max(
-    0,
-    Math.min(player.maxLuck, player.curLuck + amount),
+  setField(
+    player,
+    "curLuck",
+    Math.max(
+      0,
+      Math.min(
+        getField(player, "maxLuck"),
+        getField(player, "curLuck") + amount,
+      ),
+    ),
   );
 }
 
@@ -535,29 +562,35 @@ function canAfford(player: PlayerEntity, cost: Effect[]) {
       case EffectType.FreeXp:
         throw new RulesViolation("Free XP cannot be used as a cost.");
       case EffectType.Gold:
-        if (player.gold < effect.amount) return false;
+        if (getField(player, "gold") < effect.amount) return false;
         break;
       case EffectType.Reputation:
-        if (player.reputation < effect.amount) return false;
+        if (getField(player, "reputation") < effect.amount) return false;
         break;
       case EffectType.Health:
-        if (player.curHealth < effect.amount) return false;
+        if (getField(player, "curHealth") < effect.amount) return false;
         break;
       case EffectType.Turns:
-        if (player.turns < effect.amount) return false;
+        if (getField(player, "turns") < effect.amount) return false;
         break;
       case EffectType.Luck:
-        if (player.curLuck < effect.amount) return false;
+        if (getField(player, "curLuck") < effect.amount) return false;
         break;
       case EffectType.Resource:
-        if ((player.resources[effect.resourceType] ?? 0) < effect.amount)
+        if (
+          (getField(player, "resources")[effect.resourceType] ?? 0) <
+          effect.amount
+        )
           return false;
         break;
       case EffectType.SkillXp:
-        if ((player.skill_xp[effect.skill] ?? 0) < effect.amount) return false;
+        if ((getField(player, "skill_xp")[effect.skill] ?? 0) < effect.amount)
+          return false;
         break;
       case EffectType.RemoveItems: {
-        const inventoryIds = new Set(player.inventory.map((item) => item.id));
+        const inventoryIds = new Set(
+          getField(player, "inventory").map((item) => item.id),
+        );
         if (!effect.itemIds.every((itemId) => inventoryIds.has(itemId)))
           return false;
         break;
@@ -568,8 +601,8 @@ function canAfford(player: PlayerEntity, cost: Effect[]) {
 }
 
 function adjustSkillXp(player: PlayerEntity, skill: string, amount: number) {
-  const current = player.skill_xp[skill] ?? 0;
-  player.skill_xp[skill] = Math.max(0, current + amount);
+  const current = getField(player, "skill_xp")[skill] ?? 0;
+  getField(player, "skill_xp")[skill] = Math.max(0, current + amount);
 }
 
 function applyEffects(
@@ -710,12 +743,12 @@ function computePenalty(
     case PenaltyType.Resource: {
       const removals = Math.ceil(numFailures / 2);
       if (removals <= 0) return [];
-      const pool = Object.entries(player.resources).flatMap(
+      const pool = Object.entries(getField(player, "resources")).flatMap(
         ([resourceType, amount]) =>
           Array.from({ length: Math.max(0, amount) }, () => resourceType),
       );
       if (pool.length === 0) return [];
-      const remaining = new Map(Object.entries(player.resources));
+      const remaining = new Map(Object.entries(getField(player, "resources")));
       const removed = new Map<string, number>();
       let available = pool.length;
       const chooseResource = () => {
@@ -758,11 +791,11 @@ export function getClaims() {
 }
 
 export function getTokens(state: ApiState) {
-  return allTokens(state.tokens);
+  return allTokens(state);
 }
 
 export function getItem(state: ApiState, itemId: string) {
-  return state.items.get(itemId);
+  return state.entities.getById<Item>(itemId);
 }
 
 export function getTableau(state: ApiState, player: PlayerEntity): TableauData {
@@ -798,14 +831,21 @@ export function performSpecialAction(
   assertNoPendingWork(state, player);
   if (!action.availability(player))
     throw new RulesViolation("Special action is unavailable");
-  if (action.locations?.length && !action.locations.includes(player.location))
+  if (
+    action.locations?.length &&
+    !action.locations.includes(getField(player, "location"))
+  )
     throw new RulesViolation("Special action cannot be performed here");
   if (!canAfford(player, action.cost))
     throw new RulesViolation("You can't afford to perform this action.");
   payCost(state, player, action.cost);
   const effects = action.execute(state, player);
   applyEffects(state, player, effects);
-  player.location = locationForToken(state.hexes, player.tokenId);
+  setField(
+    player,
+    "location",
+    locationForToken(state.hexes, getField(player, "tokenId")),
+  );
   return {
     effects,
     nextActive: nextActiveForPlayer(state, player),
@@ -818,17 +858,23 @@ export function getGame(state: ApiState) {
     terrains: terrainSpecs,
     regions: state.regions,
     claims,
-    tokens: allTokens(state.tokens),
-    players: Array.from(state.players.values()).map(({ id, name }) => ({
-      id,
-      name,
-    })),
+    tokens: allTokens(state),
+    players: state.entities
+      .getBySchema<PlayerEntity>("player")
+      .map((player) => ({
+        id: player.id,
+        name: getField(player, "name"),
+      })),
+    entities: state.entities.values().map(serializeEntity),
     resourceTypes,
   };
 }
 
 export function getEntity(state: ApiState, player: PlayerEntity) {
-  return playerDto(state.hexes, player);
+  return {
+    ...serializeEntity(player),
+    skills: effectiveSkills(player),
+  };
 }
 
 function removeEncounterFromTableau(
@@ -842,12 +888,19 @@ function removeEncounterFromTableau(
 }
 
 function endTurn(state: ApiState, player: PlayerEntity, reason: string) {
-  console.log(`[endTurn] ${reason} for ${player.name} @ ${player.location}`);
-  for (const condition of player.conditions) condition.duration -= 1;
-  player.conditions = player.conditions.filter(
-    (condition) => condition.duration > 0,
+  console.log(
+    `[endTurn] ${reason} for ${getField(player, "name")} @ ${getField(player, "location")}`,
   );
-  const currentHex = state.hexByName.get(player.location);
+  for (const condition of getField(player, "conditions"))
+    setField(condition, "duration", getField(condition, "duration") - 1);
+  setField(
+    player,
+    "conditions",
+    getField(player, "conditions").filter(
+      (condition) => getField(condition, "duration") > 0,
+    ),
+  );
+  const currentHex = state.hexByName.get(getField(player, "location"));
   let changed = false;
   const tableau = getPlayerTableau(state, player);
   if (currentHex) {
@@ -879,7 +932,11 @@ export function campEntity(
     throw new RulesViolation("You can't afford to perform this action.");
   payCost(state, player, turnCost);
   adjustHealth(player, 1);
-  player.location = locationForToken(state.hexes, player.tokenId);
+  setField(
+    player,
+    "location",
+    locationForToken(state.hexes, getField(player, "tokenId")),
+  );
   endTurn(state, player, "camp");
   return {
     title: "A Restful Night",
@@ -896,7 +953,7 @@ export function travelEntity(
 ): ActivityResult {
   assertNoPendingWork(state, player);
   const route = request.route;
-  const current = locationForToken(state.hexes, player.tokenId);
+  const current = locationForToken(state.hexes, getField(player, "tokenId"));
   if (route.length < 1 || route[0] !== current)
     throw new RulesViolation("There are gaps in the route");
   const speed = computeEffectiveValue(player, SectionType.speed);
@@ -927,8 +984,8 @@ export function travelEntity(
   if (encounterHexName) {
     const encounterHex = state.hexByName.get(encounterHexName);
     if (encounterHex) {
-      moveToken(state.hexes, state.hexByName, player.tokenId, encounterHexName);
-      player.location = encounterHexName;
+      moveToken(state, getField(player, "tokenId"), encounterHexName);
+      setField(player, "location", encounterHexName);
     }
     const templates = encounterHex
       ? (terrainEncounterTemplates[encounterHex.terrain] ?? encounterTemplates)
@@ -972,11 +1029,11 @@ export function travelEntity(
               title: "Travel Done",
               effects: [],
             };
-          if (player.location !== choice.data)
+          if (getField(player, "location") !== choice.data)
             throw new RulesViolation("You can't continue since you've moved.");
           const destination = route[route.length - 1];
-          moveToken(state.hexes, state.hexByName, player.tokenId, destination);
-          player.location = destination;
+          moveToken(state, getField(player, "tokenId"), destination);
+          setField(player, "location", destination);
           endTurn(state, player, "travel-continuation");
         },
       };
@@ -993,8 +1050,8 @@ export function travelEntity(
     };
   }
 
-  moveToken(state.hexes, state.hexByName, player.tokenId, destination);
-  player.location = destination;
+  moveToken(state, getField(player, "tokenId"), destination);
+  setField(player, "location", destination);
   endTurn(state, player, "travel-complete");
   return {
     effects: [],
@@ -1063,7 +1120,7 @@ export function continueEncounter(
     state.rng,
   );
   console.log(
-    `[continueEncounter] ${player.name} ${active.id} new checks: ${nextSkillChecks
+    `[continueEncounter] ${getField(player, "name")} ${active.id} new checks: ${nextSkillChecks
       .map(
         (check) =>
           `${check.name} vs ${check.target} (roll ${check.roll} + ${check.modifier} = ${check.total})`,

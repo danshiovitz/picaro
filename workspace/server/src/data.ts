@@ -2,6 +2,7 @@ import {
   Claim,
   EffectType,
   EncounterTemplate,
+  CityEntity,
   Item,
   PenaltyType,
   PlayerEntity,
@@ -11,8 +12,15 @@ import {
   SectionType,
   Selection,
   SpecialActionDefinition,
-  Token,
 } from "./types.js";
+import {
+  createEntity,
+  EntityStore,
+  getField,
+  registerEntitySchema,
+  setField,
+} from "./entity.js";
+import { SCHEMAS } from "./schemas.js";
 import { computeEffectiveValue } from "./rule.js";
 import { queuePendingWork } from "./commands.js";
 
@@ -246,18 +254,25 @@ export function makeEmptyResources(): Record<string, number> {
   return Object.fromEntries(resourceTypes.map((type) => [type, 0] as const));
 }
 
-export let cityTokens: Token[] = [
-  "Waterdeep",
-  "Underhaven",
-  "Dawnport",
-  "Ironford",
-  "Moonfall",
-  "Highspire",
-  "Blackwell",
-  "Greengate",
-].map((n) => ({ id: makeTokenId(), entityName: `City of ${n}`, icon: "city" }));
-export function setCityTokens(next: Token[]) {
-  cityTokens = next;
+export const entityStore = new EntityStore();
+for (const schema of Object.values(SCHEMAS)) registerEntitySchema(schema);
+
+export function makeCityEntities(): CityEntity[] {
+  return [
+    "Waterdeep",
+    "Underhaven",
+    "Dawnport",
+    "Ironford",
+    "Moonfall",
+    "Highspire",
+    "Blackwell",
+    "Greengate",
+  ].map((n) =>
+    createEntity<CityEntity>("city", makeTokenId(), {
+      entityName: `City of ${n}`,
+      icon: "city",
+    }),
+  );
 }
 
 export function makeEmptySkills() {
@@ -303,7 +318,7 @@ export function addRule(rule: Rule) {
 }
 
 function hasItem(player: PlayerEntity, itemName: string) {
-  return player.inventory.some((item) => item.name === itemName);
+  return getField(player, "inventory").some((item) => item.name === itemName);
 }
 
 function hasItemNamed(player: PlayerEntity, itemName: string) {
@@ -336,7 +351,8 @@ export const specialActions: SpecialActionDefinition[] = [
     locations: ["C10"],
     cost: [{ type: EffectType.Gold, amount: 2 }],
     availability: (player) =>
-      player.curHealth < computeEffectiveValue(player, SectionType.maxHealth),
+      getField(player, "curHealth") <
+      computeEffectiveValue(player, SectionType.maxHealth),
     execute: (_state, _player) => [{ type: EffectType.Health, amount: 2 }],
   },
   {
@@ -345,7 +361,9 @@ export const specialActions: SpecialActionDefinition[] = [
     cost: [],
     availability: (player) => hasItemNamed(player, "can of coke"),
     execute: (_state, player) => {
-      const item = player.inventory.find((item) => item.name === "can of coke");
+      const item = getField(player, "inventory").find(
+        (item) => item.name === "can of coke",
+      );
       return item ? [{ type: EffectType.RemoveItems, itemIds: [item.id] }] : [];
     },
   },
@@ -384,20 +402,28 @@ export const specialActions: SpecialActionDefinition[] = [
             };
           switch (choice.data) {
             case "gold":
-              player.gold += 1;
+              setField(player, "gold", getField(player, "gold") + 1);
               return {
                 title: "Wish Granted",
                 effects: [{ type: EffectType.Gold, amount: 1 }],
               };
             case "luck":
-              player.curLuck = Math.min(player.maxLuck, player.curLuck + 1);
+              setField(
+                player,
+                "curLuck",
+                Math.min(
+                  getField(player, "maxLuck"),
+                  getField(player, "curLuck") + 1,
+                ),
+              );
               return {
                 title: "Wish Granted",
                 effects: [{ type: EffectType.Luck, amount: 1 }],
               };
-            default:
-              player.resources[choice.data] =
-                (player.resources[choice.data] ?? 0) + 1;
+            default: {
+              const resources = getField(player, "resources");
+              resources[choice.data] = (resources[choice.data] ?? 0) + 1;
+              setField(player, "resources", resources);
               return {
                 title: "Wish Granted",
                 effects: [
@@ -408,6 +434,7 @@ export const specialActions: SpecialActionDefinition[] = [
                   },
                 ],
               };
+            }
           }
         },
       };

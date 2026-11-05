@@ -1,7 +1,15 @@
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
-import { Hex, Token, Region } from "./types.js";
+import {
+  CityEntity,
+  Entity,
+  Hex,
+  HexEntity,
+  Region,
+  RegionEntity,
+} from "./types.js";
+import { createEntity, hydrateEntity, serializeEntity } from "./entity.js";
 import { RNG } from "./random.js";
 import { PerlinNoise, noiseValue } from "./noise.js";
 import {
@@ -13,18 +21,18 @@ import {
   getNeighborIndexes,
   hexDistance,
 } from "./hexmap.js";
-import { claims, cityTokens, setCityTokens } from "./data.js";
+import { claims, makeCityEntities } from "./data.js";
 
 export type MapGeneratorName = "allRandom" | "empire";
 export type GeneratedWorld = {
   hexes: Hex[];
   hexByName: Map<string, Hex>;
   regions: Region[];
-  entities: Token[];
+  entities: Entity[];
 };
 export type SavedMapState = {
   hexes: Hex[];
-  entities: Token[];
+  entities: Entity[];
   regions: Region[];
 };
 export type MapOptions = { generator: MapGeneratorName; seed: string };
@@ -232,7 +240,18 @@ async function fileExists(filePath: string) {
 
 export async function saveMap(filePath: string, state: SavedMapState) {
   await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, JSON.stringify(state, null, 2), "utf8");
+  await writeFile(
+    filePath,
+    JSON.stringify(
+      {
+        ...state,
+        entities: state.entities.map((entity) => serializeEntity(entity)),
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
 }
 
 export async function loadMap(filePath: string): Promise<GeneratedWorld> {
@@ -246,12 +265,11 @@ export async function loadMap(filePath: string): Promise<GeneratedWorld> {
     throw new Error("Invalid map save file");
   if (state.hexes.some((hex) => typeof hex.region_id !== "string"))
     throw new Error("Invalid map save file");
-  setCityTokens(state.entities);
   return {
     hexes: state.hexes,
     hexByName: new Map(state.hexes.map((hex) => [hex.name, hex] as const)),
     regions: state.regions,
-    entities: state.entities,
+    entities: state.entities.map((entity) => hydrateEntity(entity)),
   };
 }
 
@@ -276,7 +294,7 @@ function buildHexes(width: number, height: number): Hex[] {
 function placeToken(
   hexes: Hex[],
   used: Set<number>,
-  token: Token,
+  token: Pick<Entity, "id">,
   index: number | undefined,
   rng: RNG,
 ) {
@@ -296,7 +314,7 @@ function applyRandomClaims(hexes: Hex[], rng: RNG) {
   }
 }
 
-function placeCities(hexes: Hex[], rng: RNG) {
+function placeCities(hexes: Hex[], cityTokens: CityEntity[], rng: RNG) {
   const used = new Set<number>();
   placeToken(hexes, used, cityTokens[0], 42, rng);
   for (const token of cityTokens.slice(1))
@@ -715,6 +733,20 @@ function pickRandomWallPointIndex(hexes: Hex[], rng: RNG): number {
   return rng.pick(wallToIndexes.get(wall)!);
 }
 
+function makeWorldEntities(
+  hexes: Hex[],
+  regions: Region[],
+  cityTokens: CityEntity[],
+) {
+  return [
+    ...regions.map((region) =>
+      createEntity<RegionEntity>("region", region.id, region),
+    ),
+    ...hexes.map((hex) => createEntity<HexEntity>("hex", hex.name, hex)),
+    ...cityTokens,
+  ];
+}
+
 function buildAllRandom(seed: string): GeneratedWorld {
   const rng = new RNG(`${seed}:allRandom`);
   const hexes = buildHexes(20, 20);
@@ -724,12 +756,14 @@ function buildAllRandom(seed: string): GeneratedWorld {
     hex.region_id = rng.pick(allRandomRegions).id;
   }
   applyRandomClaims(hexes, rng);
-  placeCities(hexes, rng);
+  const regions = allRandomRegions.map((region) => ({ ...region }));
+  const cityTokens = makeCityEntities();
+  placeCities(hexes, cityTokens, rng);
   return {
     hexes,
     hexByName,
-    regions: allRandomRegions.map((region) => ({ ...region })),
-    entities: [...cityTokens],
+    regions,
+    entities: makeWorldEntities(hexes, regions, cityTokens),
   };
 }
 
@@ -903,8 +937,14 @@ function buildEmpire(seed: string): GeneratedWorld {
 
   const regions = assignEmpireRegions(hexes, indexByCoord, rng);
   applyRandomClaims(hexes, rng);
-  placeCities(hexes, rng);
-  return { hexes, hexByName, regions, entities: [...cityTokens] };
+  const cityTokens = makeCityEntities();
+  placeCities(hexes, cityTokens, rng);
+  return {
+    hexes,
+    hexByName,
+    regions,
+    entities: makeWorldEntities(hexes, regions, cityTokens),
+  };
 }
 
 export function buildWorld(options: MapOptions) {

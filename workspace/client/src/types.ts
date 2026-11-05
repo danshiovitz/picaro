@@ -1,20 +1,13 @@
+import type { Entity, EntityOf } from "./schemas";
+
 export type Terrain = { name: string; color: string; icon: string };
-export type Region = { id: string; name: string; base_difficulty: number };
+export type Region = EntityOf<"region">;
 export type Claim = { name: string; icon: string };
-export type Token = { id: string; entityName: string; icon: string };
-export type Item = { id: string; name: string };
-export type Condition = { id: string; name: string; duration: number };
-export type Hex = {
-  name: string;
-  x: number;
-  y: number;
-  q: number;
-  r: number;
-  terrain: string;
-  region_id: string;
-  claims: string[];
-  tokens: string[];
-};
+export type Token = EntityOf<"city">;
+export type Item = EntityOf<"item">;
+export type Condition = EntityOf<"condition">;
+export type Hex = EntityOf<"hex">;
+export type PlayerEntity = EntityOf<"player">;
 export type PlayerSummary = { id: string; name: string };
 export type GameData = {
   hexes: Hex[];
@@ -24,6 +17,7 @@ export type GameData = {
   tokens: Token[];
   players: PlayerSummary[];
   resourceTypes: string[];
+  entities?: Entity[];
 };
 export enum RewardType {
   Gold = "gold",
@@ -71,7 +65,7 @@ export type Effect =
 export type EncounterSkillCheck = { name: string; target: number };
 export type EncounterTemplate = {
   title: string;
-  base_difficulty: number;
+  difficulty_mod: number;
   rewards: RewardType[];
   criticalRewards: RewardType[];
   penalties: PenaltyType[];
@@ -122,26 +116,6 @@ export type Selection = {
   useDropdown?: boolean;
   hexSelection?: { originHex: string; radius: number };
 };
-export type PlayerEntity = {
-  id: string;
-  name: string;
-  tokenId: string;
-  curHealth: number;
-  maxHealth: number;
-  curLuck: number;
-  maxLuck: number;
-  speed: number;
-  gold: number;
-  reputation: number;
-  turns: number;
-  location: string;
-  resources: Record<string, number>;
-  inventory: Item[];
-  conditions: Condition[];
-  skill_xp: Record<string, number>;
-  skills: Record<string, number>;
-};
-export type PlayCard = { title: string; lines: string[] };
 export type ActivityNextActive =
   | { type: "encounter"; encounter: ActiveEncounter }
   | { type: "selection"; selection: Selection };

@@ -11,6 +11,7 @@ import {
 } from "./types.js";
 import { skillNames } from "./data.js";
 import { hexDistance } from "./hexmap.js";
+import { getField } from "./entity.js";
 import { computeEffectiveValue } from "./rule.js";
 import { RNG } from "./random.js";
 
@@ -37,7 +38,9 @@ function difficultySwing(rng = encounterRng) {
 }
 
 function hexesNearPlayer(player: PlayerEntity) {
-  const origin = encounterHexes.find((hex) => hex.name === player.location);
+  const origin = encounterHexes.find(
+    (hex) => hex.name === getField(player, "location"),
+  );
   if (!origin) return [...encounterHexes];
   const speed = computeEffectiveValue(player, SectionType.speed);
   const nearby = encounterHexes.filter(
@@ -81,7 +84,7 @@ export function instantiateEncounterTemplate(
   const location =
     locationCandidates.length > 0
       ? randomPick(locationCandidates).name
-      : player.location;
+      : getField(player, "location");
   const locationHex = encounterHexes.find((hex) => hex.name === location);
   const difficulty =
     regionDifficultyForHex(locationHex) +
