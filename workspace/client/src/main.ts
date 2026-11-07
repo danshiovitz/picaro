@@ -395,7 +395,7 @@ function render(
   );
   const itemNameCache = new Map<string, string>();
   for (const item of player.inventory) itemNameCache.set(item.id, item.name);
-  app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button><label class="map-toggle"><input type="checkbox" id="show-region-borders"/> show region borders</label><button id="fit">Fit</button><button id="snap">Snap</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableauData.encounters.map(renderEncounterCard).join("")}</section></div></div></div><section class="character-panel"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><div class="action-buttons-row"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="attack" class="action-button" type="button"><img src="/images/actions/swords.svg" alt=""/><span>Attack</span></button></div><div id="special-actions" class="special-actions"></div></section></section></main><aside class="right-panel"><section class="activity-panel"><h2 id="activity-panel-title" hidden></h2><div id="activity-panel-content"></div></section></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div>`;
+  app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button><label class="map-toggle"><input type="checkbox" id="show-region-borders"/> show region borders</label><button id="fit">Fit</button><button id="snap">Snap</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableauData.encounters.map(renderEncounterCard).join("")}</section></div></div></div><section class="character-panel"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><div class="action-buttons-row"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="scout" class="action-button" type="button"><img src="/images/actions/telescope.svg" alt=""/><span>Scout</span></button></div><div id="special-actions" class="special-actions"></div></section></section></main><aside class="right-panel"><section class="activity-panel"><h2 id="activity-panel-title" hidden></h2><div id="activity-panel-content"></div></section></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div>`;
   const map = document.querySelector("#map") as HTMLElement;
   const mapScroll = document.querySelector("#map-scroll") as HTMLElement;
   const tip = document.querySelector("#tip") as HTMLElement;
@@ -1280,6 +1280,22 @@ function render(
       document.querySelector("#camp-go")!.addEventListener("click", goCamp);
   }
 
+  function showScoutCard() {
+    const canAfford = canAffordEffects(player, [
+      { type: EffectType.Turns, amount: 1 },
+    ]);
+    setPlay(
+      `<article class="play-card camp-card"><h3>Scout</h3><div class="play-card-body"><img src="/images/actions/telescope.svg" alt="Telescope" style="width:120px;height:120px;object-fit:contain"/></div></article><div class="travel-controls"><button id="scout-go" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You\'re out of turns." aria-disabled="true"'}>OK</button><button id="scout-cancel" class="card-ok" type="button">Cancel</button></div>`,
+      "Scout",
+      true,
+    );
+    document
+      .querySelector("#scout-cancel")!
+      .addEventListener("click", clearPlay);
+    if (canAfford)
+      document.querySelector("#scout-go")!.addEventListener("click", goScout);
+  }
+
   function travelRouteHtml() {
     const maxNodes = player.speed + 1;
     return route!
@@ -1319,6 +1335,18 @@ function render(
           if (!launchResultNextActive(result)) maybeContinueOngoingTravel();
         });
       },
+    );
+  }
+
+  async function goScout() {
+    await executeActivity(
+      "Scout",
+      () =>
+        apiJson<ActivityResult>(
+          `/api/entities/${encodeURIComponent(player.id)}/actions/scout`,
+          { method: "POST" },
+        ),
+      (result) => showActivityResult("Scout", result),
     );
   }
 
@@ -1789,6 +1817,7 @@ function render(
   });
   document.querySelector("#travel")!.addEventListener("click", enterTravelMode);
   document.querySelector("#camp")!.addEventListener("click", showCampCard);
+  document.querySelector("#scout")!.addEventListener("click", showScoutCard);
   window.addEventListener("resize", () => {
     if (!manualZoom) {
       fitInitialZoom();

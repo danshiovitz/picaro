@@ -2,7 +2,7 @@ import { EffectType } from "./types";
 import type { ActivityResult, Effect } from "./types";
 
 export type ActivityKind =
-  "Selection" | "Action" | "Encounter" | "Camp" | "Travel";
+  "Selection" | "Action" | "Encounter" | "Camp" | "Scout" | "Travel";
 
 export function activityErrorTitle(kind: ActivityKind) {
   return `${kind} Error`;

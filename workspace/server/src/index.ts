@@ -42,6 +42,7 @@ import {
   getItem,
   performSpecialAction,
   runEncounter,
+  scoutEntity,
   travelEntity,
 } from "./commands.js";
 import { makeSelection } from "./selection.js";
@@ -256,7 +257,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     const entityMatch = path.match(
-      /^\/api\/entities\/([^/]+)(?:\/actions\/(camp|travel|run_encounter|continue_encounter|finish_encounter|special_action|make_selection))?$/,
+      /^\/api\/entities\/([^/]+)(?:\/actions\/(camp|travel|scout|run_encounter|continue_encounter|finish_encounter|special_action|make_selection))?$/,
     );
     if (entityMatch) {
       const playerId = url.searchParams.get("player") ?? entityMatch[1];
@@ -275,6 +276,9 @@ const server = http.createServer(async (req, res) => {
         const request = { route: Array.isArray(body?.route) ? body.route : [] };
         return sendJson(res, 200, travelEntity(apiState, player, request));
       }
+
+      if (req.method === "POST" && action === "scout")
+        return sendJson(res, 200, scoutEntity(apiState, player));
 
       if (req.method === "POST" && action === "run_encounter") {
         const body = await readJson(req);

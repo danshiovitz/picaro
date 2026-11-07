@@ -922,6 +922,27 @@ function endTurn(state: ApiState, player: PlayerEntity, reason: string) {
   return changed;
 }
 
+export function scoutEntity(
+  state: ApiState,
+  player: PlayerEntity,
+): ActivityResult {
+  const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
+  assertNoPendingWork(state, player);
+  if (!canAfford(player, turnCost))
+    throw new RulesViolation("You can't afford to perform this action.");
+  payCost(state, player, turnCost);
+  const tableau = getPlayerTableau(state, player);
+  tableau.splice(0, tableau.length);
+  endTurn(state, player, "scout");
+  return {
+    title: "Scout Results",
+    flavorText: "Tableau refreshed",
+    effects: [],
+    implicitEffects: [{ type: EffectType.Turns, amount: -1 }],
+    nextActive: nextActiveForPlayer(state, player),
+  };
+}
+
 export function campEntity(
   state: ApiState,
   player: PlayerEntity,
