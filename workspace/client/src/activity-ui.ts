@@ -39,6 +39,16 @@ export async function renderEffectText(
     );
     return `Removed: ${names.join(", ") || "none"}`;
   }
+  if (effect.type === EffectType.GainRandomItem) {
+    const name =
+      (await resolveItemName?.(effect.itemId ?? "no id")) ?? "a random item";
+    return `Gained: ${name}`;
+  }
+  if (effect.type === EffectType.RemoveRandomItem) {
+    const name =
+      (await resolveItemName?.(effect.itemId ?? "no id")) ?? "a random item";
+    return `Removed: ${name}`;
+  }
   return `${effect.amount >= 0 ? "+" : "-"}${Math.abs(effect.amount)} ${labelForType(effect.type)}`;
 }
 
@@ -67,5 +77,7 @@ export async function renderActivityLines(
 function labelForType(type: string) {
   if (type === EffectType.FreeXp) return "Free XP";
   if (type === EffectType.ControlledTeleport) return "Controlled Teleport";
+  if (type === EffectType.GainRandomItem) return "Item";
+  if (type === EffectType.RemoveRandomItem) return "Item";
   return type[0].toUpperCase() + type.slice(1);
 }

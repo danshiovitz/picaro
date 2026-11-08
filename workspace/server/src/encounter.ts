@@ -9,7 +9,7 @@ import {
   SectionType,
   TableauCard,
 } from "./types.js";
-import { skillNames } from "./data.js";
+import { generalPenaltyTypes, generalRewardTypes, skillNames } from "./data.js";
 import { hexDistance } from "./hexmap.js";
 import { getField } from "./entity.js";
 import { computeEffectiveValue } from "./rule.js";
@@ -31,6 +31,16 @@ export function setEncounterContext(context: {
 
 function randomPick<T>(items: T[], rng = encounterRng) {
   return rng.pick(items);
+}
+
+function pickTemplateOrGeneral<T>(
+  items: T[],
+  generalItems: T[],
+  rng = encounterRng,
+) {
+  return items.length > 0 && rng.next() < 0.8
+    ? [...items]
+    : [rng.pick(generalItems)];
 }
 
 function difficultySwing(rng = encounterRng) {
@@ -101,9 +111,12 @@ export function instantiateEncounterTemplate(
     successThreshold,
     criticalThreshold,
     failureThreshold,
-    rewards: [...template.rewards],
-    criticalRewards: [...template.criticalRewards],
-    penalties: [...template.penalties],
+    rewards: pickTemplateOrGeneral(template.rewards, generalRewardTypes),
+    criticalRewards: pickTemplateOrGeneral(
+      template.criticalRewards,
+      generalRewardTypes,
+    ),
+    penalties: pickTemplateOrGeneral(template.penalties, generalPenaltyTypes),
     skillSource: [...skillSource],
     skillChecks: rollEncounterSkillChecks(skillSource, difficulty),
   };

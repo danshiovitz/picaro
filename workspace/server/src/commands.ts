@@ -25,7 +25,9 @@ import {
   HexEntity,
   Token,
 } from "./types.js";
-import { getField, serializeEntity, setField } from "./entity.js";
+import { createEntity, getField, serializeEntity, setField } from "./entity.js";
+import { randomUUID } from "node:crypto";
+
 import { hexDistance } from "./hexmap.js";
 import {
   terrainSpecs,
@@ -489,6 +491,8 @@ function resolveEncounterEffects(
 function labelForReward(type: RewardType | PenaltyType) {
   if (type === RewardType.FreeXp) return "Free XP";
   if (type === RewardType.ControlledTeleport) return "Controlled Teleport";
+  if (type === RewardType.GainItem) return "Item";
+  if (type === PenaltyType.RemoveItem) return "Item";
   return type[0].toUpperCase() + type.slice(1);
 }
 
@@ -496,6 +500,8 @@ function labelForEffect(type: EffectType) {
   if (type === EffectType.FreeXp) return "Free XP";
   if (type === EffectType.ControlledTeleport) return "Controlled Teleport";
   if (type === EffectType.SkillXp) return "Skill XP";
+  if (type === EffectType.GainRandomItem) return "Item";
+  if (type === EffectType.RemoveRandomItem) return "Item";
   return type[0].toUpperCase() + type.slice(1);
 }
 
@@ -556,11 +562,44 @@ function adjustLuck(player: PlayerEntity, amount: number) {
   );
 }
 
+const randomItemTable = [
+  "magic sword",
+  "magic shield",
+  "fast horse",
+  "ring of invisibility",
+];
+
+function gainRandomItem(
+  state: ApiState,
+  player: PlayerEntity,
+  quality: number,
+) {
+  if (randomItemTable.length === 0) return undefined;
+  const roll = Math.min(
+    randomItemTable.length,
+    Math.max(1, state.rng.int(randomItemTable.length) + 1 + quality),
+  );
+  const itemName = randomItemTable[roll - 1];
+  const item = createEntity<Item>("item", randomUUID(), { name: itemName });
+  state.entities.add(item);
+  getField(player, "inventory").push(item);
+  return item;
+}
+
+function removeRandomItem(state: ApiState, player: PlayerEntity) {
+  const inventory = getField(player, "inventory");
+  if (inventory.length === 0) return undefined;
+  const index = state.rng.int(inventory.length);
+  const [item] = inventory.splice(index, 1);
+  return item;
+}
+
 function canAfford(player: PlayerEntity, cost: Effect[]) {
   for (const effect of cost) {
     switch (effect.type) {
       case EffectType.FreeXp:
-        throw new RulesViolation("Free XP cannot be used as a cost.");
+      case EffectType.GainRandomItem:
+        throw new RulesViolation("This effect cannot be used as a cost.");
       case EffectType.Gold:
         if (getField(player, "gold") < effect.amount) return false;
         break;
@@ -595,6 +634,9 @@ function canAfford(player: PlayerEntity, cost: Effect[]) {
           return false;
         break;
       }
+      case EffectType.RemoveRandomItem:
+        if (getField(player, "inventory").length < 1) return false;
+        break;
     }
   }
   return true;
@@ -649,6 +691,15 @@ function applyEffects(
       case EffectType.RemoveItems:
         removeItems(player, effect.itemIds);
         break;
+      case EffectType.GainRandomItem: {
+        const item = gainRandomItem(state, player, effect.quality);
+        if (item) effect.itemId = item.id;
+        break;
+      }
+      case EffectType.RemoveRandomItem:
+        const item = removeRandomItem(state, player);
+        if (item) effect.itemId = item.id;
+        break;
     }
   }
   if (frontQueue.length > 0) {
@@ -664,29 +715,13 @@ function payCost(state: ApiState, player: PlayerEntity, cost: Effect[]) {
     player,
     cost.map((effect) =>
       effect.type === EffectType.RemoveItems ||
-      effect.type === EffectType.ControlledTeleport
+      effect.type === EffectType.ControlledTeleport ||
+      effect.type === EffectType.GainRandomItem ||
+      effect.type === EffectType.RemoveRandomItem
         ? effect
         : { ...effect, amount: -effect.amount },
     ),
   );
-}
-
-function effectLabelLine(effect: Effect) {
-  if (effect.type === EffectType.RemoveItems) {
-    return `Remove items: ${effect.itemIds.join(", ") || "none"}`;
-  }
-  if (effect.type === EffectType.ControlledTeleport) {
-    return `${labelForEffect(effect.type)} (radius ${effect.radius})`;
-  }
-  const label =
-    effect.type === EffectType.SkillXp
-      ? `${labelForEffect(effect.type)} (${effect.skill})`
-      : labelForEffect(effect.type);
-  return `${effect.amount >= 0 ? "+" : "-"}${Math.abs(effect.amount)} ${label}`;
-}
-
-function effectsToLines(effects: Effect[]) {
-  return effects.map(effectLabelLine);
 }
 
 function computeReward(rewardType: RewardType, rng: RNG): Effect[] {
@@ -703,6 +738,8 @@ function computeReward(rewardType: RewardType, rng: RNG): Effect[] {
       return [{ type: EffectType.FreeXp, amount: 5 }];
     case RewardType.ControlledTeleport:
       return [{ type: EffectType.ControlledTeleport, radius: 5 }];
+    case RewardType.GainItem:
+      return [{ type: EffectType.GainRandomItem, quality: 2 }];
   }
 }
 
@@ -720,6 +757,8 @@ function computeCriticalReward(rewardType: RewardType, rng: RNG): Effect[] {
       return [{ type: EffectType.FreeXp, amount: 5 }];
     case RewardType.ControlledTeleport:
       return [{ type: EffectType.ControlledTeleport, radius: 5 }];
+    case RewardType.GainItem:
+      return [{ type: EffectType.GainRandomItem, quality: 2 }];
   }
 }
 
@@ -771,6 +810,8 @@ function computePenalty(
         resourceEffect(resourceType, -amount),
       );
     }
+    case PenaltyType.RemoveItem:
+      return [{ type: EffectType.RemoveRandomItem }];
   }
 }
 

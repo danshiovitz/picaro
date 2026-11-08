@@ -26,6 +26,8 @@ export enum RewardType {
   Resource = "resource",
   FreeXp = "free_xp",
   ControlledTeleport = "controlled_teleport",
+  GainItem = "gain_item",
+  RemoveItem = "remove_item",
 }
 export enum PenaltyType {
   Gold = "gold",
@@ -45,6 +47,8 @@ export enum EffectType {
   ControlledTeleport = "controlled_teleport",
   SkillXp = "skill_xp",
   RemoveItems = "remove_items",
+  GainRandomItem = "gain_random_item",
+  RemoveRandomItem = "remove_random_item",
 }
 export type Effect =
   | { type: EffectType.Gold; amount: number }
@@ -61,7 +65,13 @@ export type Effect =
       amount: number;
       newLevel?: number;
     }
-  | { type: EffectType.RemoveItems; itemIds: string[] };
+  | { type: EffectType.RemoveItems; itemIds: string[] }
+  | {
+      type: EffectType.GainRandomItem;
+      quality: number;
+      itemId?: string;
+    }
+  | { type: EffectType.RemoveRandomItem; itemId?: string };
 export type EncounterSkillCheck = { name: string; target: number };
 export type EncounterTemplate = {
   title: string;

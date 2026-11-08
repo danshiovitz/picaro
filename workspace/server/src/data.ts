@@ -148,6 +148,9 @@ export const terrainEncounterTemplates: Record<string, EncounterTemplate[]> =
     ]),
   );
 
+export const generalRewardTypes = Object.values(RewardType) as RewardType[];
+export const generalPenaltyTypes = Object.values(PenaltyType) as PenaltyType[];
+
 export const encounterTemplates: EncounterTemplate[] = [
   {
     title: "Dungeon Raid",

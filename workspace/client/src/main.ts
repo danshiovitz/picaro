@@ -123,6 +123,8 @@ function esc(value: unknown) {
 function labelForType(type: string) {
   if (type === RewardType.FreeXp) return "Free XP";
   if (type === RewardType.ControlledTeleport) return "Controlled Teleport";
+  if (type === RewardType.GainItem) return "Item";
+  if (type === RewardType.RemoveItem) return "Item";
   return type[0].toUpperCase() + type.slice(1);
 }
 
@@ -152,6 +154,7 @@ function skillXpDisplay(xp: number) {
   };
 }
 
+// Used for displaying costs, so random picks aren't resolved yet
 function effectLabel(effect: Effect) {
   if (effect.type === EffectType.Resource)
     return `${labelForType(effect.type)} (${effect.resourceType})`;
@@ -162,6 +165,9 @@ function effectLabel(effect: Effect) {
     return `xp for ${effect.skill}${effect.newLevel ? ` (now level ${effect.newLevel})` : ""}`;
   if (effect.type === EffectType.RemoveItems)
     return `Remove items (${effect.itemIds.join(", ") || "none"})`;
+  if (effect.type === EffectType.GainRandomItem) return `Gain a random item`;
+  if (effect.type === EffectType.RemoveRandomItem)
+    return `Remove a random item`;
   return labelForType(effect.type);
 }
 
@@ -170,7 +176,9 @@ function formatEffects(effects: Effect[]) {
     ? effects
         .map((effect) =>
           effect.type === EffectType.RemoveItems ||
-          effect.type === EffectType.ControlledTeleport
+          effect.type === EffectType.ControlledTeleport ||
+          effect.type === EffectType.RemoveRandomItem ||
+          effect.type === EffectType.GainRandomItem
             ? effectLabel(effect)
             : `-${effect.amount} ${effectLabel(effect)}`,
         )
@@ -182,6 +190,7 @@ function canAffordEffects(player: PlayerEntity, effects: Effect[]) {
   return effects.every((effect) => {
     switch (effect.type) {
       case EffectType.FreeXp:
+      case EffectType.GainRandomItem:
         return false;
       case EffectType.Gold:
         return player.gold >= effect.amount;
@@ -201,6 +210,8 @@ function canAffordEffects(player: PlayerEntity, effects: Effect[]) {
         const inventoryIds = new Set(player.inventory.map((item) => item.id));
         return effect.itemIds.every((itemId) => inventoryIds.has(itemId));
       }
+      case EffectType.RemoveRandomItem:
+        return player.inventory.length > 0;
     }
   });
 }
