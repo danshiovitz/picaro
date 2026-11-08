@@ -190,6 +190,14 @@ button {
   background: #563d18;
 }
 
+.encounter-pip.filled.positive {
+  background: #3c7cff;
+}
+
+.encounter-pip.filled.negative {
+  background: #c64d4d;
+}
+
 .play-card {
   box-sizing: border-box;
   width: 100%;

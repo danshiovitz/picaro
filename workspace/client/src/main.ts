@@ -1,6 +1,6 @@
 import { entityEntries, getField, hydrateEntity, setField } from "./entity";
 import { GameStore } from "./store";
-import { EffectType, RewardType } from "./types";
+import { EffectType, PenaltyType, RewardType } from "./types";
 import {
   activityErrorTitle,
   activityResultTitle,
@@ -30,6 +30,17 @@ const url = new URL(window.location.href);
 let playerId = url.searchParams.get("player") ?? "";
 const app = document.querySelector("#app")!;
 let activeEncounterId: string | null = null;
+
+window.addEventListener("error", (event) => {
+  console.error("[client error]", event.error ?? event.message);
+  if (event.error instanceof Error && event.error.stack)
+    console.error(event.error.stack);
+});
+window.addEventListener("unhandledrejection", (event) => {
+  console.error("[client unhandledrejection]", event.reason);
+  if (event.reason instanceof Error && event.reason.stack)
+    console.error(event.reason.stack);
+});
 
 type Point = { x: number; y: number };
 
@@ -108,7 +119,8 @@ async function apiJson<T>(
       specialActions,
     );
   } catch (err) {
-    console.error(err);
+    console.error("[client bootstrap] Failed to load game data");
+    console.error(err instanceof Error ? (err.stack ?? err) : err);
     app.innerHTML = `<main style="padding:24px"><h2>Unable to load game data</h2><p>${err instanceof Error ? err.message : String(err)}</p><p>Check that the API server is running on port 3001.</p></main>`;
   }
 })();
@@ -124,7 +136,8 @@ function labelForType(type: string) {
   if (type === RewardType.FreeXp) return "Free XP";
   if (type === RewardType.ControlledTeleport) return "Teleport";
   if (type === RewardType.GainItem) return "Item";
-  if (type === RewardType.RemoveItem) return "Item";
+  if (type === PenaltyType.RemoveItem) return "Item";
+  if (type === RewardType.QualityEncounter) return "Encounter";
   return type[0].toUpperCase() + type.slice(1);
 }
 
@@ -168,6 +181,7 @@ function effectLabel(effect: Effect) {
   if (effect.type === EffectType.GainRandomItem) return `Gain a random item`;
   if (effect.type === EffectType.RemoveRandomItem)
     return `Remove a random item`;
+  if (effect.type === EffectType.AddTableauCard) return "Add a tableau card";
   return labelForType(effect.type);
 }
 
@@ -178,7 +192,8 @@ function formatEffects(effects: Effect[]) {
           effect.type === EffectType.RemoveItems ||
           effect.type === EffectType.ControlledTeleport ||
           effect.type === EffectType.RemoveRandomItem ||
-          effect.type === EffectType.GainRandomItem
+          effect.type === EffectType.GainRandomItem ||
+          effect.type === EffectType.AddTableauCard
             ? effectLabel(effect)
             : `-${effect.amount} ${effectLabel(effect)}`,
         )
@@ -212,6 +227,8 @@ function canAffordEffects(player: PlayerEntity, effects: Effect[]) {
       }
       case EffectType.RemoveRandomItem:
         return player.inventory.length > 0;
+      case EffectType.AddTableauCard:
+        return true;
     }
   });
 }
@@ -221,10 +238,13 @@ function outcomeLine(
   criticalRewards: RewardType[],
   penalties: PenaltyType[],
 ) {
+  const rewardText = (item: RewardType) => `+${labelForType(item)}`;
+  const criticalRewardText = (item: RewardType) => `++${labelForType(item)}`;
+  const penaltyText = (item: PenaltyType) => `-${labelForType(item)}`;
   const parts = [
-    ...rewards.map((item) => `+${labelForType(item)}`),
-    ...criticalRewards.map((item) => `++${labelForType(item)}`),
-    ...penalties.map((item) => `-${labelForType(item)}`),
+    ...rewards.map(rewardText),
+    ...criticalRewards.map(criticalRewardText),
+    ...penalties.map(penaltyText),
   ];
   return `${parts.join(", ")}`;
 }
@@ -235,12 +255,31 @@ function skillLine(check: EncounterSkillCheck, showTarget = true) {
 
 type EncounterCard = TableauCard;
 
+function renderEncounterPips(difficulty: number, qualityMod = 0) {
+  const blackCount = Math.max(0, difficulty - Math.abs(qualityMod));
+  const coloredCount = Math.abs(qualityMod);
+  const emptyCount = Math.max(0, 5 - difficulty);
+  const colorClass =
+    qualityMod > 0 ? " positive" : qualityMod < 0 ? " negative" : "";
+  return [
+    ...Array.from(
+      { length: blackCount },
+      () => `<span class="encounter-pip filled" aria-hidden="true"></span>`,
+    ),
+    ...Array.from(
+      { length: coloredCount },
+      () =>
+        `<span class="encounter-pip filled${colorClass}" aria-hidden="true"></span>`,
+    ),
+    ...Array.from(
+      { length: emptyCount },
+      () => `<span class="encounter-pip" aria-hidden="true"></span>`,
+    ),
+  ].join("");
+}
+
 function renderEncounterCard(card: EncounterCard) {
-  const circles = Array.from(
-    { length: 5 },
-    (_, i) =>
-      `<span class="encounter-pip ${i < card.difficulty ? "filled" : ""}" aria-hidden="true"></span>`,
-  ).join("");
+  const circles = renderEncounterPips(card.difficulty, card.qualityMod ?? 0);
   const activeClass =
     card.id === activeEncounterId ? " active-tableau-encounter" : "";
   return `<article class="play-card encounter-card tableau-encounter${activeClass}" data-encounter-id="${esc(card.id)}">

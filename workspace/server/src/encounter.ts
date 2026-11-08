@@ -73,6 +73,7 @@ export function rollEncounterSkillChecks(
 export function instantiateEncounterTemplate(
   template: EncounterTemplate,
   player: PlayerEntity,
+  qualityModOverride: number | undefined = undefined,
 ): TableauCard {
   const nearbyHexes = hexesNearPlayer(player);
   const skillSource = template.skills.length > 0 ? template.skills : skillNames;
@@ -88,6 +89,7 @@ export function instantiateEncounterTemplate(
     regionDifficultyForHex(locationHex) +
     template.difficulty_mod +
     difficultySwing();
+  const qualityMod = qualityModOverride ?? difficultySwing();
   const successThreshold = 2;
   const criticalThreshold = 3;
   const failureThreshold = 3;
@@ -96,6 +98,7 @@ export function instantiateEncounterTemplate(
     title: template.title,
     location,
     difficulty,
+    qualityMod,
     successThreshold,
     criticalThreshold,
     failureThreshold,

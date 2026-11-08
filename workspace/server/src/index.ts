@@ -341,7 +341,9 @@ const server = http.createServer(async (req, res) => {
         message: error.message,
       });
     }
-    console.error(error);
+    console.error(
+      error instanceof Error ? (error.stack ?? error.message) : error,
+    );
     sendJson(res, 500, { error: "Internal server error" });
   }
 });

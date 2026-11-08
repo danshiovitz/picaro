@@ -27,7 +27,7 @@ export enum RewardType {
   FreeXp = "free_xp",
   ControlledTeleport = "controlled_teleport",
   GainItem = "gain_item",
-  RemoveItem = "remove_item",
+  QualityEncounter = "quality_encounter",
 }
 export enum PenaltyType {
   Gold = "gold",
@@ -35,6 +35,7 @@ export enum PenaltyType {
   Turns = "turns",
   Luck = "luck",
   Resource = "resource",
+  RemoveItem = "remove_item",
 }
 export enum EffectType {
   Gold = "gold",
@@ -49,7 +50,20 @@ export enum EffectType {
   RemoveItems = "remove_items",
   GainRandomItem = "gain_random_item",
   RemoveRandomItem = "remove_random_item",
+  AddTableauCard = "add_tableau_card",
 }
+
+export type EncounterSkillCheck = { name: string; target: number };
+export type EncounterTemplate = {
+  title: string;
+  difficulty_mod: number;
+  qualityMod?: number;
+  rewards: RewardType[];
+  criticalRewards: RewardType[];
+  penalties: PenaltyType[];
+  skills: string[];
+};
+
 export type Effect =
   | { type: EffectType.Gold; amount: number }
   | { type: EffectType.Reputation; amount: number }
@@ -71,16 +85,13 @@ export type Effect =
       quality: number;
       itemId?: string;
     }
-  | { type: EffectType.RemoveRandomItem; itemId?: string };
-export type EncounterSkillCheck = { name: string; target: number };
-export type EncounterTemplate = {
-  title: string;
-  difficulty_mod: number;
-  rewards: RewardType[];
-  criticalRewards: RewardType[];
-  penalties: PenaltyType[];
-  skills: string[];
-};
+  | { type: EffectType.RemoveRandomItem; itemId?: string }
+  | {
+      type: EffectType.AddTableauCard;
+      encounterTemplate?: EncounterTemplate;
+      qualityMod?: number;
+    };
+
 export type EncounterState = "active" | "lost" | "succeeded" | "critical";
 export type ActiveEncounterSkillCheck = {
   name: string;
@@ -95,6 +106,7 @@ export type TableauCard = {
   title: string;
   location: string;
   difficulty: number;
+  qualityMod: number;
   successThreshold: number;
   criticalThreshold?: number;
   failureThreshold: number;
@@ -145,6 +157,7 @@ export type ActiveEncounter = {
   criticalThreshold?: number;
   failureThreshold: number;
   difficulty: number;
+  qualityMod: number;
   numSuccesses: number;
   numFailures: number;
   nextPenalty?: PenaltyType;

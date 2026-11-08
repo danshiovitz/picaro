@@ -40,14 +40,19 @@ export async function renderEffectText(
     return `Removed: ${names.join(", ") || "none"}`;
   }
   if (effect.type === EffectType.GainRandomItem) {
-    const name =
-      (await resolveItemName?.(effect.itemId ?? "no id")) ?? "a random item";
-    return `Gained: ${name}`;
+    const name = effect.itemId
+      ? ((await resolveItemName?.(effect.itemId)) ?? effect.itemId)
+      : undefined;
+    return `Gained: ${name ? `a ${name}` : "a random item"}`;
   }
   if (effect.type === EffectType.RemoveRandomItem) {
-    const name =
-      (await resolveItemName?.(effect.itemId ?? "no id")) ?? "a random item";
-    return `Removed: ${name}`;
+    const name = effect.itemId
+      ? ((await resolveItemName?.(effect.itemId)) ?? effect.itemId)
+      : undefined;
+    return `Removed: ${name ? `a ${name}` : "a random item"}`;
+  }
+  if (effect.type === EffectType.AddTableauCard) {
+    return "Added tableau card";
   }
   return `${effect.amount >= 0 ? "+" : "-"}${Math.abs(effect.amount)} ${labelForType(effect.type)}`;
 }
@@ -79,5 +84,6 @@ function labelForType(type: string) {
   if (type === EffectType.ControlledTeleport) return "Teleport";
   if (type === EffectType.GainRandomItem) return "Item";
   if (type === EffectType.RemoveRandomItem) return "Item";
+  if (type === EffectType.AddTableauCard) return "Tableau Card";
   return type[0].toUpperCase() + type.slice(1);
 }

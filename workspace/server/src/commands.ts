@@ -212,6 +212,7 @@ function activeEncounterFor(
     criticalThreshold: card.criticalThreshold,
     failureThreshold: card.failureThreshold,
     difficulty: card.difficulty,
+    qualityMod: card.qualityMod,
     numSuccesses,
     numFailures,
     nextPenalty:
@@ -430,17 +431,19 @@ function resolveEncounterEffects(
   }
   const effects: Effect[] = [];
   const meetsFailureThreshold = active.numFailures >= active.failureThreshold;
+  const quality = active.difficulty + active.qualityMod;
   if (
     !meetsFailureThreshold &&
     active.numSuccesses >= active.successThreshold
   ) {
-    for (const reward of active.rewards) effects.push(...computeReward(reward));
+    for (const reward of active.rewards)
+      effects.push(...computeReward(reward, quality));
     if (
       typeof active.criticalThreshold === "number" &&
       active.numSuccesses >= active.criticalThreshold
     ) {
       for (const reward of active.criticalRewards)
-        effects.push(...computeCriticalReward(reward));
+        effects.push(...computeCriticalReward(reward, quality));
     }
   }
   for (const penalty of active.penalties)
@@ -491,15 +494,6 @@ function labelForReward(type: RewardType | PenaltyType) {
   if (type === RewardType.ControlledTeleport) return "Teleport";
   if (type === RewardType.GainItem) return "Item";
   if (type === PenaltyType.RemoveItem) return "Item";
-  return type[0].toUpperCase() + type.slice(1);
-}
-
-function labelForEffect(type: EffectType) {
-  if (type === EffectType.FreeXp) return "Free XP";
-  if (type === EffectType.ControlledTeleport) return "Teleport";
-  if (type === EffectType.SkillXp) return "Skill XP";
-  if (type === EffectType.GainRandomItem) return "Item";
-  if (type === EffectType.RemoveRandomItem) return "Item";
   return type[0].toUpperCase() + type.slice(1);
 }
 
@@ -635,6 +629,8 @@ function canAfford(player: PlayerEntity, cost: Effect[]) {
       case EffectType.RemoveRandomItem:
         if (getField(player, "inventory").length < 1) return false;
         break;
+      case EffectType.AddTableauCard:
+        return true;
     }
   }
   return true;
@@ -694,10 +690,20 @@ function applyEffects(
         if (item) effect.itemId = item.id;
         break;
       }
-      case EffectType.RemoveRandomItem:
+      case EffectType.RemoveRandomItem: {
         const item = removeRandomItem(state, player);
         if (item) effect.itemId = item.id;
         break;
+      }
+      case EffectType.AddTableauCard: {
+        const tableau = getPlayerTableau(state, player);
+        const template =
+          effect.encounterTemplate ?? getRng().pick(encounterTemplates);
+        tableau.push(
+          instantiateEncounterTemplate(template, player, effect.qualityMod),
+        );
+        break;
+      }
     }
   }
   if (frontQueue.length > 0) {
@@ -715,49 +721,60 @@ function payCost(state: ApiState, player: PlayerEntity, cost: Effect[]) {
       effect.type === EffectType.RemoveItems ||
       effect.type === EffectType.ControlledTeleport ||
       effect.type === EffectType.GainRandomItem ||
-      effect.type === EffectType.RemoveRandomItem
+      effect.type === EffectType.RemoveRandomItem ||
+      effect.type === EffectType.AddTableauCard
         ? effect
         : { ...effect, amount: -effect.amount },
     ),
   );
 }
 
-function computeReward(rewardType: RewardType): Effect[] {
+function computeReward(rewardType: RewardType, quality: number): Effect[] {
   switch (rewardType) {
     case RewardType.Gold:
-      return [{ type: EffectType.Gold, amount: 3 }];
+      return [{ type: EffectType.Gold, amount: 2 + Math.floor(quality / 2) }];
     case RewardType.Reputation:
-      return [{ type: EffectType.Reputation, amount: 1 }];
+      return [
+        { type: EffectType.Reputation, amount: 1 + Math.floor(quality / 4) },
+      ];
     case RewardType.Luck:
-      return [{ type: EffectType.Luck, amount: 1 }];
+      return [{ type: EffectType.Luck, amount: 1 + Math.floor(quality / 4) }];
     case RewardType.Resource:
-      return [resourceEffect(randomResourceType(), 1)];
+      return [
+        resourceEffect(randomResourceType(), 1 + Math.floor(quality / 3)),
+      ];
     case RewardType.FreeXp:
-      return [{ type: EffectType.FreeXp, amount: 5 }];
+      return [{ type: EffectType.FreeXp, amount: 5 + Math.floor(quality / 3) }];
     case RewardType.ControlledTeleport:
-      return [{ type: EffectType.ControlledTeleport, radius: 5 }];
+      return [
+        {
+          type: EffectType.ControlledTeleport,
+          radius: 5 + Math.floor(quality / 3),
+        },
+      ];
     case RewardType.GainItem:
-      return [{ type: EffectType.GainRandomItem, quality: 2 }];
+      return [
+        {
+          type: EffectType.GainRandomItem,
+          quality: 1 + Math.floor(quality / 3),
+        },
+      ];
+    case RewardType.QualityEncounter:
+      return [
+        {
+          type: EffectType.AddTableauCard,
+          encounterTemplate: undefined, // will do a regular job card
+          qualityMod: 3,
+        },
+      ];
   }
 }
 
-function computeCriticalReward(rewardType: RewardType): Effect[] {
-  switch (rewardType) {
-    case RewardType.Gold:
-      return [{ type: EffectType.Gold, amount: 4 }];
-    case RewardType.Reputation:
-      return [{ type: EffectType.Reputation, amount: 1 }];
-    case RewardType.Luck:
-      return [{ type: EffectType.Luck, amount: 1 }];
-    case RewardType.Resource:
-      return [resourceEffect(randomResourceType(), 2)];
-    case RewardType.FreeXp:
-      return [{ type: EffectType.FreeXp, amount: 5 }];
-    case RewardType.ControlledTeleport:
-      return [{ type: EffectType.ControlledTeleport, radius: 5 }];
-    case RewardType.GainItem:
-      return [{ type: EffectType.GainRandomItem, quality: 2 }];
-  }
+function computeCriticalReward(
+  rewardType: RewardType,
+  quality: number,
+): Effect[] {
+  return computeReward(rewardType, quality + 1);
 }
 
 function computePenalty(
@@ -971,6 +988,9 @@ export function scoutEntity(
   payCost(state, player, turnCost);
   const tableau = getPlayerTableau(state, player);
   tableau.splice(0, tableau.length);
+  // Make one encounter they scout guaranteed higher quality
+  let qmOverrides = getRng().shuffle([+2, undefined, undefined]);
+  fillTableau(tableau, encounterTemplates, player, qmOverrides);
   endTurn(state, player, "scout");
   return {
     title: "Scout Results",
@@ -1249,9 +1269,14 @@ export function fillTableau(
   tableau: TableauCard[],
   templates: EncounterTemplate[],
   player: PlayerEntity,
+  qualityMods: (number | undefined)[] = [],
 ) {
   while (tableau.length < 3 && templates.length > 0) {
     const template = getRng().pick(templates);
-    tableau.push(instantiateEncounterTemplate(template, player));
+    const qm =
+      tableau.length < qualityMods.length
+        ? qualityMods[tableau.length]
+        : undefined;
+    tableau.push(instantiateEncounterTemplate(template, player, qm));
   }
 }
