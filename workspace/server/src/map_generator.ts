@@ -775,7 +775,7 @@ function buildEmpire(seed: string): GeneratedWorld {
   const height = 30;
   const hexes = buildHexes(width, height);
   const hexByName = new Map(hexes.map((hex) => [hex.name, hex] as const));
-  const heightNoise = new PerlinNoise(`${seed}:empire:height`);
+  const heightNoise = new PerlinNoise(rng);
   const temperatureMap = new Map<string, Temperature>();
   const arcticTransitions = new Array<number>();
   const tropicalTransitions = new Array<number>();

@@ -43,7 +43,7 @@ import {
   rollEncounterSkillChecks,
 } from "./encounter.js";
 import { computeEffectiveValue } from "./rule.js";
-import { RNG } from "./random.js";
+import { getRng } from "./random.js";
 import { selectionDto } from "./selection.js";
 
 export class RulesViolation extends Error {
@@ -162,17 +162,16 @@ function encounterState(
   return "active" as const;
 }
 
-function randomPenalty(card: TableauCard, rng: RNG) {
-  return card.penalties.length > 0 ? rng.pick(card.penalties) : undefined;
+function randomPenalty(card: TableauCard) {
+  return card.penalties.length > 0 ? getRng().pick(card.penalties) : undefined;
 }
 
 function rollSkillChecks(
   player: PlayerEntity,
   checks: { name: string; target: number }[],
-  rng: RNG,
 ) {
   return checks.map((check): ActiveEncounterSkillCheck => {
-    const roll = rng.d10();
+    const roll = getRng().d10();
     const modifier = computeEffectiveValue(
       player,
       SectionType.skill,
@@ -193,9 +192,8 @@ function rollSkillChecks(
 function activeEncounterFor(
   player: PlayerEntity,
   card: TableauCard,
-  rng: RNG,
 ): ActiveEncounter {
-  const skillChecks = rollSkillChecks(player, card.skillChecks, rng);
+  const skillChecks = rollSkillChecks(player, card.skillChecks);
   const numSuccesses = skillChecks.filter((check) => check.success).length;
   const numFailures = skillChecks.length - numSuccesses;
   const state = encounterState(
@@ -218,7 +216,7 @@ function activeEncounterFor(
     numFailures,
     nextPenalty:
       state === "active" || state === "succeeded"
-        ? randomPenalty(card, rng)
+        ? randomPenalty(card)
         : undefined,
     rewards: card.rewards,
     criticalRewards: card.criticalRewards,
@@ -355,8 +353,8 @@ function freeXpSelection(
   return selection;
 }
 
-function randomResourceType(rng: RNG) {
-  return rng.pick(resourceTypes);
+function randomResourceType() {
+  return getRng().pick(resourceTypes);
 }
 
 function effectiveSkills(player: PlayerEntity) {
@@ -424,7 +422,6 @@ function resolveEncounterEffects(
   state: ApiState,
   player: PlayerEntity,
   active: ActiveEncounter,
-  rng: RNG,
   conceding = false,
 ) {
   if (conceding) {
@@ -437,18 +434,17 @@ function resolveEncounterEffects(
     !meetsFailureThreshold &&
     active.numSuccesses >= active.successThreshold
   ) {
-    for (const reward of active.rewards)
-      effects.push(...computeReward(reward, rng));
+    for (const reward of active.rewards) effects.push(...computeReward(reward));
     if (
       typeof active.criticalThreshold === "number" &&
       active.numSuccesses >= active.criticalThreshold
     ) {
       for (const reward of active.criticalRewards)
-        effects.push(...computeCriticalReward(reward, rng));
+        effects.push(...computeCriticalReward(reward));
     }
   }
   for (const penalty of active.penalties)
-    effects.push(...computePenalty(penalty, active.numFailures, player, rng));
+    effects.push(...computePenalty(penalty, active.numFailures, player));
 
   const failedChecks = active.skillChecks.filter((check) => !check.success);
   const succeededChecks = active.skillChecks.filter((check) => check.success);
@@ -456,12 +452,14 @@ function resolveEncounterEffects(
     failedChecks.length >= 3
       ? failedChecks.length === 3
         ? failedChecks
-        : rng.shuffle(failedChecks).slice(0, 3)
+        : getRng().shuffle(failedChecks).slice(0, 3)
       : failedChecks;
   const selectedSucceededChecks =
     failedChecks.length >= 3
       ? []
-      : rng.shuffle(succeededChecks).slice(0, 3 - failedChecks.length);
+      : getRng()
+          .shuffle(succeededChecks)
+          .slice(0, 3 - failedChecks.length);
 
   const xpEffects: Effect[] = [];
   const runningSkillXp = { ...getField(player, "skill_xp") };
@@ -490,7 +488,7 @@ function resolveEncounterEffects(
 
 function labelForReward(type: RewardType | PenaltyType) {
   if (type === RewardType.FreeXp) return "Free XP";
-  if (type === RewardType.ControlledTeleport) return "Controlled Teleport";
+  if (type === RewardType.ControlledTeleport) return "Teleport";
   if (type === RewardType.GainItem) return "Item";
   if (type === PenaltyType.RemoveItem) return "Item";
   return type[0].toUpperCase() + type.slice(1);
@@ -498,7 +496,7 @@ function labelForReward(type: RewardType | PenaltyType) {
 
 function labelForEffect(type: EffectType) {
   if (type === EffectType.FreeXp) return "Free XP";
-  if (type === EffectType.ControlledTeleport) return "Controlled Teleport";
+  if (type === EffectType.ControlledTeleport) return "Teleport";
   if (type === EffectType.SkillXp) return "Skill XP";
   if (type === EffectType.GainRandomItem) return "Item";
   if (type === EffectType.RemoveRandomItem) return "Item";
@@ -577,7 +575,7 @@ function gainRandomItem(
   if (randomItemTable.length === 0) return undefined;
   const roll = Math.min(
     randomItemTable.length,
-    Math.max(1, state.rng.int(randomItemTable.length) + 1 + quality),
+    Math.max(1, getRng().int(randomItemTable.length) + 1 + quality),
   );
   const itemName = randomItemTable[roll - 1];
   const item = createEntity<Item>("item", randomUUID(), { name: itemName });
@@ -589,7 +587,7 @@ function gainRandomItem(
 function removeRandomItem(state: ApiState, player: PlayerEntity) {
   const inventory = getField(player, "inventory");
   if (inventory.length === 0) return undefined;
-  const index = state.rng.int(inventory.length);
+  const index = getRng().int(inventory.length);
   const [item] = inventory.splice(index, 1);
   return item;
 }
@@ -724,7 +722,7 @@ function payCost(state: ApiState, player: PlayerEntity, cost: Effect[]) {
   );
 }
 
-function computeReward(rewardType: RewardType, rng: RNG): Effect[] {
+function computeReward(rewardType: RewardType): Effect[] {
   switch (rewardType) {
     case RewardType.Gold:
       return [{ type: EffectType.Gold, amount: 3 }];
@@ -733,7 +731,7 @@ function computeReward(rewardType: RewardType, rng: RNG): Effect[] {
     case RewardType.Luck:
       return [{ type: EffectType.Luck, amount: 1 }];
     case RewardType.Resource:
-      return [resourceEffect(randomResourceType(rng), 1)];
+      return [resourceEffect(randomResourceType(), 1)];
     case RewardType.FreeXp:
       return [{ type: EffectType.FreeXp, amount: 5 }];
     case RewardType.ControlledTeleport:
@@ -743,7 +741,7 @@ function computeReward(rewardType: RewardType, rng: RNG): Effect[] {
   }
 }
 
-function computeCriticalReward(rewardType: RewardType, rng: RNG): Effect[] {
+function computeCriticalReward(rewardType: RewardType): Effect[] {
   switch (rewardType) {
     case RewardType.Gold:
       return [{ type: EffectType.Gold, amount: 4 }];
@@ -752,7 +750,7 @@ function computeCriticalReward(rewardType: RewardType, rng: RNG): Effect[] {
     case RewardType.Luck:
       return [{ type: EffectType.Luck, amount: 1 }];
     case RewardType.Resource:
-      return [resourceEffect(randomResourceType(rng), 2)];
+      return [resourceEffect(randomResourceType(), 2)];
     case RewardType.FreeXp:
       return [{ type: EffectType.FreeXp, amount: 5 }];
     case RewardType.ControlledTeleport:
@@ -766,7 +764,6 @@ function computePenalty(
   penaltyType: PenaltyType,
   numFailures: number,
   player: PlayerEntity,
-  rng: RNG,
 ): Effect[] {
   switch (penaltyType) {
     case PenaltyType.Gold:
@@ -791,7 +788,7 @@ function computePenalty(
       const removed = new Map<string, number>();
       let available = pool.length;
       const chooseResource = () => {
-        let pick = rng.int(available);
+        let pick = getRng().int(available);
         for (const [resourceType, amount] of remaining) {
           if (amount <= 0) continue;
           if (pick < amount) return resourceType;
@@ -958,7 +955,7 @@ function endTurn(state: ApiState, player: PlayerEntity, reason: string) {
   }
   const nextTableau = getPlayerTableau(state, player);
   const beforeFill = nextTableau.length;
-  fillTableau(nextTableau, encounterTemplates, player, state.rng);
+  fillTableau(nextTableau, encounterTemplates, player);
   if (nextTableau.length !== beforeFill) changed = true;
   return changed;
 }
@@ -1040,8 +1037,8 @@ export function travelEntity(
   const destination = route[route.length - 1];
   const encounterRoute = route.slice(1);
   const encounterHexName =
-    encounterRoute.length > 0 && state.rng.next() < 0.5
-      ? state.rng.pick(encounterRoute)
+    encounterRoute.length > 0 && getRng().next() < 0.5
+      ? getRng().pick(encounterRoute)
       : undefined;
   if (encounterHexName) {
     const encounterHex = state.hexByName.get(encounterHexName);
@@ -1052,11 +1049,11 @@ export function travelEntity(
     const templates = encounterHex
       ? (terrainEncounterTemplates[encounterHex.terrain] ?? encounterTemplates)
       : encounterTemplates;
-    const template = state.rng.pick(templates);
+    const template = getRng().pick(templates);
     const encounterCard = instantiateEncounterTemplate(template, player);
     encounterCard.location = encounterHexName;
     const active = {
-      ...activeEncounterFor(player, encounterCard, state.rng),
+      ...activeEncounterFor(player, encounterCard),
       tableauId: undefined,
     };
     state.currentActivities.set(player.id, {
@@ -1135,7 +1132,7 @@ export function runEncounter(
   const tableau = getPlayerTableau(state, player);
   const encounter = tableau.find((card) => card.id === request.encounterId);
   if (!encounter) throw new RulesViolation("Encounter not found");
-  const active = activeEncounterFor(player, encounter, state.rng);
+  const active = activeEncounterFor(player, encounter);
   state.currentActivities.set(player.id, {
     type: "encounter",
     encounter: active,
@@ -1174,13 +1171,8 @@ export function continueEncounter(
   const nextSkillTemplates = rollEncounterSkillChecks(
     active.skillSource,
     active.difficulty,
-    state.rng,
   );
-  const nextSkillChecks = rollSkillChecks(
-    player,
-    nextSkillTemplates,
-    state.rng,
-  );
+  const nextSkillChecks = rollSkillChecks(player, nextSkillTemplates);
   console.log(
     `[continueEncounter] ${getField(player, "name")} ${active.id} new checks: ${nextSkillChecks
       .map(
@@ -1204,11 +1196,8 @@ export function continueEncounter(
   );
   if (active.state === "active" || active.state === "succeeded") {
     active.nextPenalty = encounter
-      ? randomPenalty(encounter, state.rng)
-      : randomPenalty(
-          { penalties: active.penalties } as TableauCard,
-          state.rng,
-        );
+      ? randomPenalty(encounter)
+      : randomPenalty({ penalties: active.penalties } as TableauCard);
   }
   return {
     effects: [],
@@ -1243,7 +1232,6 @@ export function finishEncounter(
     state,
     player,
     active,
-    state.rng,
     request.conceding,
   );
   state.currentActivities.delete(player.id);
@@ -1261,10 +1249,9 @@ export function fillTableau(
   tableau: TableauCard[],
   templates: EncounterTemplate[],
   player: PlayerEntity,
-  rng: RNG,
 ) {
   while (tableau.length < 3 && templates.length > 0) {
-    const template = rng.pick(templates);
+    const template = getRng().pick(templates);
     tableau.push(instantiateEncounterTemplate(template, player));
   }
 }

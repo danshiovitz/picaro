@@ -1,18 +1,29 @@
 import crypto from "node:crypto";
 
 export class RNG {
-  private state: number;
-  constructor(seed: string) {
-    this.state = this.hashSeed(seed) || 0x1a2b3c4d;
+  private state: number | undefined;
+  constructor(seed: string | undefined = undefined) {
+    this.state = seed ? this.hashSeed(seed) : undefined;
   }
   next() {
-    let t = (this.state += 0x6d2b79f5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    if (this.state) {
+      let t = (this.state += 0x6d2b79f5);
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    } else {
+      const array = new Uint32Array(1);
+      crypto.getRandomValues(array);
+      // Divide by 2^32 (4294967296) for a [0, 1) range
+      return array[0] / 0x100000000;
+    }
   }
   int(max: number) {
-    return Math.floor(this.next() * max);
+    if (this.state) {
+      return Math.floor(this.next() * max);
+    } else {
+      return crypto.randomInt(max);
+    }
   }
   range(min: number, max: number) {
     return min + this.int(max - min + 1);
@@ -42,4 +53,14 @@ export class RNG {
     }
     return h >>> 0;
   }
+}
+
+let globalRng: RNG = new RNG();
+
+export function setRng(rng: RNG) {
+  globalRng = rng;
+}
+
+export function getRng() {
+  return globalRng;
 }

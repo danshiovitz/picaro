@@ -155,7 +155,6 @@ export type ApiState = {
   currentActivities: Map<string, PendingActivity>;
   pendingWork: Map<string, PendingActivity[]>;
   tableau: Map<string, TableauCard[]>;
-  rng: RNG;
 };
 
 export type SpecialAction = {

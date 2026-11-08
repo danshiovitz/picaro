@@ -22,7 +22,7 @@ import {
   encounterTemplates,
 } from "./data.js";
 import { loadOrGenerateWorld, MapGeneratorName } from "./map_generator.js";
-import { RNG } from "./random.js";
+import { getRng } from "./random.js";
 import {
   RulesViolation,
   campEntity,
@@ -69,7 +69,6 @@ const playerTokens = [1, 2, 3, 4].map((i) => ({
   entityName: `Player ${i}`,
   icon: `player${i}`,
 }));
-const playerPlacementRng = new RNG(`${defaultSeed}:players`);
 
 function clearPlayerTokens() {
   for (const hex of hexes)
@@ -79,11 +78,12 @@ function clearPlayerTokens() {
 }
 
 function placePlayersAfterLoad() {
+  const rng = getRng();
   clearPlayerTokens();
   const used = new Set<number>();
   const place = (tokenId: string, index: number | undefined) => {
-    let idx = index ?? playerPlacementRng.int(hexes.length);
-    while (used.has(idx)) idx = playerPlacementRng.int(hexes.length);
+    let idx = index ?? rng.int(hexes.length);
+    while (used.has(idx)) idx = rng.int(hexes.length);
     used.add(idx);
     hexes[idx].tokens.push(tokenId);
   };
@@ -159,11 +159,10 @@ for (const token of playerTokens) {
 }
 const pendingWork = new Map<string, PendingActivity[]>();
 const tableau = new Map<string, TableauCard[]>();
-const encounterRng = new RNG(`${defaultSeed}:encounters`);
-setEncounterContext({ hexes, regions, rng: encounterRng });
+setEncounterContext({ hexes, regions });
 for (const player of entityStore.getBySchema<PlayerEntity>("player")) {
   const playerTableau: TableauCard[] = [];
-  fillTableau(playerTableau, encounterTemplates, player, encounterRng);
+  fillTableau(playerTableau, encounterTemplates, player);
   tableau.set(player.id, playerTableau);
 }
 const currentActivities = new Map<string, PendingActivity>();
@@ -177,7 +176,6 @@ const apiState: ApiState = {
   currentActivities,
   pendingWork,
   tableau,
-  rng: encounterRng,
 };
 
 function sendJson(res: http.ServerResponse, status: number, data: unknown) {

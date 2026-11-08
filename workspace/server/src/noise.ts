@@ -2,8 +2,7 @@ import { RNG } from "./random.js";
 
 export class PerlinNoise {
   private perm: number[];
-  constructor(seed: string) {
-    const rng = new RNG(seed);
+  constructor(rng: RNG) {
     const p = [...Array(256).keys()];
     for (let i = p.length - 1; i > 0; i--) {
       const j = rng.int(i + 1);

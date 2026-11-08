@@ -122,7 +122,7 @@ function esc(value: unknown) {
 
 function labelForType(type: string) {
   if (type === RewardType.FreeXp) return "Free XP";
-  if (type === RewardType.ControlledTeleport) return "Controlled Teleport";
+  if (type === RewardType.ControlledTeleport) return "Teleport";
   if (type === RewardType.GainItem) return "Item";
   if (type === RewardType.RemoveItem) return "Item";
   return type[0].toUpperCase() + type.slice(1);

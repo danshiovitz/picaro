@@ -13,38 +13,27 @@ import { generalPenaltyTypes, generalRewardTypes, skillNames } from "./data.js";
 import { hexDistance } from "./hexmap.js";
 import { getField } from "./entity.js";
 import { computeEffectiveValue } from "./rule.js";
-import { RNG } from "./random.js";
+import { getRng } from "./random.js";
 
 let encounterHexes: Hex[] = [];
 let encounterRegions: Region[] = [];
-let encounterRng = new RNG("encounter");
 
 export function setEncounterContext(context: {
   hexes: Hex[];
   regions: Region[];
-  rng: RNG;
 }) {
   encounterHexes = context.hexes;
   encounterRegions = context.regions;
-  encounterRng = context.rng;
 }
 
-function randomPick<T>(items: T[], rng = encounterRng) {
-  return rng.pick(items);
-}
-
-function pickTemplateOrGeneral<T>(
-  items: T[],
-  generalItems: T[],
-  rng = encounterRng,
-) {
-  return items.length > 0 && rng.next() < 0.8
+function pickTemplateOrGeneral<T>(items: T[], generalItems: T[]) {
+  return items.length > 0 && getRng().next() < 0.8
     ? [...items]
-    : [rng.pick(generalItems)];
+    : [getRng().pick(generalItems)];
 }
 
-function difficultySwing(rng = encounterRng) {
-  return randomPick([0, 0, 0, 0, 0, 0, 1, 1, -1, -1, 2, -2], rng);
+function difficultySwing() {
+  return getRng().pick([0, 0, 0, 0, 0, 0, 1, 1, -1, -1, 2, -2]);
 }
 
 function hexesNearPlayer(player: PlayerEntity) {
@@ -70,13 +59,12 @@ function regionDifficultyForHex(hex: Hex | undefined) {
 export function rollEncounterSkillChecks(
   skillSource: string[],
   difficulty: number,
-  rng = encounterRng,
 ): EncounterSkillCheck[] {
   return [0, 1, 2].map(() => {
-    const skillPool = rng.next() < 0.9 ? skillSource : skillNames;
-    const target = 4 + difficulty + difficultySwing(rng);
+    const skillPool = getRng().next() < 0.9 ? skillSource : skillNames;
+    const target = 4 + difficulty + difficultySwing();
     return {
-      name: randomPick(skillPool, rng),
+      name: getRng().pick(skillPool),
       target,
     };
   });
@@ -93,7 +81,7 @@ export function instantiateEncounterTemplate(
     nearbyHexes.length > 0 ? nearbyHexes : encounterHexes;
   const location =
     locationCandidates.length > 0
-      ? randomPick(locationCandidates).name
+      ? getRng().pick(locationCandidates).name
       : getField(player, "location");
   const locationHex = encounterHexes.find((hex) => hex.name === location);
   const difficulty =

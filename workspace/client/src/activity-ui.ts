@@ -76,7 +76,7 @@ export async function renderActivityLines(
 
 function labelForType(type: string) {
   if (type === EffectType.FreeXp) return "Free XP";
-  if (type === EffectType.ControlledTeleport) return "Controlled Teleport";
+  if (type === EffectType.ControlledTeleport) return "Teleport";
   if (type === EffectType.GainRandomItem) return "Item";
   if (type === EffectType.RemoveRandomItem) return "Item";
   return type[0].toUpperCase() + type.slice(1);
