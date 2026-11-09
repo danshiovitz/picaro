@@ -10,10 +10,10 @@ import {
   TableauCard,
 } from "./types.js";
 import { generalPenaltyTypes, generalRewardTypes, skillNames } from "./data.js";
-import { hexDistance } from "./hexmap.js";
+import { hexDistance } from "@common/hexmap.js";
 import { getField } from "./entity.js";
 import { computeEffectiveValue } from "./rule.js";
-import { getRng } from "./random.js";
+import { getRng } from "@common/random.js";
 
 let encounterHexes: Hex[] = [];
 let encounterRegions: Region[] = [];

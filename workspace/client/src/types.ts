@@ -1,170 +1,52 @@
-import type { Entity, EntityOf } from "./schemas";
+import type {
+  ActiveEncounter as CommonActiveEncounter,
+  ActiveEncounterSkillCheck as CommonActiveEncounterSkillCheck,
+  ActivityNextActive as CommonActivityNextActive,
+  ActivityResult as CommonActivityResult,
+  Claim as CommonClaim,
+  Condition as CommonCondition,
+  EncounterSkillCheck,
+  EncounterTemplate,
+  Effect,
+  GameData as CommonGameData,
+  Hex as CommonHex,
+  Item as CommonItem,
+  PlayerEntity as CommonPlayerEntity,
+  PlayerSummary as CommonPlayerSummary,
+  Region as CommonRegion,
+  SelectionBase,
+  SelectionChoice as CommonSelectionChoice,
+  SpecialAction as CommonSpecialAction,
+  TableauCard as CommonTableauCard,
+  TableauData as CommonTableauData,
+  Terrain as CommonTerrain,
+  Token as CommonToken,
+} from "../../common/src/types.js";
+import type { Entity as CommonEntity } from "../../common/src/schemas.js";
 
-export type Terrain = { name: string; color: string; icon: string };
-export type Region = EntityOf<"region">;
-export type Claim = { name: string; icon: string };
-export type Token = EntityOf<"city">;
-export type Item = EntityOf<"item">;
-export type Condition = EntityOf<"condition">;
-export type Hex = EntityOf<"hex">;
-export type PlayerEntity = EntityOf<"player">;
-export type PlayerSummary = { id: string; name: string };
-export type GameData = {
-  hexes: Hex[];
-  terrains: Terrain[];
-  regions: Region[];
-  claims: Claim[];
-  tokens: Token[];
-  players: PlayerSummary[];
-  resourceTypes: string[];
-  entities?: Entity[];
+export type Entity = CommonEntity;
+export type Terrain = CommonTerrain;
+export type Region = CommonRegion;
+export type Claim = CommonClaim;
+export type Token = CommonToken;
+export type Item = CommonItem;
+export type Condition = CommonCondition;
+export type Hex = CommonHex;
+export type PlayerEntity = CommonPlayerEntity & {
+  skills: Record<string, number>;
 };
-export enum RewardType {
-  Gold = "gold",
-  Reputation = "reputation",
-  Luck = "luck",
-  Resource = "resource",
-  FreeXp = "free_xp",
-  ControlledTeleport = "controlled_teleport",
-  GainItem = "gain_item",
-  QualityEncounter = "quality_encounter",
-}
-export enum PenaltyType {
-  Gold = "gold",
-  Health = "health",
-  Turns = "turns",
-  Luck = "luck",
-  Resource = "resource",
-  RemoveItem = "remove_item",
-}
-export enum EffectType {
-  Gold = "gold",
-  Reputation = "reputation",
-  Health = "health",
-  Turns = "turns",
-  Luck = "luck",
-  Resource = "resource",
-  FreeXp = "free_xp",
-  ControlledTeleport = "controlled_teleport",
-  SkillXp = "skill_xp",
-  RemoveItems = "remove_items",
-  GainRandomItem = "gain_random_item",
-  RemoveRandomItem = "remove_random_item",
-  AddTableauCard = "add_tableau_card",
-}
-
-export type EncounterSkillCheck = { name: string; target: number };
-export type EncounterTemplate = {
-  title: string;
-  difficulty_mod: number;
-  qualityMod?: number;
-  rewards: RewardType[];
-  criticalRewards: RewardType[];
-  penalties: PenaltyType[];
-  skills: string[];
-};
-
-export type Effect =
-  | { type: EffectType.Gold; amount: number }
-  | { type: EffectType.Reputation; amount: number }
-  | { type: EffectType.Health; amount: number }
-  | { type: EffectType.Turns; amount: number }
-  | { type: EffectType.Luck; amount: number }
-  | { type: EffectType.Resource; resourceType: string; amount: number }
-  | { type: EffectType.FreeXp; amount: number }
-  | { type: EffectType.ControlledTeleport; radius: number }
-  | {
-      type: EffectType.SkillXp;
-      skill: string;
-      amount: number;
-      newLevel?: number;
-    }
-  | { type: EffectType.RemoveItems; itemIds: string[] }
-  | {
-      type: EffectType.GainRandomItem;
-      quality: number;
-      itemId?: string;
-    }
-  | { type: EffectType.RemoveRandomItem; itemId?: string }
-  | {
-      type: EffectType.AddTableauCard;
-      encounterTemplate?: EncounterTemplate;
-      qualityMod?: number;
-    };
+export type PlayerSummary = CommonPlayerSummary;
+export type GameData = CommonGameData;
+export { RewardType, PenaltyType, EffectType } from "../../common/src/types.js";
+export type { EncounterSkillCheck, EncounterTemplate, Effect };
 
 export type EncounterState = "active" | "lost" | "succeeded" | "critical";
-export type ActiveEncounterSkillCheck = {
-  name: string;
-  target: number;
-  roll: number;
-  modifier: number;
-  total: number;
-  success: boolean;
-};
-export type TableauCard = {
-  id: string;
-  title: string;
-  location: string;
-  difficulty: number;
-  qualityMod: number;
-  successThreshold: number;
-  criticalThreshold?: number;
-  failureThreshold: number;
-  rewards: RewardType[];
-  criticalRewards: RewardType[];
-  penalties: PenaltyType[];
-  skillSource: string[];
-  skillChecks: EncounterSkillCheck[];
-};
-export type TableauData = { encounters: TableauCard[] };
-export type SpecialAction = {
-  id: string;
-  name: string;
-  locations?: string[];
-  cost: Effect[];
-};
-export type SelectionChoice = {
-  description: string;
-  data: string;
-  index: number;
-};
-export type Selection = {
-  id: string;
-  title: string;
-  description?: string;
-  choices: SelectionChoice[];
-  minChoices?: number;
-  maxChoices?: number;
-  useDropdown?: boolean;
-  hexSelection?: { originHex: string; radius: number };
-};
-export type ActivityNextActive =
-  | { type: "encounter"; encounter: ActiveEncounter }
-  | { type: "selection"; selection: Selection };
-export type ActivityResult = {
-  title?: string;
-  flavorText?: string;
-  effects: Effect[];
-  implicitEffects?: Effect[];
-  nextActive?: ActivityNextActive;
-};
-export type ActiveEncounter = {
-  id: string;
-  tableauId?: string;
-  title: string;
-  state: EncounterState;
-  successThreshold: number;
-  criticalThreshold?: number;
-  failureThreshold: number;
-  difficulty: number;
-  qualityMod: number;
-  numSuccesses: number;
-  numFailures: number;
-  nextPenalty?: PenaltyType;
-  rewards: RewardType[];
-  criticalRewards: RewardType[];
-  penalties: PenaltyType[];
-  skillChecks: ActiveEncounterSkillCheck[];
-  skillSource: string[];
-  currentSkillChecks: ActiveEncounterSkillCheck[];
-};
+export type ActiveEncounterSkillCheck = CommonActiveEncounterSkillCheck;
+export type TableauCard = CommonTableauCard;
+export type TableauData = CommonTableauData;
+export type SpecialAction = CommonSpecialAction;
+export type SelectionChoice = CommonSelectionChoice;
+export type Selection = SelectionBase;
+export type ActivityNextActive = CommonActivityNextActive<Selection>;
+export type ActivityResult = CommonActivityResult<Selection>;
+export type ActiveEncounter = CommonActiveEncounter;

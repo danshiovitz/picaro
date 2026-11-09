@@ -10,8 +10,8 @@ import {
   RegionEntity,
 } from "./types.js";
 import { createEntity, hydrateEntity, serializeEntity } from "./entity.js";
-import { RNG } from "./random.js";
-import { PerlinNoise, noiseValue } from "./noise.js";
+import { RNG } from "@common/random.js";
+import { PerlinNoise, noiseValue } from "@common/noise.js";
 import {
   hexName,
   hexDirs,
@@ -20,7 +20,7 @@ import {
   shortestHexPath,
   getNeighborIndexes,
   hexDistance,
-} from "./hexmap.js";
+} from "@common/hexmap.js";
 import { claims, makeCityEntities } from "./data.js";
 
 export type MapGeneratorName = "allRandom" | "empire";

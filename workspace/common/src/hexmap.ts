@@ -1,16 +1,4 @@
-import {
-  Terrain,
-  Region,
-  Claim,
-  Token,
-  Hex,
-  PlayerEntity,
-  EncounterSkillCheck,
-  ActiveEncounterSkillCheck,
-  TableauCard,
-  ActiveEncounter,
-  AxialPoint,
-} from "./types.js";
+import type { AxialPoint } from "./types.js";
 import { RNG } from "./random.js";
 
 function rowLabel(index: number): string {
@@ -20,7 +8,10 @@ function rowLabel(index: number): string {
   return `${letter}${letter}`;
 }
 
-export function hexDistance(a: Hex, b: Hex) {
+export type HexLike = { q: number; r: number };
+export type GridHexLike = HexLike & { x: number; y: number };
+
+export function hexDistance(a: HexLike, b: HexLike) {
   return (
     (Math.abs(a.q - b.q) +
       Math.abs(a.q + a.r - b.q - b.r) +
@@ -109,7 +100,7 @@ export function sharedHexEdge(
 }
 
 export function getNeighborIndexes(
-  hexes: Hex[],
+  hexes: HexLike[],
   indexByCoord: Map<string, number>,
   index: number,
 ): number[] {
@@ -125,7 +116,7 @@ export function getNeighborIndexes(
 }
 
 export function shortestHexPath(
-  hexes: Hex[],
+  hexes: HexLike[],
   indexByCoord: Map<string, number>,
   startIndex: number,
   endIndex: number,
@@ -161,10 +152,10 @@ export function shortestHexPath(
 
 type Wall = "top" | "right" | "bottom" | "left";
 
-export function pickRandomWallPoint(hexes: Hex[], rng: RNG): number {
+export function pickRandomWallPoint(hexes: GridHexLike[], rng: RNG): number {
   const walls: Wall[] = ["top", "right", "bottom", "left"];
 
-  function wallFor(hex: Hex): Wall[] {
+  function wallFor(hex: GridHexLike): Wall[] {
     const minX = Math.min(...hexes.map((h) => h.x));
     const maxX = Math.max(...hexes.map((h) => h.x));
     const minY = Math.min(...hexes.map((h) => h.y));
@@ -201,7 +192,7 @@ export function pickRandomWallPoint(hexes: Hex[], rng: RNG): number {
 }
 
 export function pickRandomWallPath(
-  hexes: Hex[],
+  hexes: GridHexLike[],
   indexByCoord: Map<string, number>,
   rng: RNG,
 ): number[] {

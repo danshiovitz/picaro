@@ -5,6 +5,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 RUN npm install -g --ignore-scripts prettier
+RUN npm install -g --ignore-scripts tsc-alias
 RUN pi update
 
 WORKDIR /workspace

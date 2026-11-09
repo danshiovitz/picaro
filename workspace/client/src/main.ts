@@ -17,7 +17,6 @@ import type {
   Hex,
   Condition,
   Item,
-  PenaltyType,
   PlayerEntity,
   Selection,
   SpecialAction,
@@ -457,6 +456,7 @@ function render(
     "#activity-panel-content",
   ) as HTMLElement;
   const tableauEl = document.querySelector(".tableau") as HTMLElement;
+  const zoomLabel = document.querySelector("#z") as HTMLElement | null;
   const actionButtons = [
     ...document.querySelectorAll(".action-button"),
   ] as HTMLButtonElement[];
@@ -990,16 +990,18 @@ function render(
   }
 
   function renderSkills(
-    skills: Record<string, number>,
-    skillXp: Record<string, number>,
+    skills: Record<string, number> | undefined,
+    skillXp: Record<string, number> | undefined,
   ) {
-    const visibleSkills = Object.entries(skills)
+    const safeSkills = skills ?? {};
+    const safeSkillXp = skillXp ?? {};
+    const visibleSkills = Object.entries(safeSkills)
       .sort(([a], [b]) => a.localeCompare(b))
       .filter(([, value]) => !hideZeroSkills || value !== 0);
     return visibleSkills.length
       ? `<ul class="skill-list">${visibleSkills
           .map(([name, value]) => {
-            const xp = skillXp[name] ?? 0;
+            const xp = safeSkillXp[name] ?? 0;
             const progress = skillXpDisplay(xp);
             const fill = Math.max(0, Math.min(1, progress.fill));
             return `<li class="skill-row"><div class="skill-top-row"><span class="skill-name">${esc(name)}</span><span class="skill-value">${esc(value)}</span></div><div class="skill-bottom-row"><span class="skill-bar" aria-hidden="true"><span class="skill-bar-fill" style="width: ${Math.round(fill * 100)}%"></span></span><span class="skill-xp-text">${esc(progress.text)}</span></div></li>`;
@@ -1548,7 +1550,7 @@ function render(
   }
 
   function draw() {
-    document.querySelector("#z")!.textContent = `${Math.round(zoom * 100)}%`;
+    if (zoomLabel) zoomLabel.textContent = `${Math.round(zoom * 100)}%`;
     const borderCheckbox = document.querySelector(
       "#show-region-borders",
     ) as HTMLInputElement | null;

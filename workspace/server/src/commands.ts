@@ -28,7 +28,7 @@ import {
 import { createEntity, getField, serializeEntity, setField } from "./entity.js";
 import { randomUUID } from "node:crypto";
 
-import { hexDistance } from "./hexmap.js";
+import { hexDistance } from "@common/hexmap.js";
 import {
   terrainSpecs,
   claims,
@@ -43,7 +43,7 @@ import {
   rollEncounterSkillChecks,
 } from "./encounter.js";
 import { computeEffectiveValue } from "./rule.js";
-import { getRng } from "./random.js";
+import { getRng } from "@common/random.js";
 import { selectionDto } from "./selection.js";
 
 export class RulesViolation extends Error {

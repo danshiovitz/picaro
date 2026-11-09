@@ -4,4 +4,5 @@ node_modules/
 workspace/client/dist/
 workspace/server/data/
 workspace/server/dist/
+workspace/data/
 

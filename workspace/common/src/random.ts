@@ -14,7 +14,6 @@ export class RNG {
     } else {
       const array = new Uint32Array(1);
       crypto.getRandomValues(array);
-      // Divide by 2^32 (4294967296) for a [0, 1) range
       return array[0] / 0x100000000;
     }
   }

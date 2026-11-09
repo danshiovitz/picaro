@@ -22,7 +22,7 @@ import {
   encounterTemplates,
 } from "./data.js";
 import { loadOrGenerateWorld, MapGeneratorName } from "./map_generator.js";
-import { getRng } from "./random.js";
+import { getRng } from "@common/random.js";
 import {
   RulesViolation,
   campEntity,
