@@ -12,8 +12,11 @@ import type {
   GameData as CommonGameData,
   Hex as CommonHex,
   Item as CommonItem,
+  AnnotatedValue as CommonAnnotatedValue,
   PlayerEntity as CommonPlayerEntity,
+  PlayerEntityDto as CommonPlayerEntityDto,
   PlayerSummary as CommonPlayerSummary,
+  SingleValueEntry as CommonSingleValueEntry,
   Region as CommonRegion,
   SelectionBase,
   SelectionChoice as CommonSelectionChoice,
@@ -59,12 +62,15 @@ export { RewardType, PenaltyType, EffectType } from "@common/types.js";
 export type { EncounterSkillCheck, EncounterTemplate, Effect };
 
 export type PlayerEntity = CommonPlayerEntity;
+export type PlayerEntityDto = CommonPlayerEntityDto;
+export type AnnotatedValue = CommonAnnotatedValue;
+export type SingleValueEntry = CommonSingleValueEntry;
 export type RegionEntity = EntityOf<"region">;
 export type CityEntity = EntityOf<"city">;
 export type HexEntity = EntityOf<"hex">;
 export type AxialPoint = CommonAxialPoint;
 
-export enum SectionType {
+export enum ValueType {
   speed = "speed",
   maxHealth = "max_health",
   skill = "skill",
@@ -77,15 +83,17 @@ export type RuleBase = {
   id: string;
   name: string;
   priority?: number;
-  section: SectionType;
-  subsection?: string;
   condition: (player: PlayerEntity) => boolean;
 };
 export type BaseValueRule = RuleBase & {
+  valueType: ValueType;
+  valueSubtype?: string;
   type: RuleType.BaseValue;
   value: (player: PlayerEntity) => number;
 };
 export type ModifierValueRule = RuleBase & {
+  valueType: ValueType;
+  valueSubtype?: string;
   type: RuleType.ModifierValue;
   value: (player: PlayerEntity) => number;
 };

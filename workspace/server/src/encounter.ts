@@ -6,8 +6,8 @@ import {
   Hex,
   PlayerEntity,
   Region,
-  SectionType,
   TableauCard,
+  ValueType,
 } from "./types.js";
 import { generalPenaltyTypes, generalRewardTypes, skillNames } from "./data.js";
 import { hexDistance } from "@common/hexmap.js";
@@ -41,7 +41,7 @@ function hexesNearPlayer(player: PlayerEntity) {
     (hex) => hex.name === getField(player, "location"),
   );
   if (!origin) return [...encounterHexes];
-  const speed = computeEffectiveValue(player, SectionType.speed);
+  const speed = computeEffectiveValue(player, ValueType.speed);
   const nearby = encounterHexes.filter(
     (hex) => hexDistance(origin, hex) <= speed,
   );

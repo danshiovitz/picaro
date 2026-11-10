@@ -568,6 +568,13 @@ button {
   padding: 10px 12px 12px;
 }
 
+.annotated-value {
+  text-decoration: underline dashed;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  cursor: help;
+}
+
 .summary-section.collapsed .summary-section-body {
   display: none;
 }

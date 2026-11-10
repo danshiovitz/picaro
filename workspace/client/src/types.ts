@@ -11,8 +11,11 @@ import type {
   GameData as CommonGameData,
   Hex as CommonHex,
   Item as CommonItem,
+  AnnotatedValue as CommonAnnotatedValue,
   PlayerEntity as CommonPlayerEntity,
+  PlayerEntityDto as CommonPlayerEntityDto,
   PlayerSummary as CommonPlayerSummary,
+  SingleValueEntry as CommonSingleValueEntry,
   Region as CommonRegion,
   SelectionBase,
   SelectionChoice as CommonSelectionChoice,
@@ -32,9 +35,12 @@ export type Token = CommonToken;
 export type Item = CommonItem;
 export type Condition = CommonCondition;
 export type Hex = CommonHex;
-export type PlayerEntity = CommonPlayerEntity & {
+export type PlayerEntityDto = CommonPlayerEntityDto;
+export type PlayerEntity = PlayerEntityDto & {
   skills: Record<string, number>;
 };
+export type AnnotatedValue = CommonAnnotatedValue;
+export type SingleValueEntry = CommonSingleValueEntry;
 export type PlayerSummary = CommonPlayerSummary;
 export type GameData = CommonGameData;
 export { RewardType, PenaltyType, EffectType } from "../../common/src/types.js";

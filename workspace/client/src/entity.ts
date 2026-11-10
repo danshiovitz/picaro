@@ -66,6 +66,17 @@ export function createEntity<T extends SchemaId>(
       },
     });
   }
+  for (const fieldName of Object.keys(initialData)) {
+    if (fieldName in schema.fields) continue;
+    Object.defineProperty(entity, fieldName, {
+      enumerable: true,
+      configurable: true,
+      get: () => data[fieldName],
+      set: (value) => {
+        data[fieldName] = value;
+      },
+    });
+  }
   return entity as EntityOf<T>;
 }
 

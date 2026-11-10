@@ -13,8 +13,8 @@ import {
   PenaltyType,
   PendingActivity,
   PlayerEntity,
+  PlayerEntityDto,
   RewardType,
-  SectionType,
   Selection,
   SelectionChoice,
   SpecialAction,
@@ -24,6 +24,7 @@ import {
   CityEntity,
   HexEntity,
   Token,
+  ValueType,
 } from "./types.js";
 import { createEntity, getField, serializeEntity, setField } from "./entity.js";
 import { randomUUID } from "node:crypto";
@@ -42,7 +43,10 @@ import {
   instantiateEncounterTemplate,
   rollEncounterSkillChecks,
 } from "./encounter.js";
-import { computeEffectiveValue } from "./rule.js";
+import {
+  computeAnnotatedEffectiveValue,
+  computeEffectiveValue,
+} from "./rule.js";
 import { getRng } from "@common/random.js";
 import { selectionDto } from "./selection.js";
 
@@ -172,11 +176,7 @@ function rollSkillChecks(
 ) {
   return checks.map((check): ActiveEncounterSkillCheck => {
     const roll = getRng().d10();
-    const modifier = computeEffectiveValue(
-      player,
-      SectionType.skill,
-      check.name,
-    );
+    const modifier = computeEffectiveValue(player, ValueType.skill, check.name);
     const total = roll + modifier;
     return {
       name: check.name,
@@ -362,15 +362,12 @@ function effectiveSkills(player: PlayerEntity) {
   return Object.fromEntries(
     skillNames.map(
       (skill) =>
-        [
-          skill,
-          computeEffectiveValue(player, SectionType.skill, skill),
-        ] as const,
+        [skill, computeEffectiveValue(player, ValueType.skill, skill)] as const,
     ),
   );
 }
 
-type PlayerDto = PlayerEntity & { skills: Record<string, number> };
+type PlayerDto = PlayerEntityDto & { skills: Record<string, number> };
 
 function playerDto(hexes: Hex[], player: PlayerEntity) {
   setField(
@@ -379,10 +376,10 @@ function playerDto(hexes: Hex[], player: PlayerEntity) {
     locationForToken(hexes, getField(player, "tokenId")),
   );
   return {
-    ...player,
+    ...(serializeEntity(player) as PlayerEntity),
     skill_xp: cloneSkillXp(getField(player, "skill_xp")),
-    maxHealth: computeEffectiveValue(player, SectionType.maxHealth),
-    speed: computeEffectiveValue(player, SectionType.speed),
+    maxHealth: computeAnnotatedEffectiveValue(player, ValueType.maxHealth),
+    speed: computeAnnotatedEffectiveValue(player, ValueType.speed),
     skills: effectiveSkills(player),
     resources: cloneResources(getField(player, "resources")),
     inventory: cloneInventory(getField(player, "inventory")),
@@ -398,15 +395,15 @@ function playerUpdates(player: PlayerEntity) {
     gold: getField(player, "gold"),
     reputation: getField(player, "reputation"),
     turns: getField(player, "turns"),
-    maxHealth: computeEffectiveValue(player, SectionType.maxHealth),
-    speed: computeEffectiveValue(player, SectionType.speed),
+    maxHealth: computeAnnotatedEffectiveValue(player, ValueType.maxHealth),
+    speed: computeAnnotatedEffectiveValue(player, ValueType.speed),
     location: getField(player, "location"),
     skill_xp: cloneSkillXp(getField(player, "skill_xp")),
     skills: effectiveSkills(player),
     resources: cloneResources(getField(player, "resources")),
     inventory: cloneInventory(getField(player, "inventory")),
     conditions: cloneConditions(getField(player, "conditions")),
-  } satisfies Partial<PlayerEntity> & { skills: Record<string, number> };
+  } satisfies Partial<PlayerEntityDto> & { skills: Record<string, number> };
 }
 
 const skillXpThresholds = [0, 10, 30, 50, 75, 100, 130];
@@ -431,7 +428,8 @@ function resolveEncounterEffects(
   }
   const effects: Effect[] = [];
   const meetsFailureThreshold = active.numFailures >= active.failureThreshold;
-  const quality = active.difficulty + active.qualityMod;
+  const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
+  const quality = clamp(active.difficulty + active.qualityMod, 0, 8);
   if (
     !meetsFailureThreshold &&
     active.numSuccesses >= active.successThreshold
@@ -510,7 +508,7 @@ function adjustReputation(player: PlayerEntity, amount: number) {
 }
 
 function adjustHealth(player: PlayerEntity, amount: number) {
-  const maxHealth = computeEffectiveValue(player, SectionType.maxHealth);
+  const maxHealth = computeEffectiveValue(player, ValueType.maxHealth);
   setField(
     player,
     "curHealth",
@@ -926,10 +924,7 @@ export function getGame(state: ApiState) {
 }
 
 export function getEntity(state: ApiState, player: PlayerEntity) {
-  return {
-    ...serializeEntity(player),
-    skills: effectiveSkills(player),
-  };
+  return playerDto(state.hexes, player);
 }
 
 function removeEncounterFromTableau(
@@ -959,7 +954,7 @@ function endTurn(state: ApiState, player: PlayerEntity, reason: string) {
   let changed = false;
   const tableau = getPlayerTableau(state, player);
   if (currentHex) {
-    const speed = computeEffectiveValue(player, SectionType.speed);
+    const speed = computeEffectiveValue(player, ValueType.speed);
     const before = tableau.length;
     const filtered = tableau.filter((card) => {
       const hex = state.hexByName.get(card.location);
@@ -1035,7 +1030,7 @@ export function travelEntity(
   const current = locationForToken(state.hexes, getField(player, "tokenId"));
   if (route.length < 1 || route[0] !== current)
     throw new RulesViolation("There are gaps in the route");
-  const speed = computeEffectiveValue(player, SectionType.speed);
+  const speed = computeEffectiveValue(player, ValueType.speed);
   if (route.length > speed + 1) throw new RulesViolation("Route is too long");
   for (let i = 0; i < route.length; i++) {
     if (typeof route[i] !== "string" || !state.hexByName.has(route[i])) {

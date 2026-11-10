@@ -2,7 +2,6 @@ import {
   ApiState,
   Selection,
   PlayerEntity,
-  SectionType,
   SelectionChoice,
   ActivityResult,
   SelectionView,

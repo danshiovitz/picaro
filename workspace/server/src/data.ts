@@ -9,9 +9,9 @@ import {
   RewardType,
   Rule,
   RuleType,
-  SectionType,
   Selection,
   SpecialActionDefinition,
+  ValueType,
 } from "./types.js";
 import {
   createEntity,
@@ -282,22 +282,26 @@ export function makeEmptySkills() {
   return Object.fromEntries(skillNames.map((skill) => [skill, 0] as const));
 }
 
-export const rulesBySection = new Map<
-  SectionType,
-  Map<string | undefined, Map<RuleType, Rule[]>>
->();
+export const rulesByTypeKey = new Map<RuleType, Map<string, Rule[]>>();
 const ruleNames = new Set<string>();
-
-function resolvedPriority(rule: Rule) {
-  return rule.priority ?? 10;
-}
 
 function insertRule(list: Rule[], rule: Rule) {
   const index = list.findIndex(
-    (existing) => resolvedPriority(existing) < resolvedPriority(rule),
+    (existing) => (existing.priority ?? 10) < (rule.priority ?? 10),
   );
   if (index === -1) list.push(rule);
   else list.splice(index, 0, rule);
+}
+
+function getRuleKey(rule: Rule) {
+  if (rule.type == RuleType.BaseValue || rule.type == RuleType.ModifierValue) {
+    if (rule.valueSubtype === undefined) {
+      return rule.valueType;
+    } else {
+      return `${rule.valueType}/${rule.valueSubtype}`;
+    }
+  }
+  return "UNKNOWN";
 }
 
 export function addRule(rule: Rule) {
@@ -305,19 +309,12 @@ export function addRule(rule: Rule) {
     throw new Error(`Rule name must be unique: ${rule.name}`);
   }
   ruleNames.add(rule.name);
-  const sectionRules =
-    rulesBySection.get(rule.section) ??
-    new Map<string | undefined, Map<RuleType, Rule[]>>();
-  rulesBySection.set(rule.section, sectionRules);
-  const subsectionRules =
-    sectionRules.get(rule.subsection) ?? new Map<RuleType, Rule[]>();
-  sectionRules.set(rule.subsection, subsectionRules);
-  const ruleList = subsectionRules.get(rule.type) ?? [];
-  subsectionRules.set(rule.type, ruleList);
-  insertRule(ruleList, {
-    ...rule,
-    priority: resolvedPriority(rule),
-  });
+  let key = getRuleKey(rule);
+  const typeRules = rulesByTypeKey.get(rule.type) ?? new Map<string, Rule[]>();
+  rulesByTypeKey.set(rule.type, typeRules);
+  const ruleList = typeRules.get(key) ?? [];
+  typeRules.set(key, ruleList);
+  insertRule(ruleList, rule);
 }
 
 function hasItem(player: PlayerEntity, itemName: string) {
@@ -331,7 +328,7 @@ function hasItemNamed(player: PlayerEntity, itemName: string) {
 addRule({
   id: "rule-speed-can-of-coke",
   name: "Can of Coke Speed Boost",
-  section: SectionType.speed,
+  valueType: ValueType.speed,
   type: RuleType.ModifierValue,
   condition: (player) => hasItem(player, "can of coke"),
   value: () => 2,
@@ -340,8 +337,8 @@ addRule({
 addRule({
   id: "rule-endurance-shield-base",
   name: "Shield Endurance Base",
-  section: SectionType.skill,
-  subsection: "Endurance",
+  valueType: ValueType.skill,
+  valueSubtype: "Endurance",
   type: RuleType.BaseValue,
   condition: (player) => hasItem(player, "shield"),
   value: () => 4,
@@ -355,7 +352,7 @@ export const specialActions: SpecialActionDefinition[] = [
     cost: [{ type: EffectType.Gold, amount: 2 }],
     availability: (player) =>
       getField(player, "curHealth") <
-      computeEffectiveValue(player, SectionType.maxHealth),
+      computeEffectiveValue(player, ValueType.maxHealth),
     execute: (_state, _player) => [{ type: EffectType.Health, amount: 2 }],
   },
   {

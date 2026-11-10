@@ -1,6 +1,6 @@
-import { rulesBySection } from "./data.js";
+import { rulesByTypeKey } from "./data.js";
 import { getField } from "./entity.js";
-import { PlayerEntity, RuleType, SectionType } from "./types.js";
+import { AnnotatedValue, PlayerEntity, RuleType, ValueType } from "./types.js";
 
 const skillXpThresholds = [0, 10, 30, 50, 75, 100, 130];
 
@@ -14,54 +14,75 @@ function skillLevelFromXp(xp: number) {
 
 export function getFieldValue(
   player: PlayerEntity,
-  section: SectionType,
-  subsection?: string,
+  valueType: ValueType,
+  valueSubtype?: string,
 ) {
-  switch (section) {
-    case SectionType.speed:
+  switch (valueType) {
+    case ValueType.speed:
       return getField(player, "speed");
-    case SectionType.maxHealth:
+    case ValueType.maxHealth:
       return getField(player, "maxHealth");
-    case SectionType.skill:
+    case ValueType.skill:
       return skillLevelFromXp(
-        getField(player, "skill_xp")[subsection ?? ""] ?? 0,
+        getField(player, "skill_xp")[valueSubtype ?? ""] ?? 0,
       );
     default: {
-      const exhaustiveCheck: never = section;
-      throw new Error(`Unsupported section: ${exhaustiveCheck}`);
+      const exhaustiveCheck: never = valueType;
+      throw new Error(`Unsupported value type: ${exhaustiveCheck}`);
     }
   }
 }
 
-function rulesForSection(
-  section: SectionType,
-  subsection: string | undefined,
-  type: RuleType,
-) {
-  return rulesBySection.get(section)?.get(subsection)?.get(type) ?? [];
+function valueKey(valueType: ValueType, valueSubtype?: string) {
+  if (valueSubtype) {
+    return `${valueType}/${valueSubtype}`;
+  } else {
+    return valueType;
+  }
 }
 
-export function computeEffectiveValue(
+export function computeAnnotatedEffectiveValue(
   player: PlayerEntity,
-  section: SectionType,
-  subsection?: string,
-) {
-  let retval = getFieldValue(player, section, subsection);
+  valueType: ValueType,
+  valueSubtype?: string,
+): AnnotatedValue {
+  const key = valueKey(valueType, valueSubtype);
+  const baseRules = rulesByTypeKey.get(RuleType.BaseValue)?.get(key) ?? [];
+  const modRules = rulesByTypeKey.get(RuleType.ModifierValue)?.get(key) ?? [];
 
-  for (const rule of rulesForSection(section, subsection, RuleType.BaseValue)) {
+  let baseValue = getFieldValue(player, valueType, valueSubtype);
+  let baseText = "default";
+
+  for (const rule of baseRules) {
     if (rule.condition(player)) {
-      retval = rule.value(player);
+      baseValue = rule.value(player);
+      baseText = rule.name;
       break;
     }
   }
 
-  for (const rule of rulesForSection(
-    section,
-    subsection,
-    RuleType.ModifierValue,
-  )) {
-    if (rule.condition(player)) retval += rule.value(player);
+  const modifierValues = [] as AnnotatedValue["modifierValues"];
+  let finalValue = baseValue;
+  for (const rule of modRules) {
+    if (rule.condition(player)) {
+      const value = rule.value(player);
+      modifierValues.push({ value, text: rule.name });
+      finalValue += value;
+    }
   }
 
-  return retval;
+  return {
+    finalValue,
+    baseValue: { value: baseValue, text: baseText },
+    modifierValues,
+  };
+}
+
+export function computeEffectiveValue(
+  player: PlayerEntity,
+  valueType: ValueType,
+  valueSubtype?: string,
+) {
+  return computeAnnotatedEffectiveValue(player, valueType, valueSubtype)
+    .finalValue;
 }

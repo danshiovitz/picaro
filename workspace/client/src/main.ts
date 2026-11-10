@@ -10,6 +10,7 @@ import {
 import type {
   ActivityResult,
   ActivityNextActive,
+  AnnotatedValue,
   ActiveEncounter,
   Effect,
   EncounterSkillCheck,
@@ -129,6 +130,48 @@ function esc(value: unknown) {
     /[&<>"]/g,
     (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]!,
   );
+}
+
+function isAnnotatedValue(value: unknown): value is AnnotatedValue {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    "finalValue" in value &&
+    "baseValue" in value &&
+    "modifierValues" in value
+  );
+}
+
+function finalValue(value: number | AnnotatedValue) {
+  return typeof value === "number" ? value : value.finalValue;
+}
+
+function annotatedValueTooltip(value: AnnotatedValue) {
+  const lines = [
+    `${value.baseValue.value} base value from ${value.baseValue.text}`,
+  ];
+  for (const modifier of value.modifierValues) {
+    const prefix = modifier.value >= 0 ? "+" : "";
+    lines.push(`${prefix}${modifier.value} ${modifier.text}`);
+  }
+  lines.push(`=${value.finalValue} final`);
+  return lines.join("\n");
+}
+
+function renderAnnotatedValue(value: AnnotatedValue) {
+  return `<span class="annotated-value" title="${esc(annotatedValueTooltip(value))}">${esc(value.finalValue)}</span>`;
+}
+
+function renderEntityValue(value: unknown) {
+  if (isAnnotatedValue(value)) return renderAnnotatedValue(value);
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  )
+    return esc(value);
+  if (value == null) return "";
+  return esc(JSON.stringify(value));
 }
 
 function labelForType(type: string) {
@@ -747,7 +790,9 @@ function render(
       if (!origin) return false;
       return action.locations.some((location) => {
         const hex = store.hexes.get(location);
-        return hex ? store.distance(origin, hex) <= player.speed : false;
+        return hex
+          ? store.distance(origin, hex) <= finalValue(player.speed)
+          : false;
       });
     });
   }
@@ -1048,14 +1093,14 @@ function render(
       ? `<ul class="extra-fields-list">${extra
           .map(
             ([key, value]) =>
-              `<li><span class="extra-field-name">${esc(key)}</span>: <span class="extra-field-value">${esc(JSON.stringify(value))}</span></li>`,
+              `<li><span class="extra-field-name">${esc(key)}</span>: <span class="extra-field-value">${renderEntityValue(value)}</span></li>`,
           )
           .join("")}</ul>`
       : `<p class="extra-fields-empty">None</p>`;
   }
 
   function renderSummary() {
-    stats.innerHTML = `<div class="summary-basic"><div><dd>${esc(player.name)}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${player.maxHealth}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div><dt>Speed</dt><dd>${player.speed}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div></div>${renderSummarySection("resources", "Resources", `<label class="skills-filter"><input type="checkbox" id="hide-zero-resources"${hideZeroResources ? " checked" : ""}/> hide 0 resources</label>${renderResources(player.resources)}`)}${renderSummarySection("inventory", "Inventory", renderInventory(player.inventory))}${renderSummarySection("conditions", "Conditions", renderConditions(player.conditions))}${renderSummarySection("skills", "Skills", `<label class="skills-filter"><input type="checkbox" id="hide-zero-skills"${hideZeroSkills ? " checked" : ""}/> hide 0 skills</label>${renderSkills(player.skills, player.skill_xp)}`)}${renderSummarySection("extraFields", "Additional Fields", renderExtraFields(player))}`;
+    stats.innerHTML = `<div class="summary-basic"><div><dd>${esc(player.name)}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${renderEntityValue(player.maxHealth)}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div><dt>Speed</dt><dd>${renderEntityValue(player.speed)}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div></div>${renderSummarySection("resources", "Resources", `<label class="skills-filter"><input type="checkbox" id="hide-zero-resources"${hideZeroResources ? " checked" : ""}/> hide 0 resources</label>${renderResources(player.resources)}`)}${renderSummarySection("inventory", "Inventory", renderInventory(player.inventory))}${renderSummarySection("conditions", "Conditions", renderConditions(player.conditions))}${renderSummarySection("skills", "Skills", `<label class="skills-filter"><input type="checkbox" id="hide-zero-skills"${hideZeroSkills ? " checked" : ""}/> hide 0 skills</label>${renderSkills(player.skills, player.skill_xp)}`)}${renderSummarySection("extraFields", "Additional Fields", renderExtraFields(player))}`;
     stats
       .querySelectorAll<HTMLButtonElement>("[data-summary-toggle]")
       .forEach((button) => {
@@ -1349,7 +1394,7 @@ function render(
   }
 
   function travelRouteHtml() {
-    const maxNodes = player.speed + 1;
+    const maxNodes = finalValue(player.speed) + 1;
     return route!
       .map((hexName, index) => {
         const cls = index >= maxNodes ? ' class="travel-route-future"' : "";
@@ -1463,7 +1508,7 @@ function render(
 
   async function goTravel() {
     if (!route) return;
-    const submittedRoute = route.slice(0, player.speed + 1);
+    const submittedRoute = route.slice(0, finalValue(player.speed) + 1);
     const destination = route[route.length - 1];
     const remainingRoute =
       route.length > submittedRoute.length

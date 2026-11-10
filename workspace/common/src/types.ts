@@ -10,6 +10,16 @@ export type Condition = EntityOf<"condition">;
 export type Hex = EntityOf<"hex">;
 export type PlayerEntity = EntityOf<"player">;
 export type PlayerSummary = { id: string; name: string };
+export type SingleValueEntry = { value: number; text: string };
+export type AnnotatedValue = {
+  finalValue: number;
+  baseValue: SingleValueEntry;
+  modifierValues: SingleValueEntry[];
+};
+export type PlayerEntityDto = Omit<PlayerEntity, "maxHealth" | "speed"> & {
+  maxHealth: AnnotatedValue;
+  speed: AnnotatedValue;
+};
 export type GameData = {
   hexes: Hex[];
   terrains: Terrain[];
