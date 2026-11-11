@@ -1,6 +1,12 @@
 import { rulesByTypeKey } from "./data.js";
 import { getField } from "./entity.js";
-import { AnnotatedValue, PlayerEntity, RuleType, ValueType } from "./types.js";
+import {
+  AnnotatedValue,
+  PlayerEntity,
+  RuleType,
+  ValueRuleType,
+  ValueType,
+} from "./types.js";
 
 const skillXpThresholds = [0, 10, 30, 50, 75, 100, 130];
 
@@ -54,20 +60,40 @@ export function computeAnnotatedEffectiveValue(
   let baseText = "default";
 
   for (const rule of baseRules) {
-    if (rule.condition(player)) {
-      baseValue = rule.value(player);
-      baseText = rule.name;
-      break;
+    if (rule.subtype == ValueRuleType.Item) {
+      for (const item of getField(player, "inventory")) {
+        if (rule.condition(player, item)) {
+          baseValue = rule.value(player, item);
+          baseText = getField(item, "name");
+          break;
+        }
+      }
+    } else {
+      if (rule.condition(player)) {
+        baseValue = rule.value(player);
+        baseText = rule.name;
+        break;
+      }
     }
   }
 
   const modifierValues = [] as AnnotatedValue["modifierValues"];
   let finalValue = baseValue;
   for (const rule of modRules) {
-    if (rule.condition(player)) {
-      const value = rule.value(player);
-      modifierValues.push({ value, text: rule.name });
-      finalValue += value;
+    if (rule.subtype == ValueRuleType.Item) {
+      for (const item of getField(player, "inventory")) {
+        if (rule.condition(player, item)) {
+          const value = rule.value(player, item);
+          modifierValues.push({ value, text: getField(item, "name") });
+          finalValue += value;
+        }
+      }
+    } else {
+      if (rule.condition(player)) {
+        const value = rule.value(player);
+        modifierValues.push({ value, text: rule.name });
+        finalValue += value;
+      }
     }
   }
 

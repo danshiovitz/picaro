@@ -129,7 +129,9 @@ export function createEntity<T extends Entity = Entity>(
     data[fieldName] = cloneDefaultValue(field.defaultValue);
   }
   for (const [fieldName, value] of Object.entries(initialData)) {
-    data[fieldName] = value;
+    if (value !== undefined) {
+      data[fieldName] = value;
+    }
   }
   validateEntityData(schema, data);
 

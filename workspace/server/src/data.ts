@@ -11,6 +11,7 @@ import {
   RuleType,
   Selection,
   SpecialActionDefinition,
+  ValueRuleType,
   ValueType,
 } from "./types.js";
 import {
@@ -326,12 +327,13 @@ function hasItemNamed(player: PlayerEntity, itemName: string) {
 }
 
 addRule({
-  id: "rule-speed-can-of-coke",
-  name: "Can of Coke Speed Boost",
+  id: "rule-item-speed-boost",
+  name: "Item Speed Boost",
   valueType: ValueType.speed,
   type: RuleType.ModifierValue,
-  condition: (player) => hasItem(player, "can of coke"),
-  value: () => 2,
+  subtype: ValueRuleType.Item,
+  condition: (player, item) => getField(item, "speed_boost") != 0,
+  value: (player, item) => getField(item, "speed_boost"),
 });
 
 addRule({
@@ -340,6 +342,7 @@ addRule({
   valueType: ValueType.skill,
   valueSubtype: "Endurance",
   type: RuleType.BaseValue,
+  subtype: ValueRuleType.General,
   condition: (player) => hasItem(player, "shield"),
   value: () => 4,
 });

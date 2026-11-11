@@ -83,21 +83,44 @@ export type RuleBase = {
   id: string;
   name: string;
   priority?: number;
-  condition: (player: PlayerEntity) => boolean;
 };
-export type BaseValueRule = RuleBase & {
-  valueType: ValueType;
-  valueSubtype?: string;
-  type: RuleType.BaseValue;
-  value: (player: PlayerEntity) => number;
-};
-export type ModifierValueRule = RuleBase & {
-  valueType: ValueType;
-  valueSubtype?: string;
-  type: RuleType.ModifierValue;
-  value: (player: PlayerEntity) => number;
-};
-export type Rule = BaseValueRule | ModifierValueRule;
+export enum ValueRuleType {
+  General = "General",
+  Item = "Item",
+}
+export type Rule =
+  | (RuleBase & {
+      valueType: ValueType;
+      valueSubtype?: string;
+      type: RuleType.BaseValue;
+      subtype: ValueRuleType.General;
+      condition: (player: PlayerEntity) => boolean;
+      value: (player: PlayerEntity) => number;
+    })
+  | (RuleBase & {
+      valueType: ValueType;
+      valueSubtype?: string;
+      type: RuleType.BaseValue;
+      subtype: ValueRuleType.Item;
+      condition: (player: PlayerEntity, item: CommonItem) => boolean;
+      value: (player: PlayerEntity, item: CommonItem) => number;
+    })
+  | (RuleBase & {
+      valueType: ValueType;
+      valueSubtype?: string;
+      type: RuleType.ModifierValue;
+      subtype: ValueRuleType.General;
+      condition: (player: PlayerEntity) => boolean;
+      value: (player: PlayerEntity) => number;
+    })
+  | (RuleBase & {
+      valueType: ValueType;
+      valueSubtype?: string;
+      type: RuleType.ModifierValue;
+      subtype: ValueRuleType.Item;
+      condition: (player: PlayerEntity, item: CommonItem) => boolean;
+      value: (player: PlayerEntity, item: CommonItem) => number;
+    });
 
 export type ActiveEncounterSkillCheck = CommonActiveEncounterSkillCheck;
 export type TableauCard = CommonTableauCard;

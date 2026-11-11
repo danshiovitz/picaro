@@ -100,13 +100,20 @@ function locationForToken(tokenId: string) {
   return hexes.find((hex) => hex.tokens.includes(tokenId))?.name ?? "Unknown";
 }
 
-function createItem(name: string): Item {
-  const item = createEntity<Item>("item", makeItemId(), { name });
-  entityStore.add(item);
-  return item;
-}
 function startingInventory(): Item[] {
-  return ["sword", "shield", "can of coke"].map(createItem);
+  const createItem = (name: string, speed_boost: number | undefined) => {
+    const item = createEntity<Item>("item", makeItemId(), {
+      name,
+      speed_boost,
+    });
+    entityStore.add(item);
+    return item;
+  };
+  return [
+    createItem("sword", undefined),
+    createItem("shield", -1),
+    createItem("can of coke", 2),
+  ];
 }
 
 function startingConditions() {

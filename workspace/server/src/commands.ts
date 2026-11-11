@@ -428,7 +428,8 @@ function resolveEncounterEffects(
   }
   const effects: Effect[] = [];
   const meetsFailureThreshold = active.numFailures >= active.failureThreshold;
-  const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
+  const clamp = (val: number, min: number, max: number) =>
+    Math.min(Math.max(val, min), max);
   const quality = clamp(active.difficulty + active.qualityMod, 0, 8);
   if (
     !meetsFailureThreshold &&

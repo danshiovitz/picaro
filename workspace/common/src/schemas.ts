@@ -32,6 +32,7 @@ export const SCHEMAS = {
     name: "Item",
     fields: {
       name: { type: "string", defaultValue: "" },
+      speed_boost: { type: "int", defaultValue: 0 },
     },
   },
   condition: {
