@@ -10,6 +10,20 @@ export type Condition = EntityOf<"condition">;
 export type Hex = EntityOf<"hex">;
 export type PlayerEntity = EntityOf<"player">;
 export type PlayerSummary = { id: string; name: string };
+export enum FunctionType {
+  RuleCondition = "rule_condition",
+  RuleValue = "rule_value",
+  SelectionCallback = "selection_callback",
+  SpecialActionAvailability = "special_action_availability",
+  SpecialActionExecute = "special_action_execute",
+}
+export enum FunctionParamType {
+  Player = "player",
+  Item = "item",
+  Selection = "selection",
+  SelectionChoices = "choices",
+  RawData = "rawData",
+}
 export type SingleValueEntry = { value: number; text: string };
 export type AnnotatedValue = {
   finalValue: number;
@@ -148,6 +162,7 @@ export type SelectionBase = {
   maxChoices?: number;
   useDropdown?: boolean;
   hexSelection?: { originHex: string; radius: number };
+  callbackData?: unknown;
 };
 export type ActiveEncounter = {
   id: string;

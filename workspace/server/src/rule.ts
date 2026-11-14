@@ -1,4 +1,4 @@
-import { rulesByTypeKey } from "./data.js";
+import { rulesByTypeKey, invoke } from "./data.js";
 import { getField } from "./entity.js";
 import {
   AnnotatedValue,
@@ -6,6 +6,7 @@ import {
   RuleType,
   ValueRuleType,
   ValueType,
+  FunctionType,
 } from "./types.js";
 
 const skillXpThresholds = [0, 10, 30, 50, 75, 100, 130];
@@ -62,15 +63,31 @@ export function computeAnnotatedEffectiveValue(
   for (const rule of baseRules) {
     if (rule.subtype == ValueRuleType.Item) {
       for (const item of getField(player, "inventory")) {
-        if (rule.condition(player, item)) {
-          baseValue = rule.value(player, item);
+        if (
+          invoke<boolean>(rule.condition, FunctionType.RuleCondition, [
+            player,
+            item,
+          ])
+        ) {
+          baseValue = invoke<number>(rule.value, FunctionType.RuleValue, [
+            player,
+            item,
+          ]);
           baseText = getField(item, "name");
           break;
         }
       }
     } else {
-      if (rule.condition(player)) {
-        baseValue = rule.value(player);
+      if (
+        invoke<boolean>(rule.condition, FunctionType.RuleCondition, [
+          player,
+          undefined,
+        ])
+      ) {
+        baseValue = invoke<number>(rule.value, FunctionType.RuleValue, [
+          player,
+          undefined,
+        ]);
         baseText = rule.name;
         break;
       }
@@ -82,15 +99,31 @@ export function computeAnnotatedEffectiveValue(
   for (const rule of modRules) {
     if (rule.subtype == ValueRuleType.Item) {
       for (const item of getField(player, "inventory")) {
-        if (rule.condition(player, item)) {
-          const value = rule.value(player, item);
+        if (
+          invoke<boolean>(rule.condition, FunctionType.RuleCondition, [
+            player,
+            item,
+          ])
+        ) {
+          const value = invoke<number>(rule.value, FunctionType.RuleValue, [
+            player,
+            item,
+          ]);
           modifierValues.push({ value, text: getField(item, "name") });
           finalValue += value;
         }
       }
     } else {
-      if (rule.condition(player)) {
-        const value = rule.value(player);
+      if (
+        invoke<boolean>(rule.condition, FunctionType.RuleCondition, [
+          player,
+          undefined,
+        ])
+      ) {
+        const value = invoke<number>(rule.value, FunctionType.RuleValue, [
+          player,
+          undefined,
+        ]);
         modifierValues.push({ value, text: rule.name });
         finalValue += value;
       }

@@ -25,6 +25,7 @@ import {
   HexEntity,
   Token,
   ValueType,
+  FunctionType,
 } from "./types.js";
 import { createEntity, getField, serializeEntity, setField } from "./entity.js";
 import { randomUUID } from "node:crypto";
@@ -38,6 +39,9 @@ import {
   skillNames,
   terrainEncounterTemplates,
   specialActions,
+  getApiState,
+  invoke,
+  registerFunction,
 } from "./data.js";
 import {
   instantiateEncounterTemplate,
@@ -107,11 +111,11 @@ function assertNoPendingWork(state: ApiState, player: PlayerEntity) {
 }
 
 export function queuePendingWork(
-  state: ApiState,
   player: PlayerEntity,
   work: PendingActivity,
   front = false,
 ) {
+  const state = getApiState();
   const queue = pendingWorkFor(state, player);
   if (front) queue.unshift(work);
   else queue.push(work);
@@ -130,9 +134,9 @@ function takePendingWork(
 }
 
 export function nextActiveForPlayer(
-  state: ApiState,
   player: PlayerEntity,
 ): ActivityNextActive | undefined {
+  const state = getApiState();
   if (!state.currentActivities.has(player.id)) {
     let pending = takePendingWork(state, player);
     if (pending) {
@@ -246,112 +250,6 @@ function cloneSkillXp(skill_xp: Record<string, number>) {
 
 function resourceEffect(resourceType: string, amount: number): Effect {
   return { type: EffectType.Resource, resourceType, amount };
-}
-
-function controlledTeleportSelection(
-  state: ApiState,
-  player: PlayerEntity,
-  radius: number,
-): Selection {
-  const originHex = state.hexByName.get(getField(player, "location"));
-  if (!originHex) throw new RulesViolation("Origin hex not found");
-  const choices = state.hexes
-    .filter((hex) => hexDistance(originHex, hex) <= radius)
-    .map((hex, index) => ({
-      description: hex.name,
-      data: hex.name,
-      index,
-    }));
-  const selection: Selection = {
-    id: `selection-controlled-teleport-${Math.random().toString(36).slice(2)}`,
-    title: "Controlled Teleport",
-    description: `Choose a hex within ${radius} hexes of ${getField(player, "location")}.`,
-    choices,
-    minChoices: 1,
-    maxChoices: 1,
-    useDropdown: true,
-    hexSelection: { originHex: getField(player, "location"), radius },
-    callback: (indexes) => {
-      const choice = selection.choices.find(
-        (item: SelectionChoice) => item.index === indexes[0],
-      );
-      if (!choice) {
-        return {
-          title: "Controlled Teleport",
-          flavorText: "No selection made.",
-          effects: [],
-        };
-      }
-      const origin = state.hexByName.get(selection.hexSelection!.originHex);
-      if (!origin) throw new RulesViolation("Origin hex not found");
-      const target = state.hexByName.get(choice.data);
-      if (!target) throw new RulesViolation("Selected hex not found");
-      if (hexDistance(origin, target) > selection.hexSelection!.radius) {
-        throw new RulesViolation("Selected hex is out of range");
-      }
-      moveToken(state, getField(player, "tokenId"), target.name);
-      setField(player, "location", target.name);
-      return {
-        title: "Controlled Teleport",
-        flavorText: `Teleported to ${target.name}.`,
-        effects: [],
-      };
-    },
-  };
-  return selection;
-}
-
-function freeXpSelection(
-  state: ApiState,
-  player: PlayerEntity,
-  amount: number,
-): Selection {
-  const selection: Selection = {
-    id: `selection-free-xp-${Math.random().toString(36).slice(2)}`,
-    title: "Free XP",
-    description: `Choose a skill to gain ${amount} xp in.`,
-    choices: skillNames.map((skill, index) => ({
-      description: skill,
-      data: skill,
-      index,
-    })),
-    minChoices: 1,
-    maxChoices: 1,
-    useDropdown: true,
-    callback: (indexes) => {
-      const choice = selection.choices.find(
-        (item: SelectionChoice) => item.index === indexes[0],
-      );
-      if (!choice) {
-        return {
-          title: "Free XP",
-          flavorText: "No selection made.",
-          effects: [],
-        };
-      }
-      const currentXp = getField(player, "skill_xp")[choice.data] ?? 0;
-      const nextXp = currentXp + amount;
-      const effect =
-        skillLevelFromXp(nextXp) > skillLevelFromXp(currentXp)
-          ? ({
-              type: EffectType.SkillXp,
-              skill: choice.data,
-              amount,
-              newLevel: skillLevelFromXp(nextXp),
-            } satisfies Effect)
-          : ({
-              type: EffectType.SkillXp,
-              skill: choice.data,
-              amount,
-            } satisfies Effect);
-      applyEffects(state, player, [effect]);
-      return {
-        title: "Free XP",
-        effects: [effect],
-      };
-    },
-  };
-  return selection;
 }
 
 function randomResourceType() {
@@ -651,7 +549,7 @@ function applyEffects(
       case EffectType.FreeXp:
         frontQueue.push({
           type: "selection",
-          selection: freeXpSelection(state, player, effect.amount),
+          selection: freeXpSelection(effect.amount),
         });
         break;
       case EffectType.ControlledTeleport:
@@ -725,6 +623,201 @@ function payCost(state: ApiState, player: PlayerEntity, cost: Effect[]) {
         ? effect
         : { ...effect, amount: -effect.amount },
     ),
+  );
+}
+
+type ControlledTeleportSelectionData = { radius: number };
+type FreeXpSelectionData = { amount: number };
+type TravelContinueSelectionData = {
+  destination: string;
+  encounterHexName: string;
+};
+
+export function controlledTeleportSelectionCallback(
+  selection: Selection,
+  player: PlayerEntity,
+  choices: SelectionChoice[],
+): ActivityResult {
+  const data = selection.callbackData as
+    ControlledTeleportSelectionData | undefined;
+  const radius = data?.radius ?? 0;
+  const state = getApiState();
+  if (choices.length != 1) {
+    return {
+      title: "Controlled Teleport",
+      flavorText: "No selection made.",
+      effects: [],
+    };
+  }
+  const choice = choices[0];
+
+  const origin = state.hexByName.get(getField(player, "location"));
+  if (!origin) throw new RulesViolation("Origin hex not found");
+  const target = state.hexByName.get(choice.data);
+  if (!target) throw new RulesViolation("Selected hex not found");
+  if (hexDistance(origin, target) > radius) {
+    throw new RulesViolation("Selected hex is out of range");
+  }
+  moveToken(state, getField(player, "tokenId"), target.name);
+  setField(player, "location", target.name);
+  return {
+    title: "Controlled Teleport",
+    flavorText: `Teleported to ${target.name}.`,
+    effects: [],
+  };
+}
+
+export function freeXpSelectionCallback(
+  selection: Selection,
+  player: PlayerEntity,
+  choices: SelectionChoice[],
+): ActivityResult {
+  const data = selection.callbackData as FreeXpSelectionData | undefined;
+  const amount = data?.amount ?? 0;
+  if (choices.length !== 1) {
+    return {
+      title: "Free XP",
+      flavorText: "No selection made.",
+      effects: [],
+    };
+  }
+  const choice = choices[0];
+  const state = getApiState();
+  const currentXp = getField(player, "skill_xp")[choice.data] ?? 0;
+  const nextXp = currentXp + amount;
+  const effect =
+    skillLevelFromXp(nextXp) > skillLevelFromXp(currentXp)
+      ? ({
+          type: EffectType.SkillXp,
+          skill: choice.data,
+          amount,
+          newLevel: skillLevelFromXp(nextXp),
+        } satisfies Effect)
+      : ({
+          type: EffectType.SkillXp,
+          skill: choice.data,
+          amount,
+        } satisfies Effect);
+  applyEffects(state, player, [effect]);
+  return {
+    title: "Free XP",
+    effects: [effect],
+  };
+}
+
+export function travelContinueSelectionCallback(
+  selection: Selection,
+  player: PlayerEntity,
+  choices: SelectionChoice[],
+): ActivityResult | void {
+  const data = selection.callbackData as
+    TravelContinueSelectionData | undefined;
+  if (choices.length != 1 || choices[0].data == "") {
+    return {
+      title: "Travel Done",
+      effects: [],
+    };
+  }
+  const choice = choices[0];
+  if (!data) throw new RulesViolation("Selection data missing");
+  if (getField(player, "location") !== data.encounterHexName)
+    throw new RulesViolation("You can't continue since you've moved.");
+  const state = getApiState();
+  moveToken(state, getField(player, "tokenId"), data.destination);
+  setField(player, "location", data.destination);
+  endTurn(state, player, "travel-continuation");
+}
+
+function controlledTeleportSelection(
+  state: ApiState,
+  player: PlayerEntity,
+  radius: number,
+): Selection {
+  const originHex = state.hexByName.get(getField(player, "location"));
+  if (!originHex) throw new RulesViolation("Origin hex not found");
+  const selection: Selection = {
+    id: `selection-controlled-teleport-${Math.random().toString(36).slice(2)}`,
+    title: "Controlled Teleport",
+    description: `Choose a hex within ${radius} hexes of ${getField(player, "location")}.`,
+    choices: state.hexes
+      .filter((hex) => hexDistance(originHex, hex) <= radius)
+      .map((hex, index) => ({
+        description: hex.name,
+        data: hex.name,
+        index,
+      })),
+    minChoices: 1,
+    maxChoices: 1,
+    useDropdown: true,
+    hexSelection: { originHex: getField(player, "location"), radius },
+    callback: "selection-controlled-teleport",
+    callbackData: { radius },
+  };
+  return selection;
+}
+
+function freeXpSelection(amount: number): Selection {
+  const selection: Selection = {
+    id: `selection-free-xp-${Math.random().toString(36).slice(2)}`,
+    title: "Free XP",
+    description: `Choose a skill to gain ${amount} xp in.`,
+    choices: skillNames.map((skill, index) => ({
+      description: skill,
+      data: skill,
+      index,
+    })),
+    minChoices: 1,
+    maxChoices: 1,
+    useDropdown: true,
+    callback: "selection-free-xp",
+    callbackData: { amount },
+  };
+  return selection;
+}
+
+function travelContinueSelection(
+  currentHex: string,
+  destinationHex: string,
+): Selection {
+  const selection: Selection = {
+    id: `selection-travel-continue-${Math.random().toString(36).slice(2)}`,
+    title: "Continue Travel",
+    description:
+      "You may continue the rest of this route without spending an additional turn.",
+    choices: [
+      {
+        description: `Move to hex ${destinationHex}`,
+        data: "",
+        index: 0,
+      },
+      { description: "Stay here", data: "", index: 1 },
+    ],
+    minChoices: 1,
+    maxChoices: 1,
+    callback: "selection-travel-continue",
+    callbackData: {
+      destination: destinationHex,
+      encounterHexName: currentHex,
+    },
+  };
+  return selection;
+}
+
+export function initSystemFunctions() {
+  registerFunction(
+    "selection-controlled-teleport",
+    FunctionType.SelectionCallback,
+    controlledTeleportSelectionCallback,
+  );
+  registerFunction(
+    "selection-free-xp",
+    FunctionType.SelectionCallback,
+    freeXpSelectionCallback,
+  );
+  registerFunction(
+    "selection-travel-continue",
+    FunctionType.SelectionCallback,
+    travelContinueSelectionCallback,
   );
 }
 
@@ -828,7 +921,8 @@ function computePenalty(
   }
 }
 
-export function getHexes(state: ApiState) {
+export function getHexes() {
+  const state = getApiState();
   return state.hexes;
 }
 
@@ -836,7 +930,8 @@ export function getTerrain() {
   return terrainSpecs;
 }
 
-export function getRegions(state: ApiState) {
+export function getRegions() {
+  const state = getApiState();
   return state.regions;
 }
 
@@ -844,15 +939,18 @@ export function getClaims() {
   return claims;
 }
 
-export function getTokens(state: ApiState) {
+export function getTokens() {
+  const state = getApiState();
   return allTokens(state);
 }
 
-export function getItem(state: ApiState, itemId: string) {
+export function getItem(itemId: string) {
+  const state = getApiState();
   return state.entities.getById<Item>(itemId);
 }
 
-export function getTableau(state: ApiState, player: PlayerEntity): TableauData {
+export function getTableau(player: PlayerEntity): TableauData {
+  const state = getApiState();
   return { encounters: getPlayerTableau(state, player) };
 }
 
@@ -862,28 +960,37 @@ export function getSpecialActionCatalog(): SpecialAction[] {
   );
 }
 
-export function getSpecialActions(
-  state: ApiState,
-  player: PlayerEntity,
-): SpecialAction[] {
+export function getSpecialActions(player: PlayerEntity): SpecialAction[] {
   return specialActions
-    .filter((action) => action.availability(player))
+    .filter((action) =>
+      invoke<boolean>(
+        action.availability,
+        FunctionType.SpecialActionAvailability,
+        [player],
+      ),
+    )
     .map(
       ({ availability: _availability, execute: _execute, ...action }) => action,
     );
 }
 
 export function performSpecialAction(
-  state: ApiState,
   player: PlayerEntity,
   request: SpecialActionRequest,
 ): ActivityResult {
+  const state = getApiState();
   const action = specialActions.find(
     (item) => item.id === request.specialActionId,
   );
   if (!action) throw new RulesViolation("Special action not found");
   assertNoPendingWork(state, player);
-  if (!action.availability(player))
+  if (
+    !invoke<boolean>(
+      action.availability,
+      FunctionType.SpecialActionAvailability,
+      [player],
+    )
+  )
     throw new RulesViolation("Special action is unavailable");
   if (
     action.locations?.length &&
@@ -893,7 +1000,11 @@ export function performSpecialAction(
   if (!canAfford(player, action.cost))
     throw new RulesViolation("You can't afford to perform this action.");
   payCost(state, player, action.cost);
-  const effects = action.execute(state, player);
+  const effects = invoke<Effect[]>(
+    action.execute,
+    FunctionType.SpecialActionExecute,
+    [player],
+  );
   applyEffects(state, player, effects);
   setField(
     player,
@@ -902,11 +1013,12 @@ export function performSpecialAction(
   );
   return {
     effects,
-    nextActive: nextActiveForPlayer(state, player),
+    nextActive: nextActiveForPlayer(player),
   };
 }
 
-export function getGame(state: ApiState) {
+export function getGame() {
+  const state = getApiState();
   return {
     hexes: state.hexes,
     terrains: terrainSpecs,
@@ -924,7 +1036,8 @@ export function getGame(state: ApiState) {
   };
 }
 
-export function getEntity(state: ApiState, player: PlayerEntity) {
+export function getEntity(player: PlayerEntity) {
+  const state = getApiState();
   return playerDto(state.hexes, player);
 }
 
@@ -973,10 +1086,8 @@ function endTurn(state: ApiState, player: PlayerEntity, reason: string) {
   return changed;
 }
 
-export function scoutEntity(
-  state: ApiState,
-  player: PlayerEntity,
-): ActivityResult {
+export function scoutEntity(player: PlayerEntity): ActivityResult {
+  const state = getApiState();
   const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
   assertNoPendingWork(state, player);
   if (!canAfford(player, turnCost))
@@ -993,14 +1104,12 @@ export function scoutEntity(
     flavorText: "Tableau refreshed",
     effects: [],
     implicitEffects: [{ type: EffectType.Turns, amount: -1 }],
-    nextActive: nextActiveForPlayer(state, player),
+    nextActive: nextActiveForPlayer(player),
   };
 }
 
-export function campEntity(
-  state: ApiState,
-  player: PlayerEntity,
-): ActivityResult {
+export function campEntity(player: PlayerEntity): ActivityResult {
+  const state = getApiState();
   const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
   assertNoPendingWork(state, player);
   if (!canAfford(player, turnCost))
@@ -1017,15 +1126,15 @@ export function campEntity(
     title: "A Restful Night",
     effects: [{ type: EffectType.Health, amount: 1 }],
     implicitEffects: [{ type: EffectType.Turns, amount: -1 }],
-    nextActive: nextActiveForPlayer(state, player),
+    nextActive: nextActiveForPlayer(player),
   };
 }
 
 export function travelEntity(
-  state: ApiState,
   player: PlayerEntity,
   request: TravelRequest,
 ): ActivityResult {
+  const state = getApiState();
   assertNoPendingWork(state, player);
   const route = request.route;
   const current = locationForToken(state.hexes, getField(player, "tokenId"));
@@ -1080,41 +1189,13 @@ export function travelEntity(
     // If they didn't stop in the last hex, then queue up a selection to
     // let them continue for free
     if (encounterHexName != encounterRoute[encounterRoute.length - 1]) {
-      const travelContinueSelection: Selection = {
-        id: `selection-travel-continue-${Math.random().toString(36).slice(2)}`,
-        title: "Continue Travel",
-        description:
-          "You may continue the rest of this route without spending an additional turn.",
-        choices: [
-          {
-            description: `Move to hex ${encounterRoute[encounterRoute.length - 1]}`,
-            data: encounterHexName,
-            index: 0,
-          },
-          { description: "Stay here", data: "", index: 1 },
-        ],
-        minChoices: 1,
-        maxChoices: 1,
-        callback: (indexes) => {
-          const choice = travelContinueSelection.choices.find(
-            (item: SelectionChoice) => item.index === indexes[0],
-          );
-          if (!choice || choice.data == "")
-            return {
-              title: "Travel Done",
-              effects: [],
-            };
-          if (getField(player, "location") !== choice.data)
-            throw new RulesViolation("You can't continue since you've moved.");
-          const destination = route[route.length - 1];
-          moveToken(state, getField(player, "tokenId"), destination);
-          setField(player, "location", destination);
-          endTurn(state, player, "travel-continuation");
-        },
-      };
-      queuePendingWork(state, player, {
+      const selection = travelContinueSelection(
+        encounterHexName,
+        encounterRoute[encounterRoute.length - 1],
+      );
+      queuePendingWork(player, {
         type: "selection",
-        selection: travelContinueSelection,
+        selection,
       });
     }
 
@@ -1131,15 +1212,15 @@ export function travelEntity(
   return {
     effects: [],
     implicitEffects: [{ type: EffectType.Turns, amount: -1 }],
-    nextActive: nextActiveForPlayer(state, player),
+    nextActive: nextActiveForPlayer(player),
   };
 }
 
 export function runEncounter(
-  state: ApiState,
   player: PlayerEntity,
   request: EncounterRequest,
 ): ActivityResult {
+  const state = getApiState();
   const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
   assertNoPendingWork(state, player);
   if (!canAfford(player, turnCost))
@@ -1161,10 +1242,10 @@ export function runEncounter(
 }
 
 export function continueEncounter(
-  state: ApiState,
   player: PlayerEntity,
   request: EncounterRequest,
 ): ActivityResult {
+  const state = getApiState();
   const curActivity = state.currentActivities.get(player.id);
   const active =
     curActivity && curActivity.type == "encounter"
@@ -1222,10 +1303,10 @@ export function continueEncounter(
 }
 
 export function finishEncounter(
-  state: ApiState,
   player: PlayerEntity,
   request: EncounterRequest & { conceding?: boolean },
 ): ActivityResult {
+  const state = getApiState();
   const curActivity = state.currentActivities.get(player.id);
   const active =
     curActivity && curActivity.type == "encounter"
@@ -1257,7 +1338,7 @@ export function finishEncounter(
   }
   return {
     effects,
-    nextActive: nextActiveForPlayer(state, player),
+    nextActive: nextActiveForPlayer(player),
   };
 }
 

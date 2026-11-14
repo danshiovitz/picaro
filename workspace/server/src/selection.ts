@@ -1,16 +1,13 @@
 import {
-  ApiState,
   Selection,
   PlayerEntity,
   SelectionChoice,
   ActivityResult,
   SelectionView,
-  PendingActivity,
+  FunctionType,
 } from "./types.js";
-import { nextActiveForPlayer } from "./commands.js";
-import { skillNames } from "./data.js";
-import { computeEffectiveValue } from "./rule.js";
-import { RulesViolation } from "./commands.js";
+import { nextActiveForPlayer, RulesViolation } from "./commands.js";
+import { getApiState, skillNames, invoke } from "./data.js";
 
 export type SelectionRequest = {
   selectionId: string;
@@ -69,10 +66,10 @@ function selectedChoices(selection: Selection, selectedIndexes: number[]) {
 }
 
 export function makeSelection(
-  state: ApiState,
   player: PlayerEntity,
   request: SelectionRequest,
 ): ActivityResult {
+  const state = getApiState();
   const curActivity = state.currentActivities.get(player.id);
   const selection =
     curActivity && curActivity.type == "selection"
@@ -83,8 +80,12 @@ export function makeSelection(
   }
   validateSelectionIndexes(selection, request.selectedIndexes);
   state.currentActivities.delete(player.id);
-  const callbackResult = selection.callback([...request.selectedIndexes]);
   const choices = selectedChoices(selection, request.selectedIndexes);
+  const callbackResult = invoke<ActivityResult | undefined>(
+    selection.callback,
+    FunctionType.SelectionCallback,
+    [selection, player, choices],
+  );
   return (
     callbackResult ?? {
       flavorText:
@@ -92,7 +93,7 @@ export function makeSelection(
           ? choices.map((choice) => choice.description).join("\n")
           : "No selection made.",
       effects: [],
-      nextActive: nextActiveForPlayer(state, player),
+      nextActive: nextActiveForPlayer(player),
     }
   );
 }

@@ -1,4 +1,5 @@
 import {
+  ApiState,
   Claim,
   EffectType,
   EncounterTemplate,
@@ -10,9 +11,12 @@ import {
   Rule,
   RuleType,
   Selection,
+  SelectionChoice,
   SpecialActionDefinition,
   ValueRuleType,
   ValueType,
+  FunctionType,
+  FunctionParamType,
 } from "./types.js";
 import {
   createEntity,
@@ -23,7 +27,7 @@ import {
 } from "./entity.js";
 import { SCHEMAS } from "./schemas.js";
 import { computeEffectiveValue } from "./rule.js";
-import { queuePendingWork } from "./commands.js";
+import { queuePendingWork, RulesViolation } from "./commands.js";
 
 export const terrainSpecs = [
   ["Forest", "#1a531e", "forest"],
@@ -261,22 +265,118 @@ export function makeEmptyResources(): Record<string, number> {
 export const entityStore = new EntityStore();
 for (const schema of Object.values(SCHEMAS)) registerEntitySchema(schema);
 
-export function makeCityEntities(): CityEntity[] {
-  return [
-    "Waterdeep",
-    "Underhaven",
-    "Dawnport",
-    "Ironford",
-    "Moonfall",
-    "Highspire",
-    "Blackwell",
-    "Greengate",
-  ].map((n) =>
-    createEntity<CityEntity>("city", makeTokenId(), {
-      entityName: `City of ${n}`,
-      icon: "city",
-    }),
+type RegisteredFunction = {
+  type: FunctionType;
+  fn: (...params: any[]) => unknown;
+};
+
+export const functionRegistry = new Map<string, RegisteredFunction>();
+export const functionParamTypesByType = new Map<
+  FunctionType,
+  FunctionParamType[]
+>([
+  [
+    FunctionType.RuleCondition,
+    [FunctionParamType.Player, FunctionParamType.RawData],
+  ],
+  [
+    FunctionType.RuleValue,
+    [FunctionParamType.Player, FunctionParamType.RawData],
+  ],
+  [
+    FunctionType.SelectionCallback,
+    [
+      FunctionParamType.Selection,
+      FunctionParamType.Player,
+      FunctionParamType.SelectionChoices,
+    ],
+  ],
+  [FunctionType.SpecialActionAvailability, [FunctionParamType.Player]],
+  [FunctionType.SpecialActionExecute, [FunctionParamType.Player]],
+]);
+
+function isEntityWithSchema(value: unknown, schemaId: string) {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    "schemaId" in value &&
+    (value as { schemaId?: unknown }).schemaId === schemaId
   );
+}
+
+function validateFunctionParam(
+  paramType: FunctionParamType,
+  value: unknown,
+  index: number,
+) {
+  switch (paramType) {
+    case FunctionParamType.Player:
+      if (!isEntityWithSchema(value, "player")) {
+        throw new RulesViolation(`Parameter ${index} must be a player entity`);
+      }
+      return;
+    case FunctionParamType.Item:
+      if (!isEntityWithSchema(value, "item")) {
+        throw new RulesViolation(`Parameter ${index} must be an item entity`);
+      }
+      return;
+    case FunctionParamType.SelectionChoices:
+      if (!Array.isArray(value) || !value.every((c) => "description" in c)) {
+        throw new RulesViolation(
+          `Parameter ${index} must be an array of selection choices`,
+        );
+      }
+      return;
+    case FunctionParamType.RawData:
+      // can be whatever, is cast later
+      return;
+  }
+}
+
+export function registerFunction(
+  name: string,
+  type: FunctionType,
+  fn: (...params: any[]) => unknown,
+) {
+  if (functionRegistry.has(name)) {
+    throw new Error(`Function name must be unique: ${name}`);
+  }
+  functionRegistry.set(name, { type, fn });
+}
+
+export function invoke<T>(
+  name: string,
+  type: FunctionType,
+  params: unknown[],
+): T {
+  const registered = functionRegistry.get(name);
+  if (!registered) {
+    throw new RulesViolation(`Function not found: ${name}`);
+  }
+  if (registered.type !== type) {
+    throw new RulesViolation(
+      `Function type mismatch for ${name}: expected ${type}, got ${registered.type}`,
+    );
+  }
+  const expectedParams = functionParamTypesByType.get(type) ?? [];
+  if (expectedParams.length !== params.length) {
+    throw new RulesViolation(
+      `Function ${name} expected ${expectedParams.length} parameters, got ${params.length}`,
+    );
+  }
+  params.forEach((param, index) =>
+    validateFunctionParam(expectedParams[index], param, index),
+  );
+  return registered.fn(...params) as T;
+}
+
+let apiState: ApiState | undefined;
+export function setApiState(state: ApiState) {
+  apiState = state;
+}
+export function getApiState() {
+  if (!apiState) throw new Error("ApiState has not been initialized");
+  return apiState;
 }
 
 export function makeEmptySkills() {
@@ -326,14 +426,35 @@ function hasItemNamed(player: PlayerEntity, itemName: string) {
   return hasItem(player, itemName);
 }
 
+registerFunction(
+  "rule-item-speed-boost-condition",
+  FunctionType.RuleCondition,
+  (_player, item) => getField(item, "speed_boost") != 0,
+);
+registerFunction(
+  "rule-item-speed-boost-value",
+  FunctionType.RuleValue,
+  (_player, item) => getField(item, "speed_boost"),
+);
+registerFunction(
+  "rule-endurance-shield-base-condition",
+  FunctionType.RuleCondition,
+  (player) => hasItem(player, "shield"),
+);
+registerFunction(
+  "rule-endurance-shield-base-value",
+  FunctionType.RuleValue,
+  () => 4,
+);
+
 addRule({
   id: "rule-item-speed-boost",
   name: "Item Speed Boost",
   valueType: ValueType.speed,
   type: RuleType.ModifierValue,
   subtype: ValueRuleType.Item,
-  condition: (player, item) => getField(item, "speed_boost") != 0,
-  value: (player, item) => getField(item, "speed_boost"),
+  condition: "rule-item-speed-boost-condition",
+  value: "rule-item-speed-boost-value",
 });
 
 addRule({
@@ -343,9 +464,103 @@ addRule({
   valueSubtype: "Endurance",
   type: RuleType.BaseValue,
   subtype: ValueRuleType.General,
-  condition: (player) => hasItem(player, "shield"),
-  value: () => 4,
+  condition: "rule-endurance-shield-base-condition",
+  value: "rule-endurance-shield-base-value",
 });
+
+registerFunction(
+  "special-medical-visit-availability",
+  FunctionType.SpecialActionAvailability,
+  (player) =>
+    getField(player, "curHealth") <
+    computeEffectiveValue(player, ValueType.maxHealth),
+);
+registerFunction(
+  "special-medical-visit-execute",
+  FunctionType.SpecialActionExecute,
+  (_player) => [{ type: EffectType.Health, amount: 2 }],
+);
+registerFunction(
+  "special-drink-availability",
+  FunctionType.SpecialActionAvailability,
+  (player) => hasItemNamed(player, "can of coke"),
+);
+registerFunction(
+  "special-drink-execute",
+  FunctionType.SpecialActionExecute,
+  (player) => {
+    const item = getField(player, "inventory").find(
+      (item: Item) => item.name === "can of coke",
+    );
+    return item ? [{ type: EffectType.RemoveItems, itemIds: [item.id] }] : [];
+  },
+);
+registerFunction(
+  "special-wish-availability",
+  FunctionType.SpecialActionAvailability,
+  () => true,
+);
+registerFunction(
+  "special-wish-execute",
+  FunctionType.SpecialActionExecute,
+  (player) => {
+    const selection: Selection = {
+      id: `selection-wish-${Math.random().toString(36).slice(2)}`,
+      title: "You Get Your Wish",
+      description: "What would you like?",
+      choices: [
+        { description: "1 gold", data: "gold", index: 0 },
+        { description: "1 luck", data: "luck", index: 1 },
+        { description: "1 Silk", data: "Silk", index: 2 },
+      ],
+      minChoices: 0,
+      maxChoices: 1,
+      callback: "selection-wish-callback",
+    };
+    queuePendingWork(player, {
+      type: "selection",
+      selection,
+    });
+    return [];
+  },
+);
+registerFunction(
+  "selection-wish-callback",
+  FunctionType.SelectionCallback,
+  (selection, player, choices) => {
+    if (choices.length !== 1)
+      return {
+        title: "Wish Granted",
+        effects: [],
+        flavorText: "No selection made.",
+      };
+    const choice = choices[0];
+    switch (choice.data) {
+      case "gold":
+        setField(player, "gold", getField(player, "gold") + 1);
+        return {
+          title: "Wish Granted",
+          effects: [{ type: EffectType.Gold, amount: 1 }],
+        };
+      case "luck":
+        setField(
+          player,
+          "curLuck",
+          Math.min(
+            getField(player, "maxLuck"),
+            getField(player, "curLuck") + 1,
+          ),
+        );
+        return {
+          title: "Wish Granted",
+          effects: [{ type: EffectType.Luck, amount: 1 }],
+        };
+      default: {
+        throw new RulesViolation("Unknown wish type");
+      }
+    }
+  },
+);
 
 export const specialActions: SpecialActionDefinition[] = [
   {
@@ -353,99 +568,21 @@ export const specialActions: SpecialActionDefinition[] = [
     name: "Medical Visit",
     locations: ["C10"],
     cost: [{ type: EffectType.Gold, amount: 2 }],
-    availability: (player) =>
-      getField(player, "curHealth") <
-      computeEffectiveValue(player, ValueType.maxHealth),
-    execute: (_state, _player) => [{ type: EffectType.Health, amount: 2 }],
+    availability: "special-medical-visit-availability",
+    execute: "special-medical-visit-execute",
   },
   {
     id: "drink",
     name: "Drink",
     cost: [],
-    availability: (player) => hasItemNamed(player, "can of coke"),
-    execute: (_state, player) => {
-      const item = getField(player, "inventory").find(
-        (item) => item.name === "can of coke",
-      );
-      return item ? [{ type: EffectType.RemoveItems, itemIds: [item.id] }] : [];
-    },
+    availability: "special-drink-availability",
+    execute: "special-drink-execute",
   },
   {
     id: "wish",
     name: "Wish",
     cost: [],
-    availability: () => true,
-    execute: (state, player) => {
-      const selection: Selection = {
-        id: `selection-wish-${Math.random().toString(36).slice(2)}`,
-        title: "You Get Your Wish",
-        description: "What would you like?",
-        choices: [
-          { description: "1 gold", data: "gold", index: 0 },
-          { description: "1 luck", data: "luck", index: 1 },
-          { description: "1 Silk", data: "Silk", index: 2 },
-        ],
-        minChoices: 0,
-        maxChoices: 1,
-        callback: (indexes) => {
-          if (indexes.length === 0)
-            return {
-              title: "Wish Granted",
-              effects: [],
-              flavorText: "No selection made.",
-            };
-          const choice = selection.choices.find(
-            (item) => item.index === indexes[0],
-          );
-          if (!choice)
-            return {
-              title: "Wish Granted",
-              effects: [],
-              flavorText: "No selection made.",
-            };
-          switch (choice.data) {
-            case "gold":
-              setField(player, "gold", getField(player, "gold") + 1);
-              return {
-                title: "Wish Granted",
-                effects: [{ type: EffectType.Gold, amount: 1 }],
-              };
-            case "luck":
-              setField(
-                player,
-                "curLuck",
-                Math.min(
-                  getField(player, "maxLuck"),
-                  getField(player, "curLuck") + 1,
-                ),
-              );
-              return {
-                title: "Wish Granted",
-                effects: [{ type: EffectType.Luck, amount: 1 }],
-              };
-            default: {
-              const resources = getField(player, "resources");
-              resources[choice.data] = (resources[choice.data] ?? 0) + 1;
-              setField(player, "resources", resources);
-              return {
-                title: "Wish Granted",
-                effects: [
-                  {
-                    type: EffectType.Resource,
-                    resourceType: choice.data,
-                    amount: 1,
-                  },
-                ],
-              };
-            }
-          }
-        },
-      };
-      queuePendingWork(state, player, {
-        type: "selection",
-        selection: selection,
-      });
-      return [];
-    },
+    availability: "special-wish-availability",
+    execute: "special-wish-execute",
   },
 ];

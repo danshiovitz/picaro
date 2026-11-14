@@ -10,6 +10,8 @@ import {
   PlayerEntity,
   Selection,
   TableauCard,
+  FunctionParamType,
+  FunctionType,
 } from "./types.js";
 import { createEntity } from "./entity.js";
 import {
@@ -20,6 +22,7 @@ import {
   makeItemId,
   makeTokenId,
   encounterTemplates,
+  setApiState,
 } from "./data.js";
 import { loadOrGenerateWorld, MapGeneratorName } from "./map_generator.js";
 import { getRng } from "@common/random.js";
@@ -40,6 +43,7 @@ import {
   getTerrain,
   getTokens,
   getItem,
+  initSystemFunctions,
   performSpecialAction,
   runEncounter,
   scoutEntity,
@@ -184,6 +188,8 @@ const apiState: ApiState = {
   pendingWork,
   tableau,
 };
+setApiState(apiState);
+initSystemFunctions();
 
 function sendJson(res: http.ServerResponse, status: number, data: unknown) {
   const body = JSON.stringify(data);
@@ -222,30 +228,30 @@ const server = http.createServer(async (req, res) => {
     const path = decodeURIComponent(url.pathname);
 
     if (req.method === "GET" && path === "/api/hexes")
-      return sendJson(res, 200, getHexes(apiState));
+      return sendJson(res, 200, getHexes());
     if (req.method === "GET" && path === "/api/terrain")
       return sendJson(res, 200, getTerrain());
     if (req.method === "GET" && path === "/api/regions")
-      return sendJson(res, 200, getRegions(apiState));
+      return sendJson(res, 200, getRegions());
     if (req.method === "GET" && path === "/api/claims")
       return sendJson(res, 200, getClaims());
     if (req.method === "GET" && path === "/api/tokens")
-      return sendJson(res, 200, getTokens(apiState));
+      return sendJson(res, 200, getTokens());
     if (req.method === "GET" && path === "/api/tableau") {
       const playerId = url.searchParams.get("player");
       if (!playerId) return sendJson(res, 400, { error: "Player id required" });
       const player = entityStore.getById<PlayerEntity>(playerId);
       if (!player) return sendJson(res, 404, { error: "Entity not found" });
-      return sendJson(res, 200, getTableau(apiState, player));
+      return sendJson(res, 200, getTableau(player));
     }
     if (req.method === "GET" && path === "/api/game")
-      return sendJson(res, 200, getGame(apiState));
+      return sendJson(res, 200, getGame());
     if (req.method === "GET" && path === "/api/special_actions")
       return sendJson(res, 200, getSpecialActionCatalog());
 
     const itemMatch = path.match(/^\/api\/items\/([^/]+)$/);
     if (itemMatch && req.method === "GET") {
-      const item = getItem(apiState, itemMatch[1]);
+      const item = getItem(itemMatch[1]);
       if (!item) return sendJson(res, 404, { error: "Item not found" });
       return sendJson(res, 200, item);
     }
@@ -258,7 +264,7 @@ const server = http.createServer(async (req, res) => {
       const player = entityStore.getById<PlayerEntity>(playerId);
       if (!player) return sendJson(res, 404, { error: "Entity not found" });
       if (req.method === "GET")
-        return sendJson(res, 200, getSpecialActions(apiState, player));
+        return sendJson(res, 200, getSpecialActions(player));
     }
 
     const entityMatch = path.match(
@@ -271,19 +277,19 @@ const server = http.createServer(async (req, res) => {
       const action = entityMatch[2];
 
       if (req.method === "GET" && !action)
-        return sendJson(res, 200, getEntity(apiState, player));
+        return sendJson(res, 200, getEntity(player));
 
       if (req.method === "POST" && action === "camp")
-        return sendJson(res, 200, campEntity(apiState, player));
+        return sendJson(res, 200, campEntity(player));
 
       if (req.method === "POST" && action === "travel") {
         const body = await readJson(req);
         const request = { route: Array.isArray(body?.route) ? body.route : [] };
-        return sendJson(res, 200, travelEntity(apiState, player, request));
+        return sendJson(res, 200, travelEntity(player, request));
       }
 
       if (req.method === "POST" && action === "scout")
-        return sendJson(res, 200, scoutEntity(apiState, player));
+        return sendJson(res, 200, scoutEntity(player));
 
       if (req.method === "POST" && action === "run_encounter") {
         const body = await readJson(req);
@@ -292,7 +298,7 @@ const server = http.createServer(async (req, res) => {
           tableauId:
             typeof body?.tableauId === "string" ? body.tableauId : undefined,
         };
-        return sendJson(res, 200, runEncounter(apiState, player, request));
+        return sendJson(res, 200, runEncounter(player, request));
       }
 
       if (req.method === "POST" && action === "continue_encounter") {
@@ -302,7 +308,7 @@ const server = http.createServer(async (req, res) => {
           tableauId:
             typeof body?.tableauId === "string" ? body.tableauId : undefined,
         };
-        return sendJson(res, 200, continueEncounter(apiState, player, request));
+        return sendJson(res, 200, continueEncounter(player, request));
       }
 
       if (req.method === "POST" && action === "finish_encounter") {
@@ -313,7 +319,7 @@ const server = http.createServer(async (req, res) => {
             typeof body?.tableauId === "string" ? body.tableauId : undefined,
           conceding: Boolean(body?.conceding),
         };
-        return sendJson(res, 200, finishEncounter(apiState, player, request));
+        return sendJson(res, 200, finishEncounter(player, request));
       }
 
       if (req.method === "POST" && action === "special_action") {
@@ -321,11 +327,7 @@ const server = http.createServer(async (req, res) => {
         const request = {
           specialActionId: String(body?.specialActionId ?? ""),
         };
-        return sendJson(
-          res,
-          200,
-          performSpecialAction(apiState, player, request),
-        );
+        return sendJson(res, 200, performSpecialAction(player, request));
       }
 
       if (req.method === "POST" && action === "make_selection") {
@@ -336,7 +338,7 @@ const server = http.createServer(async (req, res) => {
             ? body.selectedIndexes.map((value: unknown) => Number(value))
             : [],
         };
-        return sendJson(res, 200, makeSelection(apiState, player, request));
+        return sendJson(res, 200, makeSelection(player, request));
       }
     }
 

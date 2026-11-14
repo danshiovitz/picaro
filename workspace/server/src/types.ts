@@ -18,6 +18,8 @@ import type {
   PlayerSummary as CommonPlayerSummary,
   SingleValueEntry as CommonSingleValueEntry,
   Region as CommonRegion,
+  FunctionParamType,
+  FunctionType,
   SelectionBase,
   SelectionChoice as CommonSelectionChoice,
   SpecialAction as CommonSpecialAction,
@@ -58,7 +60,13 @@ export type GameData = {
   entities?: Entity[];
 };
 export type PlayerSummary = CommonPlayerSummary;
-export { RewardType, PenaltyType, EffectType } from "@common/types.js";
+export {
+  RewardType,
+  PenaltyType,
+  EffectType,
+  FunctionType,
+  FunctionParamType,
+} from "@common/types.js";
 export type { EncounterSkillCheck, EncounterTemplate, Effect };
 
 export type PlayerEntity = CommonPlayerEntity;
@@ -94,32 +102,32 @@ export type Rule =
       valueSubtype?: string;
       type: RuleType.BaseValue;
       subtype: ValueRuleType.General;
-      condition: (player: PlayerEntity) => boolean;
-      value: (player: PlayerEntity) => number;
+      condition: string;
+      value: string;
     })
   | (RuleBase & {
       valueType: ValueType;
       valueSubtype?: string;
       type: RuleType.BaseValue;
       subtype: ValueRuleType.Item;
-      condition: (player: PlayerEntity, item: CommonItem) => boolean;
-      value: (player: PlayerEntity, item: CommonItem) => number;
+      condition: string;
+      value: string;
     })
   | (RuleBase & {
       valueType: ValueType;
       valueSubtype?: string;
       type: RuleType.ModifierValue;
       subtype: ValueRuleType.General;
-      condition: (player: PlayerEntity) => boolean;
-      value: (player: PlayerEntity) => number;
+      condition: string;
+      value: string;
     })
   | (RuleBase & {
       valueType: ValueType;
       valueSubtype?: string;
       type: RuleType.ModifierValue;
       subtype: ValueRuleType.Item;
-      condition: (player: PlayerEntity, item: CommonItem) => boolean;
-      value: (player: PlayerEntity, item: CommonItem) => number;
+      condition: string;
+      value: string;
     });
 
 export type ActiveEncounterSkillCheck = CommonActiveEncounterSkillCheck;
@@ -130,15 +138,15 @@ export type SelectionChoice = CommonSelectionChoice;
 export type SelectionViewChoice = CommonSelectionChoice;
 export type SelectionView = SelectionBase;
 export type Selection = SelectionBase & {
-  callback: (indexes: number[]) => ActivityResult | void;
+  callback: string;
 };
 export type PendingActivity =
   | { type: "encounter"; encounter: ActiveEncounter }
   | { type: "selection"; selection: Selection };
 export type PlayCard = { title: string; lines: string[] };
 export type SpecialActionDefinition = SpecialAction & {
-  availability: (player: PlayerEntity) => boolean;
-  execute: (state: ApiState, player: PlayerEntity) => Effect[];
+  availability: string;
+  execute: string;
 };
 export type SpecialActionRequest = { specialActionId: string };
 export type ApiState = {

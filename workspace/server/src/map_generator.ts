@@ -21,7 +21,7 @@ import {
   getNeighborIndexes,
   hexDistance,
 } from "@common/hexmap.js";
-import { claims, makeCityEntities } from "./data.js";
+import { claims, makeTokenId } from "./data.js";
 
 export type MapGeneratorName = "allRandom" | "empire";
 export type GeneratedWorld = {
@@ -745,6 +745,24 @@ function makeWorldEntities(
     ...hexes.map((hex) => createEntity<HexEntity>("hex", hex.name, hex)),
     ...cityTokens,
   ];
+}
+
+function makeCityEntities(): CityEntity[] {
+  return [
+    "Waterdeep",
+    "Underhaven",
+    "Dawnport",
+    "Ironford",
+    "Moonfall",
+    "Highspire",
+    "Blackwell",
+    "Greengate",
+  ].map((n) =>
+    createEntity<CityEntity>("city", makeTokenId(), {
+      entityName: `City of ${n}`,
+      icon: "city",
+    }),
+  );
 }
 
 function buildAllRandom(seed: string): GeneratedWorld {
