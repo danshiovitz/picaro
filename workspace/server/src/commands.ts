@@ -17,11 +17,15 @@ import {
   RewardType,
   Selection,
   SelectionChoice,
+  AvailableSpecialAction,
   SpecialAction,
+  SpecialActionDefinition,
   SpecialActionRequest,
+  SpecialActionType,
   TableauCard,
   TableauData,
   CityEntity,
+  Entity,
   HexEntity,
   Token,
   ValueType,
@@ -70,6 +74,21 @@ export type EncounterRequest = {
 
 function allTokens(state: ApiState) {
   return [...state.tokens, ...state.entities.getBySchema<CityEntity>("city")];
+}
+
+function specialActionBase(action: SpecialActionDefinition) {
+  const { availability: _availability, execute: _execute, ...rest } = action;
+  return rest;
+}
+
+function nearbyEntitiesForPlayer(state: ApiState, player: PlayerEntity) {
+  const location = getField(player, "location");
+  const hex = state.hexByName.get(location);
+  if (!hex) return [];
+  return hex.tokens
+    .filter((tokenId) => tokenId !== getField(player, "tokenId"))
+    .map((tokenId) => state.entities.getById<Entity>(tokenId))
+    .filter((entity): entity is Entity => Boolean(entity));
 }
 
 function locationForToken(hexes: Hex[], tokenId: string) {
@@ -787,7 +806,7 @@ function travelContinueSelection(
     choices: [
       {
         description: `Move to hex ${destinationHex}`,
-        data: "",
+        data: destinationHex,
         index: 0,
       },
       { description: "Stay here", data: "", index: 1 },
@@ -955,23 +974,54 @@ export function getTableau(player: PlayerEntity): TableauData {
 }
 
 export function getSpecialActionCatalog(): SpecialAction[] {
-  return specialActions.map(
-    ({ availability: _availability, execute: _execute, ...action }) => action,
-  );
+  return specialActions.map(specialActionBase);
 }
 
-export function getSpecialActions(player: PlayerEntity): SpecialAction[] {
-  return specialActions
-    .filter((action) =>
-      invoke<boolean>(
-        action.availability,
-        FunctionType.SpecialActionAvailability,
-        [player],
-      ),
-    )
-    .map(
-      ({ availability: _availability, execute: _execute, ...action }) => action,
-    );
+export function getSpecialActions(
+  player: PlayerEntity,
+): AvailableSpecialAction[] {
+  const state = getApiState();
+  const available: AvailableSpecialAction[] = [];
+  for (const action of specialActions) {
+    if (action.type === SpecialActionType.General) {
+      if (
+        invoke<boolean>(
+          action.availability,
+          FunctionType.SpecialActionAvailability,
+          [player],
+        )
+      ) {
+        available.push(specialActionBase(action));
+      }
+      continue;
+    }
+    if (action.type === SpecialActionType.Item) {
+      for (const item of getField(player, "inventory")) {
+        if (
+          invoke<boolean>(
+            action.availability,
+            FunctionType.SpecialActionAvailability,
+            [player, item],
+          )
+        ) {
+          available.push({ ...specialActionBase(action), entityId: item.id });
+        }
+      }
+      continue;
+    }
+    for (const entity of nearbyEntitiesForPlayer(state, player)) {
+      if (
+        invoke<boolean>(
+          action.availability,
+          FunctionType.SpecialActionAvailability,
+          [player, entity],
+        )
+      ) {
+        available.push({ ...specialActionBase(action), entityId: entity.id });
+      }
+    }
+  }
+  return available;
 }
 
 export function performSpecialAction(
@@ -984,11 +1034,33 @@ export function performSpecialAction(
   );
   if (!action) throw new RulesViolation("Special action not found");
   assertNoPendingWork(state, player);
+  let target: Item | Entity | undefined;
+  let params: unknown[] = [player];
+  switch (action.type) {
+    case SpecialActionType.General:
+      break;
+    case SpecialActionType.Item: {
+      target = getField(player, "inventory").find(
+        (item) => item.id === request.entityId,
+      );
+      if (!target) throw new RulesViolation("Special action item not found");
+      params = [player, target];
+      break;
+    }
+    case SpecialActionType.NearbyEntity: {
+      target = nearbyEntitiesForPlayer(state, player).find(
+        (entity) => entity.id === request.entityId,
+      );
+      if (!target) throw new RulesViolation("Special action entity not found");
+      params = [player, target];
+      break;
+    }
+  }
   if (
     !invoke<boolean>(
       action.availability,
       FunctionType.SpecialActionAvailability,
-      [player],
+      params,
     )
   )
     throw new RulesViolation("Special action is unavailable");
@@ -1003,7 +1075,7 @@ export function performSpecialAction(
   const effects = invoke<Effect[]>(
     action.execute,
     FunctionType.SpecialActionExecute,
-    [player],
+    params,
   );
   applyEffects(state, player, effects);
   setField(

@@ -326,6 +326,7 @@ const server = http.createServer(async (req, res) => {
         const body = await readJson(req);
         const request = {
           specialActionId: String(body?.specialActionId ?? ""),
+          entityId: body?.entityId ? String(body?.entityId!) : undefined,
         };
         return sendJson(res, 200, performSpecialAction(player, request));
       }

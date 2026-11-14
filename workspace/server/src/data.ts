@@ -13,6 +13,7 @@ import {
   Selection,
   SelectionChoice,
   SpecialActionDefinition,
+  SpecialActionType,
   ValueRuleType,
   ValueType,
   FunctionType,
@@ -268,6 +269,7 @@ for (const schema of Object.values(SCHEMAS)) registerEntitySchema(schema);
 type RegisteredFunction = {
   type: FunctionType;
   fn: (...params: any[]) => unknown;
+  paramTypes?: FunctionParamType[];
 };
 
 export const functionRegistry = new Map<string, RegisteredFunction>();
@@ -320,6 +322,15 @@ function validateFunctionParam(
         throw new RulesViolation(`Parameter ${index} must be an item entity`);
       }
       return;
+    case FunctionParamType.Entity:
+      if (
+        !value ||
+        typeof value !== "object" ||
+        typeof (value as { schemaId?: unknown }).schemaId !== "string"
+      ) {
+        throw new RulesViolation(`Parameter ${index} must be an entity`);
+      }
+      return;
     case FunctionParamType.SelectionChoices:
       if (!Array.isArray(value) || !value.every((c) => "description" in c)) {
         throw new RulesViolation(
@@ -337,11 +348,12 @@ export function registerFunction(
   name: string,
   type: FunctionType,
   fn: (...params: any[]) => unknown,
+  paramTypes?: FunctionParamType[],
 ) {
   if (functionRegistry.has(name)) {
     throw new Error(`Function name must be unique: ${name}`);
   }
-  functionRegistry.set(name, { type, fn });
+  functionRegistry.set(name, { type, fn, paramTypes });
 }
 
 export function invoke<T>(
@@ -358,7 +370,8 @@ export function invoke<T>(
       `Function type mismatch for ${name}: expected ${type}, got ${registered.type}`,
     );
   }
-  const expectedParams = functionParamTypesByType.get(type) ?? [];
+  const expectedParams =
+    registered.paramTypes ?? functionParamTypesByType.get(type) ?? [];
   if (expectedParams.length !== params.length) {
     throw new RulesViolation(
       `Function ${name} expected ${expectedParams.length} parameters, got ${params.length}`,
@@ -474,31 +487,46 @@ registerFunction(
   (player) =>
     getField(player, "curHealth") <
     computeEffectiveValue(player, ValueType.maxHealth),
+  [FunctionParamType.Player],
 );
 registerFunction(
   "special-medical-visit-execute",
   FunctionType.SpecialActionExecute,
   (_player) => [{ type: EffectType.Health, amount: 2 }],
+  [FunctionParamType.Player],
 );
 registerFunction(
   "special-drink-availability",
   FunctionType.SpecialActionAvailability,
-  (player) => hasItemNamed(player, "can of coke"),
+  (_player, item) => getField(item, "name") === "can of coke",
+  [FunctionParamType.Player, FunctionParamType.Item],
 );
 registerFunction(
   "special-drink-execute",
   FunctionType.SpecialActionExecute,
-  (player) => {
-    const item = getField(player, "inventory").find(
-      (item: Item) => item.name === "can of coke",
-    );
-    return item ? [{ type: EffectType.RemoveItems, itemIds: [item.id] }] : [];
-  },
+  (_player, item) => [
+    { type: EffectType.RemoveItems, itemIds: [item.id] },
+    { type: EffectType.Health, amount: 2 },
+  ],
+  [FunctionParamType.Player, FunctionParamType.Item],
+);
+registerFunction(
+  "special-trade-availability",
+  FunctionType.SpecialActionAvailability,
+  (_player, entity) => entity.schemaId === "city",
+  [FunctionParamType.Player, FunctionParamType.Entity],
+);
+registerFunction(
+  "special-trade-execute",
+  FunctionType.SpecialActionExecute,
+  (_player) => [{ type: EffectType.Gold, amount: 2 }],
+  [FunctionParamType.Player, FunctionParamType.Entity],
 );
 registerFunction(
   "special-wish-availability",
   FunctionType.SpecialActionAvailability,
   () => true,
+  [FunctionParamType.Player],
 );
 registerFunction(
   "special-wish-execute",
@@ -523,6 +551,7 @@ registerFunction(
     });
     return [];
   },
+  [FunctionParamType.Player],
 );
 registerFunction(
   "selection-wish-callback",
@@ -566,6 +595,7 @@ export const specialActions: SpecialActionDefinition[] = [
   {
     id: "medical-visit",
     name: "Medical Visit",
+    type: SpecialActionType.General,
     locations: ["C10"],
     cost: [{ type: EffectType.Gold, amount: 2 }],
     availability: "special-medical-visit-availability",
@@ -574,13 +604,23 @@ export const specialActions: SpecialActionDefinition[] = [
   {
     id: "drink",
     name: "Drink",
+    type: SpecialActionType.Item,
     cost: [],
     availability: "special-drink-availability",
     execute: "special-drink-execute",
   },
   {
+    id: "trade",
+    name: "Trade",
+    type: SpecialActionType.NearbyEntity,
+    cost: [],
+    availability: "special-trade-availability",
+    execute: "special-trade-execute",
+  },
+  {
     id: "wish",
     name: "Wish",
+    type: SpecialActionType.General,
     cost: [],
     availability: "special-wish-availability",
     execute: "special-wish-execute",

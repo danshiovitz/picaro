@@ -11,24 +11,42 @@ export class GameStore {
   claims = new Map<string, GameData["claims"][number]>();
 
   constructor(public data: GameData) {
+    const hydratedHexes = data.hexes.map((hex) =>
+      createEntity("hex", hex.name, hex),
+    );
+    const hydratedTokens = data.tokens.map((token) =>
+      createEntity("city", token.id, token),
+    );
+    const hydratedRegions = data.regions.map((region) =>
+      createEntity("region", region.id, region),
+    );
+
+    this.data.hexes = hydratedHexes;
+    this.data.tokens = hydratedTokens;
+    this.data.regions = hydratedRegions;
+
     const entities = data.entities ?? [
-      ...data.hexes,
-      ...data.regions,
-      ...data.tokens,
+      ...hydratedHexes,
+      ...hydratedRegions,
+      ...hydratedTokens,
     ];
     for (const entity of entities)
       this.entities.set(entity.id, hydrateEntity(entity));
 
-    for (const h of data.hexes) {
-      const hydrated = createEntity("hex", h.name, h);
-      this.hexes.set(hydrated.name, hydrated);
-      hydrated.tokens.forEach((t) => this.tokenHex.set(t, hydrated));
+    for (const h of hydratedHexes) {
+      this.hexes.set(h.name, h);
+      h.tokens.forEach((t) => this.tokenHex.set(t, h));
+      this.entities.set(h.id, h);
     }
-    for (const t of data.tokens)
-      this.tokens.set(t.id, createEntity("city", t.id, t));
+    for (const t of hydratedTokens) {
+      this.tokens.set(t.id, t);
+      this.entities.set(t.id, t);
+    }
+    for (const r of hydratedRegions) {
+      this.regions.set(r.id, r);
+      this.entities.set(r.id, r);
+    }
     data.terrains.forEach((t) => this.terrains.set(t.name, t));
-    for (const r of data.regions)
-      this.regions.set(r.id, createEntity("region", r.id, r));
     data.claims.forEach((c) => this.claims.set(c.name, c));
   }
 

@@ -22,7 +22,10 @@ import type {
   FunctionType,
   SelectionBase,
   SelectionChoice as CommonSelectionChoice,
+  AvailableSpecialAction as CommonAvailableSpecialAction,
   SpecialAction as CommonSpecialAction,
+  SpecialActionRequest as CommonSpecialActionRequest,
+  SpecialActionType as CommonSpecialActionType,
   TableauCard as CommonTableauCard,
   TableauData as CommonTableauData,
   Terrain as CommonTerrain,
@@ -134,6 +137,8 @@ export type ActiveEncounterSkillCheck = CommonActiveEncounterSkillCheck;
 export type TableauCard = CommonTableauCard;
 export type TableauData = CommonTableauData;
 export type SpecialAction = CommonSpecialAction;
+export type AvailableSpecialAction = CommonAvailableSpecialAction;
+export { SpecialActionType } from "@common/types.js";
 export type SelectionChoice = CommonSelectionChoice;
 export type SelectionViewChoice = CommonSelectionChoice;
 export type SelectionView = SelectionBase;
@@ -148,7 +153,7 @@ export type SpecialActionDefinition = SpecialAction & {
   availability: string;
   execute: string;
 };
-export type SpecialActionRequest = { specialActionId: string };
+export type SpecialActionRequest = CommonSpecialActionRequest;
 export type ApiState = {
   hexes: Hex[];
   hexByName: Map<string, Hex>;

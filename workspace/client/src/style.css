@@ -726,6 +726,26 @@ button {
   filter: grayscale(0.8);
 }
 
+.inventory-list li,
+.special-action-entity-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.inventory-list .special-action-link,
+.special-action-entity-group .special-action-link {
+  width: auto;
+  padding: 3px 8px;
+  text-align: center;
+  font-size: 11px;
+}
+
+.special-action-entity-name {
+  font-weight: 700;
+}
+
 .special-action-controls {
   display: flex;
   gap: 10px;

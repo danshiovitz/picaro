@@ -1,6 +1,11 @@
 import { entityEntries, getField, hydrateEntity, setField } from "./entity";
 import { GameStore } from "./store";
-import { EffectType, PenaltyType, RewardType } from "./types";
+import {
+  EffectType,
+  PenaltyType,
+  RewardType,
+  SpecialActionType,
+} from "./types";
 import {
   activityErrorTitle,
   activityResultTitle,
@@ -20,6 +25,7 @@ import type {
   Item,
   PlayerEntity,
   Selection,
+  AvailableSpecialAction,
   SpecialAction,
   TableauCard,
   TableauData,
@@ -105,7 +111,7 @@ async function apiJson<T>(
         ),
         apiJson<TableauData>("/api/tableau", undefined, 20),
         apiJson<SpecialAction[]>("/api/special_actions", undefined, 20),
-        apiJson<SpecialAction[]>(
+        apiJson<AvailableSpecialAction[]>(
           `/api/entities/${encodeURIComponent(playerId)}/special_actions`,
           undefined,
           20,
@@ -472,7 +478,7 @@ function render(
   player: PlayerEntity,
   tableau: TableauData,
   initialSpecialActionCatalog: SpecialAction[],
-  initialSpecialActions: SpecialAction[],
+  initialSpecialActions: AvailableSpecialAction[],
 ) {
   let tableauData = tableau;
   let encounterById = new Map(
@@ -521,6 +527,9 @@ function render(
   type OngoingTravelData = {
     route: string[];
     specialActionId: string | null;
+    entityId?: string;
+    targetHex?: string;
+    targetName?: string;
   };
   let ongoingTravel: OngoingTravelData | null = null;
   let activeSelection: Selection | null = null;
@@ -561,6 +570,9 @@ function render(
         "#selection-select, #selection-cancel",
       )
       .forEach((button) => (button.disabled = busy));
+    document
+      .querySelectorAll<HTMLButtonElement>("[data-special-action-id]")
+      .forEach((button) => (button.disabled = disabled));
     renderSpecialActionList();
   }
   function setActivityPanel(
@@ -604,7 +616,11 @@ function render(
           (item) => item.id === ongoingTravel.specialActionId,
         );
         if (!action) return false;
-        showSpecialActionPrompt(action, player.location);
+        showSpecialActionPrompt(
+          action,
+          ongoingTravel.targetName ?? player.location,
+          ongoingTravel.entityId,
+        );
         ongoingTravel = null;
         return true;
       } else {
@@ -783,9 +799,39 @@ function render(
     return best?.name;
   }
 
-  function visibleSpecialActions() {
+  function catalogSpecialActionsForHex(hexName: string) {
+    return specialActionCatalog.filter((action) =>
+      action.locations?.includes(hexName),
+    );
+  }
+
+  function nearbyEntityGroupsForHex(hexName: string) {
+    const hex = store.hexes.get(hexName);
+    if (!hex) return [];
+    const groups = new Map<
+      string,
+      { entityId: string; name: string; actions: SpecialAction[] }
+    >();
+    for (const tokenId of hex.tokens) {
+      const entity = store.tokens.get(tokenId);
+      if (!entity) continue;
+      const actions = specialActionCatalog.filter(
+        (action) => action.type === SpecialActionType.NearbyEntity,
+      );
+      if (!actions.length) continue;
+      groups.set(tokenId, {
+        entityId: tokenId,
+        name: entity.entityName ?? entity.name ?? tokenId,
+        actions,
+      });
+    }
+    return [...groups.values()];
+  }
+
+  function visibleGeneralSpecialActions() {
     const origin = currentLocationHex();
     return specialActions.filter((action) => {
+      if (action.type !== SpecialActionType.General) return false;
       if (!action.locations?.length) return true;
       if (!origin) return false;
       return action.locations.some((location) => {
@@ -797,32 +843,88 @@ function render(
     });
   }
 
-  function catalogSpecialActionsForHex(hexName: string) {
-    return specialActionCatalog.filter((action) =>
-      action.locations?.includes(hexName),
-    );
+  function specialActionLabel(action: AvailableSpecialAction) {
+    return action.name;
   }
 
-  function renderSpecialActionLabel(action: SpecialAction, target?: string) {
-    return `${esc(action.name)}${target ? ` (${esc(target)})` : ""}`;
+  function renderSpecialActionButton(
+    action: AvailableSpecialAction,
+    options: {
+      targetHex?: string;
+      targetName?: string;
+      entityId?: string;
+    } = {},
+  ) {
+    const disabled = busy || activityBlocksControls;
+    const attrs = [
+      `class="special-action-button special-action-link"`,
+      `type="button"`,
+      `data-special-action-id="${esc(action.id)}"`,
+      (options.entityId ?? action.entityId)
+        ? `data-special-action-entity-id="${esc(options.entityId ?? action.entityId)}"`
+        : "",
+      options.targetHex
+        ? `data-special-action-target-hex="${esc(options.targetHex)}"`
+        : "",
+      options.targetName
+        ? `data-special-action-target-name="${esc(options.targetName)}"`
+        : "",
+      disabled ? "disabled" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    return `<button ${attrs}>${esc(specialActionLabel(action))}</button>`;
   }
 
   function renderSpecialActionList() {
-    const actions = visibleSpecialActions();
     const disabled = busy || activityBlocksControls;
-    specialActionsEl.innerHTML = actions.length
-      ? `<div class="special-actions-list">${actions
-          .map((action) => {
-            const target = specialActionTarget(action);
-            return `<button class="special-action-link" type="button" data-action-id="${esc(action.id)}"${target ? ` data-target-hex="${esc(target)}"` : ""} ${disabled ? "disabled" : ""}>${renderSpecialActionLabel(action, target)}</button>`;
-          })
-          .join("")}</div>`
-      : "";
+    const generalActions = visibleGeneralSpecialActions();
+    const nearbyEntityActions = specialActions.filter(
+      (action) => action.type === SpecialActionType.NearbyEntity,
+    );
+    const nearbyGroups = new Map<string, AvailableSpecialAction[]>();
+    for (const action of nearbyEntityActions) {
+      if (!action.entityId) continue;
+      const actions = nearbyGroups.get(action.entityId) ?? [];
+      actions.push(action);
+      nearbyGroups.set(action.entityId, actions);
+    }
+    const nearbyHtml = [...nearbyGroups.entries()]
+      .map(([entityId, actions]) => {
+        const entity = store.entity(entityId);
+        const name =
+          (entity as { entityName?: string; name?: string } | undefined)
+            ?.entityName ??
+          (entity as { entityName?: string; name?: string } | undefined)
+            ?.name ??
+          entityId;
+        return `<div class="special-action-entity-group"><span class="special-action-entity-name">${esc(name)}</span> ${actions
+          .map((action) =>
+            renderSpecialActionButton(action, {
+              targetHex: player.location,
+              targetName: name,
+              entityId,
+            }),
+          )
+          .join(" ")}</div>`;
+      })
+      .join("");
+    specialActionsEl.innerHTML =
+      generalActions.length || nearbyHtml
+        ? `<div class="special-actions-list">${generalActions
+            .map((action) => renderSpecialActionButton(action))
+            .join(" ")}</div>${nearbyHtml}`
+        : "";
+    specialActionsEl
+      .querySelectorAll<HTMLButtonElement>("button[data-special-action-id]")
+      .forEach((button) => {
+        button.disabled = disabled;
+      });
   }
 
   async function refreshSpecialActions() {
     try {
-      specialActions = await apiJson<SpecialAction[]>(
+      specialActions = await apiJson<AvailableSpecialAction[]>(
         `/api/entities/${encodeURIComponent(player.id)}/special_actions`,
         undefined,
         20,
@@ -833,14 +935,41 @@ function render(
     }
   }
 
-  function specialActionTitle(action: SpecialAction, hexName: string) {
-    return `Perform ${action.name} in hex ${hexName}?`;
+  function specialActionTitle(action: SpecialAction, targetName?: string) {
+    if (!targetName) return `Perform ${action.name}?`;
+    if (action.type === SpecialActionType.NearbyEntity) {
+      return `Perform ${action.name} with ${targetName}?`;
+    }
+    if (action.type === SpecialActionType.Item) {
+      return `Perform ${action.name} on ${targetName}?`;
+    }
+    if (action.locations?.length) {
+      return `Perform ${action.name} in hex ${targetName}?`;
+    }
+    return `Perform ${action.name} on ${targetName}?`;
   }
 
-  function showSpecialActionPrompt(action: SpecialAction, hexName: string) {
+  function specialActionTargetName(action: AvailableSpecialAction) {
+    if (!action.entityId) return undefined;
+    if (action.type === SpecialActionType.Item) {
+      return player.inventory.find((item) => item.id === action.entityId)?.name;
+    }
+    if (action.type === SpecialActionType.NearbyEntity) {
+      const entity = store.entity(action.entityId) as
+        { entityName?: string; name?: string } | undefined;
+      return entity?.entityName ?? entity?.name;
+    }
+    return undefined;
+  }
+
+  function showSpecialActionPrompt(
+    action: SpecialAction,
+    targetName?: string,
+    entityId?: string,
+  ) {
     const canAfford = canAffordEffects(player, action.cost ?? []);
     setPlay(
-      `<article class="play-card special-action-card"><h3>${esc(action.name)}</h3><div class="play-card-body"><p>${esc(specialActionTitle(action, hexName))}</p><p class="special-action-cost">Cost: ${esc(formatEffects(action.cost ?? []))}</p></div></article><div class="special-action-controls"><button id="special-action-ok" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You can\'t afford to perform this action." aria-disabled="true"'}>OK</button><button id="special-action-cancel" class="card-ok" type="button">Cancel</button></div>`,
+      `<article class="play-card special-action-card"><h3>${esc(action.name)}</h3><div class="play-card-body"><p>${esc(specialActionTitle(action, targetName))}</p><p class="special-action-cost">Cost: ${esc(formatEffects(action.cost ?? []))}</p></div></article><div class="special-action-controls"><button id="special-action-ok" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You can\'t afford to perform this action." aria-disabled="true"'}>OK</button><button id="special-action-cancel" class="card-ok" type="button">Cancel</button></div>`,
       action.name,
       true,
     );
@@ -853,18 +982,26 @@ function render(
     if (canAfford)
       okButton.addEventListener(
         "click",
-        () => void performSpecialAction(action.id),
+        () => void performSpecialAction(action.id, entityId),
       );
   }
 
-  function startSpecialAction(action: SpecialAction, targetHex: string) {
+  function startSpecialAction(
+    action: SpecialAction,
+    targetHex: string,
+    entityId?: string,
+    targetName?: string,
+  ) {
     const currentHex = player.location;
     if (currentHex === targetHex) {
-      showSpecialActionPrompt(action, targetHex);
+      showSpecialActionPrompt(action, targetName ?? targetHex, entityId);
       return;
     }
     ongoingTravel = {
       specialActionId: action.id,
+      entityId,
+      targetHex,
+      targetName: targetName ?? targetHex,
       route: shortestPath(player.location, targetHex),
     };
     enterTravelMode();
@@ -872,18 +1009,27 @@ function render(
     if (hex) selectRouteHex(hex);
   }
 
-  function specialActionLinkClick(actionId: string, targetHex?: string) {
+  function specialActionLinkClick(
+    actionId: string,
+    targetHex?: string,
+    entityId?: string,
+    targetName?: string,
+  ) {
     const action = specialActionCatalog.find((item) => item.id === actionId);
+    if (!action) return;
     const hexName =
       targetHex ??
       (action?.locations?.length
         ? specialActionTarget(action)
         : player.location);
-    if (!action || !hexName) return;
-    startSpecialAction(action, hexName);
+    if (!hexName) return;
+    startSpecialAction(action, hexName, entityId, targetName);
   }
 
-  async function performSpecialAction(specialActionId: string) {
+  async function performSpecialAction(
+    specialActionId: string,
+    entityId?: string,
+  ) {
     await executeActivity(
       "Action",
       () =>
@@ -892,7 +1038,7 @@ function render(
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ specialActionId }),
+            body: JSON.stringify({ specialActionId, entityId }),
           },
         ),
       (result) => {
@@ -903,15 +1049,40 @@ function render(
     );
   }
 
-  specialActionsEl.addEventListener("click", (e) => {
-    const button = (e.target as HTMLElement).closest(
-      ".special-action-link",
+  function handleSpecialActionClick(event: MouseEvent) {
+    const button = (event.target as HTMLElement)?.closest(
+      "button[data-special-action-id]",
     ) as HTMLButtonElement | null;
     if (!button || button.disabled) return;
-    const actionId = button.dataset.actionId;
+    const actionId = button.dataset.specialActionId;
     if (!actionId) return;
-    specialActionLinkClick(actionId, button.dataset.targetHex);
-  });
+    const action = specialActions.find((item) => item.id === actionId);
+    if (!action) return;
+    const entityId = button.dataset.specialActionEntityId;
+    const targetHex = button.dataset.specialActionTargetHex;
+    const targetName =
+      button.dataset.specialActionTargetName ?? specialActionTargetName(action);
+    if (action.type === SpecialActionType.Item) {
+      showSpecialActionPrompt(action, targetName, entityId);
+      return;
+    }
+    if (action.type === SpecialActionType.NearbyEntity) {
+      if (!targetHex) {
+        showSpecialActionPrompt(action, targetName, entityId);
+        return;
+      }
+      startSpecialAction(action, targetHex, entityId, targetName);
+      return;
+    }
+    if (targetHex) {
+      specialActionLinkClick(actionId, targetHex, entityId, targetName);
+      return;
+    }
+    showSpecialActionPrompt(action, targetName, entityId);
+  }
+
+  specialActionsEl.addEventListener("click", handleSpecialActionClick);
+  stats.addEventListener("click", handleSpecialActionClick);
 
   function encounterButtons(card: ActiveEncounter) {
     if (card.state === "active")
@@ -1015,9 +1186,29 @@ function render(
   }
 
   function renderInventory(items: Item[]) {
+    const itemActionsById = new Map<string, AvailableSpecialAction[]>();
+    for (const action of specialActions) {
+      if (action.type !== SpecialActionType.Item || !action.entityId) continue;
+      const actions = itemActionsById.get(action.entityId) ?? [];
+      actions.push(action);
+      itemActionsById.set(action.entityId, actions);
+    }
     return items.length
       ? `<ul class="inventory-list">${items
-          .map((item) => `<li>${esc(item.name)}</li>`)
+          .map((item) => {
+            const actions = itemActionsById.get(item.id) ?? [];
+            const actionHtml = actions.length
+              ? ` ${actions
+                  .map((action) =>
+                    renderSpecialActionButton(action, {
+                      targetName: item.name,
+                      entityId: item.id,
+                    }),
+                  )
+                  .join(" ")}`
+              : "";
+            return `<li>${esc(item.name)}${actionHtml}</li>`;
+          })
           .join("")}</ul>`
       : `<p class="inventory-empty">None</p>`;
   }
@@ -1233,8 +1424,8 @@ function render(
       20,
     );
     syncTableau(updatedTableau);
-    renderSummary();
     await refreshSpecialActions();
+    renderSummary();
     draw();
   }
 
@@ -1750,6 +1941,7 @@ function render(
     );
     const encounter = encounterByLocation.get(hex.name);
     const specialActionsHere = catalogSpecialActionsForHex(hex.name);
+    const nearbyEntityGroups = nearbyEntityGroupsForHex(hex.name);
     const regionStars = f.regionObj
       ? "★".repeat(f.regionObj.base_difficulty)
       : "";
@@ -1776,6 +1968,21 @@ function render(
           .map(
             (action) =>
               `<a class="special-action-popup-link" href="#" data-action-id="${esc(action.id)}" data-target-hex="${esc(hex.name)}">${esc(action.name)}</a>`,
+          )
+          .join("<br/>"),
+      ]);
+    if (nearbyEntityGroups.length)
+      lines.push([
+        "Nearby Actions",
+        nearbyEntityGroups
+          .map(
+            (group) =>
+              `<div><a class="special-action-entity-link" href="#" data-target-hex="${esc(hex.name)}">${esc(group.name)}</a> ${group.actions
+                .map(
+                  (action) =>
+                    `<a class="special-action-popup-link" href="#" data-action-id="${esc(action.id)}" data-target-hex="${esc(hex.name)}" data-target-name="${esc(group.name)}" data-entity-id="${esc(group.entityId)}">${esc(action.name)}</a>`,
+                )
+                .join(" ")}</div>`,
           )
           .join("<br/>"),
       ]);
@@ -1857,7 +2064,26 @@ function render(
         e.stopPropagation();
         const actionId = specialActionLink.dataset.actionId;
         const targetHex = specialActionLink.dataset.targetHex;
-        if (actionId) specialActionLinkClick(actionId, targetHex);
+        const entityId = specialActionLink.dataset.entityId;
+        const targetName = specialActionLink.dataset.targetName;
+        if (actionId)
+          specialActionLinkClick(actionId, targetHex, entityId, targetName);
+      });
+    });
+    tip.querySelectorAll(".special-action-entity-link").forEach((link) => {
+      const entityLink = link as HTMLAnchorElement;
+      entityLink.classList.toggle("disabled", moveHereDisabled);
+      entityLink.setAttribute("aria-disabled", String(moveHereDisabled));
+      entityLink.addEventListener("click", (e) => {
+        if (moveHereDisabled) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        enterTravelMode();
+        if (route) selectRouteHex(hex);
       });
     });
   }

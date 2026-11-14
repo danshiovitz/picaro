@@ -20,6 +20,7 @@ export enum FunctionType {
 export enum FunctionParamType {
   Player = "player",
   Item = "item",
+  Entity = "entity",
   Selection = "selection",
   SelectionChoices = "choices",
   RawData = "rawData",
@@ -142,11 +143,20 @@ export type TableauCard = {
   skillChecks: EncounterSkillCheck[];
 };
 export type TableauData = { encounters: TableauCard[] };
+export enum SpecialActionType {
+  General = "general",
+  Item = "item",
+  NearbyEntity = "nearby_entity",
+}
 export type SpecialAction = {
   id: string;
   name: string;
+  type: SpecialActionType;
   locations?: string[];
   cost: Effect[];
+};
+export type AvailableSpecialAction = SpecialAction & {
+  entityId?: string;
 };
 export type SelectionChoice = {
   description: string;
@@ -189,6 +199,10 @@ export type ActivityNextActive<
 > =
   | { type: "encounter"; encounter: ActiveEncounter }
   | { type: "selection"; selection: SelectionT };
+export type SpecialActionRequest = {
+  specialActionId: string;
+  entityId?: string;
+};
 export type ActivityResult<SelectionT extends SelectionBase = SelectionBase> = {
   title?: string;
   flavorText?: string;
