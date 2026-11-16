@@ -160,8 +160,7 @@ export type ApiState = {
   regions: Region[];
   tokens: { id: string; entityName: string; icon: string }[];
   entities: EntityStore;
-  currentActivities: Map<string, PendingActivity>;
-  pendingWork: Map<string, PendingActivity[]>;
+  activitiesQueue: Map<string, PendingActivity[]>;
   tableau: Map<string, TableauCard[]>;
 };
 export type ActivityNextActive = CommonActivityNextActive<SelectionView>;

@@ -72,7 +72,8 @@ export type EncounterRequest = {
   conceding?: boolean;
 };
 
-function allTokens(state: ApiState) {
+function allTokens() {
+  const state = getApiState();
   return [...state.tokens, ...state.entities.getBySchema<CityEntity>("city")];
 }
 
@@ -81,7 +82,8 @@ function specialActionBase(action: SpecialActionDefinition) {
   return rest;
 }
 
-function nearbyEntitiesForPlayer(state: ApiState, player: PlayerEntity) {
+function nearbyEntitiesForPlayer(player: PlayerEntity) {
+  const state = getApiState();
   const location = getField(player, "location");
   const hex = state.hexByName.get(location);
   if (!hex) return [];
@@ -95,7 +97,8 @@ function locationForToken(hexes: Hex[], tokenId: string) {
   return hexes.find((hex) => hex.tokens.includes(tokenId))?.name ?? "Unknown";
 }
 
-function moveToken(state: ApiState, tokenId: string, to: string) {
+function moveToken(tokenId: string, to: string) {
+  const state = getApiState();
   const fromHex = state.hexes.find((hex) => hex.tokens.includes(tokenId));
   if (fromHex) fromHex.tokens = fromHex.tokens.filter((id) => id !== tokenId);
   const targetHex = state.hexByName.get(to);
@@ -110,66 +113,101 @@ function moveToken(state: ApiState, tokenId: string, to: string) {
   }
 }
 
-function getPlayerTableau(state: ApiState, player: PlayerEntity) {
+function getPlayerTableau(player: PlayerEntity) {
+  const state = getApiState();
   const tableau = state.tableau.get(player.id);
   if (!tableau) throw new RulesViolation("Tableau not found");
   return tableau;
 }
 
-function pendingWorkFor(state: ApiState, player: PlayerEntity) {
-  return state.pendingWork.get(player.id) ?? [];
-}
-
-function assertNoPendingWork(state: ApiState, player: PlayerEntity) {
-  if (
-    pendingWorkFor(state, player).length > 0 ||
-    state.currentActivities.has(player.id)
-  ) {
+function assertNoActivities(player: PlayerEntity) {
+  const state = getApiState();
+  let queue = state.activitiesQueue.get(player.id);
+  if (queue && queue.length > 0) {
     throw new RulesViolation("You must finish pending items first.");
   }
 }
 
-export function queuePendingWork(
+export function prependActivity(
   player: PlayerEntity,
-  work: PendingActivity,
-  front = false,
+  activity: PendingActivity,
 ) {
   const state = getApiState();
-  const queue = pendingWorkFor(state, player);
-  if (front) queue.unshift(work);
-  else queue.push(work);
-  state.pendingWork.set(player.id, queue);
+  let queue = state.activitiesQueue.get(player.id);
+  if (!queue || queue.length == 0) {
+    queue = [];
+    state.activitiesQueue.set(player.id, queue);
+  }
+  queue.unshift(activity);
 }
 
-function takePendingWork(
-  state: ApiState,
+export function appendActivity(
   player: PlayerEntity,
-): PendingActivity | undefined {
-  const queue = pendingWorkFor(state, player);
-  const work = queue.shift();
-  if (queue.length > 0) state.pendingWork.set(player.id, queue);
-  else state.pendingWork.delete(player.id);
-  return work;
+  activity: PendingActivity,
+) {
+  const state = getApiState();
+  let queue = state.activitiesQueue.get(player.id);
+  if (!queue || queue.length == 0) {
+    queue = [];
+    state.activitiesQueue.set(player.id, queue);
+  }
+  queue.push(activity);
 }
 
-export function nextActiveForPlayer(
+export function fetchNextActivityForClient(
   player: PlayerEntity,
 ): ActivityNextActive | undefined {
   const state = getApiState();
-  if (!state.currentActivities.has(player.id)) {
-    let pending = takePendingWork(state, player);
-    if (pending) {
-      state.currentActivities.set(player.id, pending);
-    }
+  const queue = state.activitiesQueue.get(player.id);
+  if (!queue || queue.length == 0) {
+    return undefined;
   }
-  const activity = state.currentActivities.get(player.id);
-  if (!activity) return undefined;
-  switch (activity.type) {
+  switch (queue[0].type) {
     case "selection":
-      return { type: "selection", selection: selectionDto(activity.selection) };
+      return { type: "selection", selection: selectionDto(queue[0].selection) };
     case "encounter":
-      return activity;
+      return queue[0];
   }
+}
+
+export function fetchNextActivityExpectingSelection(
+  player: PlayerEntity,
+  selectionId: string,
+  remove: boolean = true,
+): Selection | undefined {
+  const state = getApiState();
+  const queue = state.activitiesQueue.get(player.id);
+  const selection =
+    queue && queue.length > 0 && queue[0].type == "selection"
+      ? queue[0].selection
+      : undefined;
+  if (!selection || selection.id !== selectionId) {
+    return undefined;
+  }
+  if (remove) {
+    queue!.shift();
+  }
+  return selection;
+}
+
+export function fetchNextActivityExpectingEncounter(
+  player: PlayerEntity,
+  encounterId: string,
+  remove: boolean = true,
+): ActiveEncounter | undefined {
+  const state = getApiState();
+  const queue = state.activitiesQueue.get(player.id);
+  const encounter =
+    queue && queue.length > 0 && queue[0].type == "encounter"
+      ? queue[0].encounter
+      : undefined;
+  if (!encounter || encounter.id !== encounterId) {
+    return undefined;
+  }
+  if (remove) {
+    queue!.shift();
+  }
+  return encounter;
 }
 
 function encounterState(
@@ -334,7 +372,6 @@ function skillLevelFromXp(xp: number) {
 }
 
 function resolveEncounterEffects(
-  state: ApiState,
   player: PlayerEntity,
   active: ActiveEncounter,
   conceding = false,
@@ -401,7 +438,7 @@ function resolveEncounterEffects(
     );
   }
   effects.push(...xpEffects);
-  applyEffects(state, player, effects);
+  applyEffects(player, effects);
   return effects;
 }
 
@@ -477,11 +514,8 @@ const randomItemTable = [
   "ring of invisibility",
 ];
 
-function gainRandomItem(
-  state: ApiState,
-  player: PlayerEntity,
-  quality: number,
-) {
+function gainRandomItem(player: PlayerEntity, quality: number) {
+  const state = getApiState();
   if (randomItemTable.length === 0) return undefined;
   const roll = Math.min(
     randomItemTable.length,
@@ -494,7 +528,7 @@ function gainRandomItem(
   return item;
 }
 
-function removeRandomItem(state: ApiState, player: PlayerEntity) {
+function removeRandomItem(player: PlayerEntity) {
   const inventory = getField(player, "inventory");
   if (inventory.length === 0) return undefined;
   const index = getRng().int(inventory.length);
@@ -557,11 +591,7 @@ function adjustSkillXp(player: PlayerEntity, skill: string, amount: number) {
   getField(player, "skill_xp")[skill] = Math.max(0, current + amount);
 }
 
-function applyEffects(
-  state: ApiState,
-  player: PlayerEntity,
-  effects: Effect[],
-) {
+function applyEffects(player: PlayerEntity, effects: Effect[]) {
   const frontQueue: PendingActivity[] = [];
   for (const effect of effects) {
     switch (effect.type) {
@@ -574,7 +604,7 @@ function applyEffects(
       case EffectType.ControlledTeleport:
         frontQueue.push({
           type: "selection",
-          selection: controlledTeleportSelection(state, player, effect.radius),
+          selection: controlledTeleportSelection(player, effect.radius),
         });
         break;
       case EffectType.Gold:
@@ -602,17 +632,17 @@ function applyEffects(
         removeItems(player, effect.itemIds);
         break;
       case EffectType.GainRandomItem: {
-        const item = gainRandomItem(state, player, effect.quality);
+        const item = gainRandomItem(player, effect.quality);
         if (item) effect.itemId = item.id;
         break;
       }
       case EffectType.RemoveRandomItem: {
-        const item = removeRandomItem(state, player);
+        const item = removeRandomItem(player);
         if (item) effect.itemId = item.id;
         break;
       }
       case EffectType.AddTableauCard: {
-        const tableau = getPlayerTableau(state, player);
+        const tableau = getPlayerTableau(player);
         const template =
           effect.encounterTemplate ?? getRng().pick(encounterTemplates);
         tableau.push(
@@ -622,16 +652,13 @@ function applyEffects(
       }
     }
   }
-  if (frontQueue.length > 0) {
-    const queue = pendingWorkFor(state, player);
-    queue.unshift(...frontQueue);
-    state.pendingWork.set(player.id, queue);
+  while (frontQueue.length > 0) {
+    prependActivity(player, frontQueue.pop()!);
   }
 }
 
-function payCost(state: ApiState, player: PlayerEntity, cost: Effect[]) {
+function payCost(player: PlayerEntity, cost: Effect[]) {
   applyEffects(
-    state,
     player,
     cost.map((effect) =>
       effect.type === EffectType.RemoveItems ||
@@ -677,7 +704,7 @@ export function controlledTeleportSelectionCallback(
   if (hexDistance(origin, target) > radius) {
     throw new RulesViolation("Selected hex is out of range");
   }
-  moveToken(state, getField(player, "tokenId"), target.name);
+  moveToken(getField(player, "tokenId"), target.name);
   setField(player, "location", target.name);
   return {
     title: "Controlled Teleport",
@@ -717,7 +744,7 @@ export function freeXpSelectionCallback(
           skill: choice.data,
           amount,
         } satisfies Effect);
-  applyEffects(state, player, [effect]);
+  applyEffects(player, [effect]);
   return {
     title: "Free XP",
     effects: [effect],
@@ -742,16 +769,16 @@ export function travelContinueSelectionCallback(
   if (getField(player, "location") !== data.encounterHexName)
     throw new RulesViolation("You can't continue since you've moved.");
   const state = getApiState();
-  moveToken(state, getField(player, "tokenId"), data.destination);
+  moveToken(getField(player, "tokenId"), data.destination);
   setField(player, "location", data.destination);
-  endTurn(state, player, "travel-continuation");
+  endTurn(player, "travel-continuation");
 }
 
 function controlledTeleportSelection(
-  state: ApiState,
   player: PlayerEntity,
   radius: number,
 ): Selection {
+  const state = getApiState();
   const originHex = state.hexByName.get(getField(player, "location"));
   if (!originHex) throw new RulesViolation("Origin hex not found");
   const selection: Selection = {
@@ -960,7 +987,7 @@ export function getClaims() {
 
 export function getTokens() {
   const state = getApiState();
-  return allTokens(state);
+  return allTokens();
 }
 
 export function getItem(itemId: string) {
@@ -970,7 +997,7 @@ export function getItem(itemId: string) {
 
 export function getTableau(player: PlayerEntity): TableauData {
   const state = getApiState();
-  return { encounters: getPlayerTableau(state, player) };
+  return { encounters: getPlayerTableau(player) };
 }
 
 export function getSpecialActionCatalog(): SpecialAction[] {
@@ -1009,7 +1036,7 @@ export function getSpecialActions(
       }
       continue;
     }
-    for (const entity of nearbyEntitiesForPlayer(state, player)) {
+    for (const entity of nearbyEntitiesForPlayer(player)) {
       if (
         invoke<boolean>(
           action.availability,
@@ -1033,7 +1060,7 @@ export function performSpecialAction(
     (item) => item.id === request.specialActionId,
   );
   if (!action) throw new RulesViolation("Special action not found");
-  assertNoPendingWork(state, player);
+  assertNoActivities(player);
   let target: Item | Entity | undefined;
   let params: unknown[] = [player];
   switch (action.type) {
@@ -1048,7 +1075,7 @@ export function performSpecialAction(
       break;
     }
     case SpecialActionType.NearbyEntity: {
-      target = nearbyEntitiesForPlayer(state, player).find(
+      target = nearbyEntitiesForPlayer(player).find(
         (entity) => entity.id === request.entityId,
       );
       if (!target) throw new RulesViolation("Special action entity not found");
@@ -1071,13 +1098,13 @@ export function performSpecialAction(
     throw new RulesViolation("Special action cannot be performed here");
   if (!canAfford(player, action.cost))
     throw new RulesViolation("You can't afford to perform this action.");
-  payCost(state, player, action.cost);
+  payCost(player, action.cost);
   const effects = invoke<Effect[]>(
     action.execute,
     FunctionType.SpecialActionExecute,
     params,
   );
-  applyEffects(state, player, effects);
+  applyEffects(player, effects);
   setField(
     player,
     "location",
@@ -1085,7 +1112,7 @@ export function performSpecialAction(
   );
   return {
     effects,
-    nextActive: nextActiveForPlayer(player),
+    nextActive: fetchNextActivityForClient(player),
   };
 }
 
@@ -1096,7 +1123,7 @@ export function getGame() {
     terrains: terrainSpecs,
     regions: state.regions,
     claims,
-    tokens: allTokens(state),
+    tokens: allTokens(),
     players: state.entities
       .getBySchema<PlayerEntity>("player")
       .map((player) => ({
@@ -1123,7 +1150,8 @@ function removeEncounterFromTableau(
   return true;
 }
 
-function endTurn(state: ApiState, player: PlayerEntity, reason: string) {
+function endTurn(player: PlayerEntity, reason: string) {
+  const state = getApiState();
   console.log(
     `[endTurn] ${reason} for ${getField(player, "name")} @ ${getField(player, "location")}`,
   );
@@ -1138,7 +1166,7 @@ function endTurn(state: ApiState, player: PlayerEntity, reason: string) {
   );
   const currentHex = state.hexByName.get(getField(player, "location"));
   let changed = false;
-  const tableau = getPlayerTableau(state, player);
+  const tableau = getPlayerTableau(player);
   if (currentHex) {
     const speed = computeEffectiveValue(player, ValueType.speed);
     const before = tableau.length;
@@ -1151,7 +1179,7 @@ function endTurn(state: ApiState, player: PlayerEntity, reason: string) {
       changed = true;
     }
   }
-  const nextTableau = getPlayerTableau(state, player);
+  const nextTableau = getPlayerTableau(player);
   const beforeFill = nextTableau.length;
   fillTableau(nextTableau, encounterTemplates, player);
   if (nextTableau.length !== beforeFill) changed = true;
@@ -1161,44 +1189,44 @@ function endTurn(state: ApiState, player: PlayerEntity, reason: string) {
 export function scoutEntity(player: PlayerEntity): ActivityResult {
   const state = getApiState();
   const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
-  assertNoPendingWork(state, player);
+  assertNoActivities(player);
   if (!canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
-  payCost(state, player, turnCost);
-  const tableau = getPlayerTableau(state, player);
+  payCost(player, turnCost);
+  const tableau = getPlayerTableau(player);
   tableau.splice(0, tableau.length);
   // Make one encounter they scout guaranteed higher quality
   let qmOverrides = getRng().shuffle([+2, undefined, undefined]);
   fillTableau(tableau, encounterTemplates, player, qmOverrides);
-  endTurn(state, player, "scout");
+  endTurn(player, "scout");
   return {
     title: "Scout Results",
     flavorText: "Tableau refreshed",
     effects: [],
     implicitEffects: [{ type: EffectType.Turns, amount: -1 }],
-    nextActive: nextActiveForPlayer(player),
+    nextActive: fetchNextActivityForClient(player),
   };
 }
 
 export function campEntity(player: PlayerEntity): ActivityResult {
   const state = getApiState();
   const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
-  assertNoPendingWork(state, player);
+  assertNoActivities(player);
   if (!canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
-  payCost(state, player, turnCost);
+  payCost(player, turnCost);
   adjustHealth(player, 1);
   setField(
     player,
     "location",
     locationForToken(state.hexes, getField(player, "tokenId")),
   );
-  endTurn(state, player, "camp");
+  endTurn(player, "camp");
   return {
     title: "A Restful Night",
     effects: [{ type: EffectType.Health, amount: 1 }],
     implicitEffects: [{ type: EffectType.Turns, amount: -1 }],
-    nextActive: nextActiveForPlayer(player),
+    nextActive: fetchNextActivityForClient(player),
   };
 }
 
@@ -1207,7 +1235,7 @@ export function travelEntity(
   request: TravelRequest,
 ): ActivityResult {
   const state = getApiState();
-  assertNoPendingWork(state, player);
+  assertNoActivities(player);
   const route = request.route;
   const current = locationForToken(state.hexes, getField(player, "tokenId"));
   if (route.length < 1 || route[0] !== current)
@@ -1229,7 +1257,7 @@ export function travelEntity(
   const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
   if (!canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
-  payCost(state, player, turnCost);
+  payCost(player, turnCost);
 
   const destination = route[route.length - 1];
   const encounterRoute = route.slice(1);
@@ -1240,7 +1268,7 @@ export function travelEntity(
   if (encounterHexName) {
     const encounterHex = state.hexByName.get(encounterHexName);
     if (encounterHex) {
-      moveToken(state, getField(player, "tokenId"), encounterHexName);
+      moveToken(getField(player, "tokenId"), encounterHexName);
       setField(player, "location", encounterHexName);
     }
     const templates = encounterHex
@@ -1253,7 +1281,7 @@ export function travelEntity(
       ...activeEncounterFor(player, encounterCard),
       tableauId: undefined,
     };
-    state.currentActivities.set(player.id, {
+    appendActivity(player, {
       type: "encounter",
       encounter: active,
     });
@@ -1265,7 +1293,7 @@ export function travelEntity(
         encounterHexName,
         encounterRoute[encounterRoute.length - 1],
       );
-      queuePendingWork(player, {
+      appendActivity(player, {
         type: "selection",
         selection,
       });
@@ -1278,13 +1306,13 @@ export function travelEntity(
     };
   }
 
-  moveToken(state, getField(player, "tokenId"), destination);
+  moveToken(getField(player, "tokenId"), destination);
   setField(player, "location", destination);
-  endTurn(state, player, "travel-complete");
+  endTurn(player, "travel-complete");
   return {
     effects: [],
     implicitEffects: [{ type: EffectType.Turns, amount: -1 }],
-    nextActive: nextActiveForPlayer(player),
+    nextActive: fetchNextActivityForClient(player),
   };
 }
 
@@ -1294,15 +1322,15 @@ export function runEncounter(
 ): ActivityResult {
   const state = getApiState();
   const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
-  assertNoPendingWork(state, player);
+  assertNoActivities(player);
   if (!canAfford(player, turnCost))
     throw new RulesViolation("You can't afford to perform this action.");
-  payCost(state, player, turnCost);
-  const tableau = getPlayerTableau(state, player);
+  payCost(player, turnCost);
+  const tableau = getPlayerTableau(player);
   const encounter = tableau.find((card) => card.id === request.encounterId);
   if (!encounter) throw new RulesViolation("Encounter not found");
   const active = activeEncounterFor(player, encounter);
-  state.currentActivities.set(player.id, {
+  appendActivity(player, {
     type: "encounter",
     encounter: active,
   });
@@ -1317,22 +1345,19 @@ export function continueEncounter(
   player: PlayerEntity,
   request: EncounterRequest,
 ): ActivityResult {
-  const state = getApiState();
-  const curActivity = state.currentActivities.get(player.id);
-  const active =
-    curActivity && curActivity.type == "encounter"
-      ? curActivity.encounter
-      : undefined;
-  if (!active || active.id !== request.encounterId)
-    throw new RulesViolation("No active encounter to continue");
+  const active = fetchNextActivityExpectingEncounter(
+    player,
+    request.encounterId,
+  );
+  if (!active) throw new RulesViolation("No active encounter to continue");
   if (active.state !== "active" && active.state !== "succeeded")
     throw new RulesViolation("Encounter cannot be continued");
-  const tableau = getPlayerTableau(state, player);
-  const encounter = active.tableauId
+  const tableau = getPlayerTableau(player);
+  const tableauEncounter = active.tableauId
     ? tableau.find((card) => card.id === request.encounterId)
     : undefined;
-  if (active.tableauId && !encounter)
-    throw new RulesViolation("Encounter not found");
+  if (active.tableauId && !tableauEncounter)
+    throw new RulesViolation("Encounter not found in tableau");
   if (active.nextPenalty) {
     active.penalties = [...active.penalties, active.nextPenalty];
     active.nextPenalty = undefined;
@@ -1364,10 +1389,12 @@ export function continueEncounter(
     active.failureThreshold,
   );
   if (active.state === "active" || active.state === "succeeded") {
-    active.nextPenalty = encounter
-      ? randomPenalty(encounter)
+    active.nextPenalty = tableauEncounter
+      ? randomPenalty(tableauEncounter)
       : randomPenalty({ penalties: active.penalties } as TableauCard);
   }
+  // Put this back on the queue, since we popped it off at the beginning
+  prependActivity(player, { type: "encounter", encounter: active });
   return {
     effects: [],
     nextActive: { type: "encounter", encounter: active },
@@ -1379,38 +1406,27 @@ export function finishEncounter(
   request: EncounterRequest & { conceding?: boolean },
 ): ActivityResult {
   const state = getApiState();
-  const curActivity = state.currentActivities.get(player.id);
-  const active =
-    curActivity && curActivity.type == "encounter"
-      ? curActivity.encounter
-      : undefined;
   const encounterId = request.tableauId ?? request.encounterId;
-  if (!active || active.id !== request.encounterId)
-    throw new RulesViolation("No active encounter to finish");
-  const tableau = getPlayerTableau(state, player);
-  const encounter = active.tableauId
+  const active = fetchNextActivityExpectingEncounter(player, encounterId);
+  if (!active) throw new RulesViolation("Encounter not found");
+  const tableau = getPlayerTableau(player);
+  const tableauEncounter = active.tableauId
     ? tableau.find((card) => card.id === request.encounterId)
     : undefined;
-  if (active.tableauId && !encounter)
-    throw new RulesViolation("Encounter not found");
+  if (active.tableauId && !tableauEncounter)
+    throw new RulesViolation("Encounter not found in tableau");
   if (request.conceding) {
     active.state = "lost";
     active.nextPenalty = undefined;
   }
-  const effects = resolveEncounterEffects(
-    state,
-    player,
-    active,
-    request.conceding,
-  );
-  state.currentActivities.delete(player.id);
-  if (encounter) {
+  const effects = resolveEncounterEffects(player, active, request.conceding);
+  if (tableauEncounter) {
     removeEncounterFromTableau(tableau, encounterId);
-    endTurn(state, player, "finish-encounter");
+    endTurn(player, "finish-encounter");
   }
   return {
     effects,
-    nextActive: nextActiveForPlayer(player),
+    nextActive: fetchNextActivityForClient(player),
   };
 }
 

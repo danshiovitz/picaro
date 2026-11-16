@@ -6,7 +6,10 @@ import {
   SelectionView,
   FunctionType,
 } from "./types.js";
-import { nextActiveForPlayer, RulesViolation } from "./commands.js";
+import {
+  fetchNextActivityExpectingSelection,
+  RulesViolation,
+} from "./commands.js";
 import { getApiState, skillNames, invoke } from "./data.js";
 
 export type SelectionRequest = {
@@ -69,31 +72,18 @@ export function makeSelection(
   player: PlayerEntity,
   request: SelectionRequest,
 ): ActivityResult {
-  const state = getApiState();
-  const curActivity = state.currentActivities.get(player.id);
-  const selection =
-    curActivity && curActivity.type == "selection"
-      ? curActivity.selection
-      : undefined;
-  if (!selection || selection.id !== request.selectionId) {
+  const selection = fetchNextActivityExpectingSelection(
+    player,
+    request.selectionId,
+  );
+  if (!selection) {
     throw new RulesViolation("Selection not found");
   }
   validateSelectionIndexes(selection, request.selectedIndexes);
-  state.currentActivities.delete(player.id);
   const choices = selectedChoices(selection, request.selectedIndexes);
-  const callbackResult = invoke<ActivityResult | undefined>(
+  return invoke<ActivityResult>(
     selection.callback,
     FunctionType.SelectionCallback,
     [selection, player, choices],
-  );
-  return (
-    callbackResult ?? {
-      flavorText:
-        choices.length > 0
-          ? choices.map((choice) => choice.description).join("\n")
-          : "No selection made.",
-      effects: [],
-      nextActive: nextActiveForPlayer(player),
-    }
   );
 }

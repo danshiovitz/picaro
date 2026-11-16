@@ -28,7 +28,7 @@ import {
 } from "./entity.js";
 import { SCHEMAS } from "./schemas.js";
 import { computeEffectiveValue } from "./rule.js";
-import { queuePendingWork, RulesViolation } from "./commands.js";
+import { appendActivity, RulesViolation } from "./commands.js";
 
 export const terrainSpecs = [
   ["Forest", "#1a531e", "forest"],
@@ -545,7 +545,7 @@ registerFunction(
       maxChoices: 1,
       callback: "selection-wish-callback",
     };
-    queuePendingWork(player, {
+    appendActivity(player, {
       type: "selection",
       selection,
     });

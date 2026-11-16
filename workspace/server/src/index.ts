@@ -168,7 +168,7 @@ for (const token of playerTokens) {
     }),
   );
 }
-const pendingWork = new Map<string, PendingActivity[]>();
+const activitiesQueue = new Map<string, PendingActivity[]>();
 const tableau = new Map<string, TableauCard[]>();
 setEncounterContext({ hexes, regions });
 for (const player of entityStore.getBySchema<PlayerEntity>("player")) {
@@ -176,7 +176,6 @@ for (const player of entityStore.getBySchema<PlayerEntity>("player")) {
   fillTableau(playerTableau, encounterTemplates, player);
   tableau.set(player.id, playerTableau);
 }
-const currentActivities = new Map<string, PendingActivity>();
 
 const apiState: ApiState = {
   hexes,
@@ -184,8 +183,7 @@ const apiState: ApiState = {
   regions,
   tokens: playerTokens,
   entities: entityStore,
-  currentActivities,
-  pendingWork,
+  activitiesQueue,
   tableau,
 };
 setApiState(apiState);
