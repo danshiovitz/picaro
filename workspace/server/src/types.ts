@@ -3,6 +3,8 @@ import type {
   ActiveEncounterSkillCheck as CommonActiveEncounterSkillCheck,
   ActivityNextActive as CommonActivityNextActive,
   ActivityResult as CommonActivityResult,
+  Notification as CommonNotification,
+  Trigger as CommonTrigger,
   AxialPoint as CommonAxialPoint,
   Claim as CommonClaim,
   Condition as CommonCondition,
@@ -145,9 +147,13 @@ export type SelectionView = SelectionBase;
 export type Selection = SelectionBase & {
   callback: string;
 };
+export type Notification = CommonNotification;
+export type Trigger = CommonTrigger;
+export { TriggerType } from "@common/types.js";
 export type PendingActivity =
   | { type: "encounter"; encounter: ActiveEncounter }
-  | { type: "selection"; selection: Selection };
+  | { type: "selection"; selection: Selection }
+  | { type: "notification"; notification: Notification };
 export type PlayCard = { title: string; lines: string[] };
 export type SpecialActionDefinition = SpecialAction & {
   availability: string;

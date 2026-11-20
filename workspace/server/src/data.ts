@@ -1,7 +1,10 @@
+import { randomUUID } from "node:crypto";
+
 import {
   ApiState,
   Claim,
   EffectType,
+  Effect,
   EncounterTemplate,
   CityEntity,
   Item,
@@ -14,6 +17,9 @@ import {
   SelectionChoice,
   SpecialActionDefinition,
   SpecialActionType,
+  Trigger,
+  TriggerType,
+  Notification,
   ValueRuleType,
   ValueType,
   FunctionType,
@@ -28,7 +34,13 @@ import {
 } from "./entity.js";
 import { SCHEMAS } from "./schemas.js";
 import { computeEffectiveValue } from "./rule.js";
-import { appendActivity, RulesViolation } from "./commands.js";
+import {
+  appendActivity,
+  applyEffects,
+  prependActivity,
+  makeNotification,
+  RulesViolation,
+} from "./commands.js";
 
 export const terrainSpecs = [
   ["Forest", "#1a531e", "forest"],
@@ -295,7 +307,33 @@ export const functionParamTypesByType = new Map<
   ],
   [FunctionType.SpecialActionAvailability, [FunctionParamType.Player]],
   [FunctionType.SpecialActionExecute, [FunctionParamType.Player]],
+  [FunctionType.TriggerCallback, [FunctionParamType.Player]],
 ]);
+
+const triggerNames = new Set<string>();
+const triggersByType = new Map<TriggerType, Trigger[]>();
+
+function insertTrigger(list: Trigger[], trigger: Trigger) {
+  const index = list.findIndex(
+    (existing) => (existing.priority ?? 10) > (trigger.priority ?? 10),
+  );
+  if (index === -1) list.push(trigger);
+  else list.splice(index, 0, trigger);
+}
+
+export function addTrigger(trigger: Trigger) {
+  if (triggerNames.has(trigger.name)) {
+    throw new Error(`Trigger name must be unique: ${trigger.name}`);
+  }
+  triggerNames.add(trigger.name);
+  const list = triggersByType.get(trigger.type) ?? [];
+  triggersByType.set(trigger.type, list);
+  insertTrigger(list, trigger);
+}
+
+export function getTriggersForType(type: TriggerType) {
+  return [...(triggersByType.get(type) ?? [])];
+}
 
 function isEntityWithSchema(value: unknown, schemaId: string) {
   return (
@@ -544,6 +582,7 @@ registerFunction(
       minChoices: 0,
       maxChoices: 1,
       callback: "selection-wish-callback",
+      implicitEffects: [],
     };
     appendActivity(player, {
       type: "selection",
@@ -556,40 +595,55 @@ registerFunction(
 registerFunction(
   "selection-wish-callback",
   FunctionType.SelectionCallback,
-  (selection, player, choices) => {
-    if (choices.length !== 1)
-      return {
-        title: "Wish Granted",
-        effects: [],
-        flavorText: "No selection made.",
-      };
-    const choice = choices[0];
-    switch (choice.data) {
-      case "gold":
-        setField(player, "gold", getField(player, "gold") + 1);
-        return {
-          title: "Wish Granted",
-          effects: [{ type: EffectType.Gold, amount: 1 }],
-        };
-      case "luck":
-        setField(
-          player,
-          "curLuck",
-          Math.min(
-            getField(player, "maxLuck"),
-            getField(player, "curLuck") + 1,
-          ),
-        );
-        return {
-          title: "Wish Granted",
-          effects: [{ type: EffectType.Luck, amount: 1 }],
-        };
-      default: {
-        throw new RulesViolation("Unknown wish type");
-      }
+  (_selection, player, choices) => {
+    if (choices.length !== 1) {
+      const notification = makeNotification(
+        "Wish Granted",
+        "No selection made",
+      );
+      appendActivity(player, { type: "notification", notification });
+      return;
     }
+    let effects: Effect[] = [];
+    switch (choices[0].data) {
+      case "gold":
+        effects = [{ type: EffectType.Gold, amount: 1 }];
+        break;
+      case "luck":
+        effects = [{ type: EffectType.Luck, amount: 1 }];
+        break;
+      case "Silk":
+        effects = [
+          { type: EffectType.Resource, amount: 1, resourceType: "Silk" },
+        ];
+        break;
+      default:
+        throw new RulesViolation("Unknown wish type");
+    }
+    applyEffects(player, effects, makeNotification("Wish Granted"));
   },
 );
+
+registerFunction(
+  "trigger-wasting-disease",
+  FunctionType.TriggerCallback,
+  (player) => {
+    applyEffects(
+      player,
+      [{ type: EffectType.Health, amount: -1 }],
+      makeNotification("The Disease Ravages Your Body"),
+    );
+  },
+  [FunctionParamType.Player],
+);
+
+addTrigger({
+  id: "trigger-wasting-disease",
+  name: "Wasting Disease",
+  priority: 0,
+  type: TriggerType.EndOfTurn,
+  callback: "trigger-wasting-disease",
+});
 
 export const specialActions: SpecialActionDefinition[] = [
   {

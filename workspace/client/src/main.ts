@@ -13,8 +13,8 @@ import {
   type ActivityKind,
 } from "./activity-ui";
 import type {
-  ActivityResult,
   ActivityNextActive,
+  Notification,
   AnnotatedValue,
   ActiveEncounter,
   Effect,
@@ -182,9 +182,13 @@ function renderEntityValue(value: unknown) {
 
 function labelForType(type: string) {
   if (type === RewardType.FreeXp) return "Free XP";
-  if (type === RewardType.ControlledTeleport) return "Teleport";
-  if (type === RewardType.GainItem) return "Item";
-  if (type === PenaltyType.RemoveItem) return "Item";
+  if (
+    type === RewardType.ControlledTeleport ||
+    type == PenaltyType.RandomTeleport
+  )
+    return "Teleport";
+  if (type === RewardType.GainItem || type === PenaltyType.RemoveItem)
+    return "Item";
   if (type === RewardType.QualityEncounter) return "Encounter";
   return type[0].toUpperCase() + type.slice(1);
 }
@@ -222,6 +226,8 @@ function effectLabel(effect: Effect) {
   if (effect.type === EffectType.FreeXp) return labelForType(effect.type);
   if (effect.type === EffectType.ControlledTeleport)
     return `${labelForType(effect.type)} (radius ${effect.radius})`;
+  if (effect.type === EffectType.RandomTeleport)
+    return `${labelForType(effect.type)} (radius ${effect.radius} of ${effect.centerHex})`;
   if (effect.type === EffectType.SkillXp)
     return `xp for ${effect.skill}${effect.newLevel ? ` (now level ${effect.newLevel})` : ""}`;
   if (effect.type === EffectType.RemoveItems)
@@ -230,6 +236,7 @@ function effectLabel(effect: Effect) {
   if (effect.type === EffectType.RemoveRandomItem)
     return `Remove a random item`;
   if (effect.type === EffectType.AddTableauCard) return "Add a tableau card";
+  if (effect.type === EffectType.RefreshTableau) return "Refresh the tableau";
   return labelForType(effect.type);
 }
 
@@ -239,9 +246,11 @@ function formatEffects(effects: Effect[]) {
         .map((effect) =>
           effect.type === EffectType.RemoveItems ||
           effect.type === EffectType.ControlledTeleport ||
+          effect.type === EffectType.Teleport ||
           effect.type === EffectType.RemoveRandomItem ||
           effect.type === EffectType.GainRandomItem ||
-          effect.type === EffectType.AddTableauCard
+          effect.type === EffectType.AddTableauCard ||
+          effect.type === EffectType.RefreshTableau
             ? effectLabel(effect)
             : `-${effect.amount} ${effectLabel(effect)}`,
         )
@@ -276,6 +285,9 @@ function canAffordEffects(player: PlayerEntity, effects: Effect[]) {
       case EffectType.RemoveRandomItem:
         return player.inventory.length > 0;
       case EffectType.AddTableauCard:
+      case EffectType.RefreshTableau:
+      case EffectType.ControlledTeleport:
+      case EffectType.RandomTeleport:
         return true;
     }
   });
@@ -700,25 +712,18 @@ function render(
     const selectionId = activeSelection.id;
     activeSelection = null;
     updateMapCursor();
-    await executeActivity(
-      "Selection",
-      () =>
-        apiJson<ActivityResult>(
-          `/api/entities/${encodeURIComponent(player.id)}/actions/make_selection`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              selectionId,
-              selectedIndexes,
-            }),
-          },
-        ),
-      (result) => {
-        return showActivityResult("Selection", result, () => {
-          if (!launchResultNextActive(result)) maybeContinueOngoingTravel();
-        });
-      },
+    await executeActivity("Selection", () =>
+      apiJson<ActivityNextActive>(
+        `/api/entities/${encodeURIComponent(player.id)}/actions/make_selection`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            selectionId,
+            selectedIndexes,
+          }),
+        },
+      ),
     );
   }
 
@@ -969,7 +974,7 @@ function render(
   ) {
     const canAfford = canAffordEffects(player, action.cost ?? []);
     setPlay(
-      `<article class="play-card special-action-card"><h3>${esc(action.name)}</h3><div class="play-card-body"><p>${esc(specialActionTitle(action, targetName))}</p><p class="special-action-cost">Cost: ${esc(formatEffects(action.cost ?? []))}</p></div></article><div class="special-action-controls"><button id="special-action-ok" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You can\'t afford to perform this action." aria-disabled="true"'}>OK</button><button id="special-action-cancel" class="card-ok" type="button">Cancel</button></div>`,
+      `<article class="play-card special-action-card"><h3>${esc(action.name)}</h3><div class="play-card-body"><p>${esc(specialActionTitle(action, targetName))}</p><p class="special-action-cost">Cost: ${esc(formatEffects(action.cost ?? []))}</p></div></article><div class="special-action-controls"><button id="special-action-ok" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You can\'t afford to perform this action." aria-disabled="true"'}>Do Action</button><button id="special-action-cancel" class="card-ok" type="button">Cancel</button></div>`,
       action.name,
       true,
     );
@@ -1030,22 +1035,15 @@ function render(
     specialActionId: string,
     entityId?: string,
   ) {
-    await executeActivity(
-      "Action",
-      () =>
-        apiJson<ActivityResult>(
-          `/api/entities/${encodeURIComponent(player.id)}/actions/special_action`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ specialActionId, entityId }),
-          },
-        ),
-      (result) => {
-        return showActivityResult("Action", result, () => {
-          if (!launchResultNextActive(result)) maybeContinueOngoingTravel();
-        });
-      },
+    await executeActivity("Action", () =>
+      apiJson<ActivityNextActive>(
+        `/api/entities/${encodeURIComponent(player.id)}/actions/special_action`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ specialActionId, entityId }),
+        },
+      ),
     );
   }
 
@@ -1330,22 +1328,13 @@ function render(
     document.querySelector("#card-ok")!.addEventListener("click", clearPlay);
   }
 
-  async function showActivityResult(
+  async function showNotification(
     kind: ActivityKind,
-    result: ActivityResult,
-    onClosed?: () => void,
+    notification: Notification,
+    onClosed?: (nextActive?: ActivityNextActive | null) => void,
   ) {
-    const shouldRenderCard =
-      Boolean(result.flavorText) ||
-      result.effects.length > 0 ||
-      !result.nextActive;
-    const title = activityResultTitle(kind, result);
-    if (!shouldRenderCard) {
-      clearPlay();
-      onClosed?.();
-      return;
-    }
-    const lines = await renderActivityLines(result, async (itemId) => {
+    const title = activityResultTitle(kind, notification);
+    const lines = await renderActivityLines(notification, async (itemId) => {
       const cached = itemNameCache.get(itemId);
       if (cached) return cached;
       try {
@@ -1367,20 +1356,12 @@ function render(
           "",
         )}</div></article><button id="card-ok" class="card-ok" type="button">OK</button>`,
       title,
-      Boolean(result.nextActive),
+      true,
     );
-    document.querySelector("#card-ok")!.addEventListener("click", () => {
-      clearPlay();
-      onClosed?.();
-    });
-  }
 
-  function launchResultNextActive(result: ActivityResult) {
-    if (result.nextActive) {
-      launchNextActive(result.nextActive);
-      return true;
-    }
-    return false;
+    document
+      .querySelector("#card-ok")!
+      .addEventListener("click", () => void ackNotification(notification.id));
   }
 
   function syncTableau(next: TableauData) {
@@ -1431,8 +1412,8 @@ function render(
 
   async function executeActivity(
     kind: string,
-    request: () => Promise<ActivityResult>,
-    onComplete: (result: ActivityResult) => void,
+    request: () => Promise<ActivityNextActive>,
+    onComplete: (result: ActivityNextActive) => void = () => {},
   ) {
     busy = true;
     updateActionButtons();
@@ -1440,12 +1421,31 @@ function render(
       const result = await request();
       await refreshActivityState();
       await onComplete(result);
+      showNextActivity(result);
     } catch (err) {
       console.error(err);
       showActivityError(kind, err instanceof Error ? err.message : String(err));
     } finally {
       busy = false;
       updateActionButtons();
+    }
+  }
+
+  function showNextActivity(result: ActivityNextActive | undefined) {
+    if (!result) {
+      if (!maybeContinueOngoingTravel()) {
+        clearPlay();
+      }
+    } else if (result.type === "selection") {
+      showSelection(result.selection);
+    } else if (result.type === "encounter") {
+      showActiveEncounter(result.encounter);
+    } else if (result.type === "notification") {
+      // Kind here is vestigal and shouldn't be used in practice
+      showNotification("Unknown", result.notification);
+    } else {
+      console.error("Unknown result type", result.type);
+      clearPlay();
     }
   }
 
@@ -1472,48 +1472,42 @@ function render(
     setEncounterPanel(card);
   }
 
-  function launchNextActive(nextActive: ActivityNextActive) {
-    if (nextActive.type === "selection") showSelection(nextActive.selection);
-    else showActiveEncounter(nextActive.encounter);
+  async function ackNotification(notificationId: string) {
+    await executeActivity("Notification", () =>
+      apiJson<ActivityNextActive | null>(
+        `/api/entities/${encodeURIComponent(player.id)}/actions/ack_notification`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notificationId: notificationId }),
+        },
+      ),
+    );
   }
 
   async function runEncounter(encounterId: string) {
-    await executeActivity(
-      "Encounter",
-      () =>
-        apiJson<ActivityResult>(
-          `/api/entities/${encodeURIComponent(player.id)}/actions/run_encounter`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ encounterId, tableauId: encounterId }),
-          },
-        ),
-      (result) => {
-        return showActivityResult("Encounter", result, () =>
-          launchResultNextActive(result),
-        );
-      },
+    await executeActivity("Encounter", () =>
+      apiJson<ActivityNextActive>(
+        `/api/entities/${encodeURIComponent(player.id)}/actions/run_encounter`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ encounterId, tableauId: encounterId }),
+        },
+      ),
     );
   }
 
   async function continueEncounter(encounterId: string) {
-    await executeActivity(
-      "Encounter",
-      () =>
-        apiJson<ActivityResult>(
-          `/api/entities/${encodeURIComponent(player.id)}/actions/continue_encounter`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ encounterId, tableauId: encounterId }),
-          },
-        ),
-      (result) => {
-        return showActivityResult("Encounter", result, () =>
-          launchResultNextActive(result),
-        );
-      },
+    await executeActivity("Encounter", () =>
+      apiJson<ActivityNextActive>(
+        `/api/entities/${encodeURIComponent(player.id)}/actions/continue_encounter`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ encounterId, tableauId: encounterId }),
+        },
+      ),
     );
   }
 
@@ -1521,7 +1515,7 @@ function render(
     await executeActivity(
       "Encounter",
       () =>
-        apiJson<ActivityResult>(
+        apiJson<ActivityNextActive>(
           `/api/entities/${encodeURIComponent(player.id)}/actions/finish_encounter`,
           {
             method: "POST",
@@ -1536,9 +1530,6 @@ function render(
       (result) => {
         activeEncounterId = null;
         setEncounterPanel(null);
-        return showActivityResult("Encounter", result, () => {
-          if (!launchResultNextActive(result)) maybeContinueOngoingTravel();
-        });
       },
     );
   }
@@ -1611,30 +1602,20 @@ function render(
   }
 
   async function goCamp() {
-    await executeActivity(
-      "Camp",
-      () =>
-        apiJson<ActivityResult>(
-          `/api/entities/${encodeURIComponent(player.id)}/actions/camp`,
-          { method: "POST" },
-        ),
-      (result) => {
-        return showActivityResult("Camp", result, () => {
-          if (!launchResultNextActive(result)) maybeContinueOngoingTravel();
-        });
-      },
+    await executeActivity("Camp", () =>
+      apiJson<ActivityNextActive>(
+        `/api/entities/${encodeURIComponent(player.id)}/actions/camp`,
+        { method: "POST" },
+      ),
     );
   }
 
   async function goScout() {
-    await executeActivity(
-      "Scout",
-      () =>
-        apiJson<ActivityResult>(
-          `/api/entities/${encodeURIComponent(player.id)}/actions/scout`,
-          { method: "POST" },
-        ),
-      (result) => showActivityResult("Scout", result),
+    await executeActivity("Scout", () =>
+      apiJson<ActivityNextActive>(
+        `/api/entities/${encodeURIComponent(player.id)}/actions/scout`,
+        { method: "POST" },
+      ),
     );
   }
 
@@ -1711,7 +1692,7 @@ function render(
     await executeActivity(
       "Travel",
       () =>
-        apiJson<ActivityResult>(
+        apiJson<ActivityNextActive>(
           `/api/entities/${encodeURIComponent(player.id)}/actions/travel`,
           {
             method: "POST",
@@ -1726,9 +1707,6 @@ function render(
             route: remainingRoute,
           };
         }
-        return showActivityResult("Travel", result, () => {
-          if (!launchResultNextActive(result)) maybeContinueOngoingTravel();
-        });
       },
     );
   }

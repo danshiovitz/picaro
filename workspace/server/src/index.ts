@@ -32,6 +32,7 @@ import {
   fillTableau,
   continueEncounter,
   finishEncounter,
+  ackNotification,
   getClaims,
   getEntity,
   getGame,
@@ -48,6 +49,7 @@ import {
   runEncounter,
   scoutEntity,
   travelEntity,
+  viewNextActivityForClient,
 } from "./commands.js";
 import { makeSelection } from "./selection.js";
 import { setEncounterContext } from "./encounter.js";
@@ -266,7 +268,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     const entityMatch = path.match(
-      /^\/api\/entities\/([^/]+)(?:\/actions\/(camp|travel|scout|run_encounter|continue_encounter|finish_encounter|special_action|make_selection))?$/,
+      /^\/api\/entities\/([^/]+)(?:\/actions\/(camp|travel|scout|run_encounter|continue_encounter|finish_encounter|special_action|make_selection|ack_notification))?$/,
     );
     if (entityMatch) {
       const playerId = url.searchParams.get("player") ?? entityMatch[1];
@@ -277,39 +279,30 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "GET" && !action)
         return sendJson(res, 200, getEntity(player));
 
-      if (req.method === "POST" && action === "camp")
-        return sendJson(res, 200, campEntity(player));
-
-      if (req.method === "POST" && action === "travel") {
+      if (req.method === "POST" && action === "camp") campEntity(player);
+      else if (req.method === "POST" && action === "travel") {
         const body = await readJson(req);
         const request = { route: Array.isArray(body?.route) ? body.route : [] };
-        return sendJson(res, 200, travelEntity(player, request));
-      }
-
-      if (req.method === "POST" && action === "scout")
-        return sendJson(res, 200, scoutEntity(player));
-
-      if (req.method === "POST" && action === "run_encounter") {
+        travelEntity(player, request);
+      } else if (req.method === "POST" && action === "scout")
+        scoutEntity(player);
+      else if (req.method === "POST" && action === "run_encounter") {
         const body = await readJson(req);
         const request = {
           encounterId: String(body?.encounterId ?? ""),
           tableauId:
             typeof body?.tableauId === "string" ? body.tableauId : undefined,
         };
-        return sendJson(res, 200, runEncounter(player, request));
-      }
-
-      if (req.method === "POST" && action === "continue_encounter") {
+        runEncounter(player, request);
+      } else if (req.method === "POST" && action === "continue_encounter") {
         const body = await readJson(req);
         const request = {
           encounterId: String(body?.encounterId ?? ""),
           tableauId:
             typeof body?.tableauId === "string" ? body.tableauId : undefined,
         };
-        return sendJson(res, 200, continueEncounter(player, request));
-      }
-
-      if (req.method === "POST" && action === "finish_encounter") {
+        continueEncounter(player, request);
+      } else if (req.method === "POST" && action === "finish_encounter") {
         const body = await readJson(req);
         const request = {
           encounterId: String(body?.encounterId ?? ""),
@@ -317,19 +310,15 @@ const server = http.createServer(async (req, res) => {
             typeof body?.tableauId === "string" ? body.tableauId : undefined,
           conceding: Boolean(body?.conceding),
         };
-        return sendJson(res, 200, finishEncounter(player, request));
-      }
-
-      if (req.method === "POST" && action === "special_action") {
+        finishEncounter(player, request);
+      } else if (req.method === "POST" && action === "special_action") {
         const body = await readJson(req);
         const request = {
           specialActionId: String(body?.specialActionId ?? ""),
           entityId: body?.entityId ? String(body?.entityId!) : undefined,
         };
-        return sendJson(res, 200, performSpecialAction(player, request));
-      }
-
-      if (req.method === "POST" && action === "make_selection") {
+        performSpecialAction(player, request);
+      } else if (req.method === "POST" && action === "make_selection") {
         const body = await readJson(req);
         const request = {
           selectionId: String(body?.selectionId ?? ""),
@@ -337,8 +326,13 @@ const server = http.createServer(async (req, res) => {
             ? body.selectedIndexes.map((value: unknown) => Number(value))
             : [],
         };
-        return sendJson(res, 200, makeSelection(player, request));
+        makeSelection(player, request);
+      } else if (req.method === "POST" && action === "ack_notification") {
+        const body = await readJson(req);
+        ackNotification(player, String(body?.notificationId ?? ""));
       }
+
+      return sendJson(res, 200, viewNextActivityForClient(player) ?? null);
     }
 
     sendJson(res, 404, { error: "Not found" });

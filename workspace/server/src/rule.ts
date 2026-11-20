@@ -1,4 +1,5 @@
-import { rulesByTypeKey, invoke } from "./data.js";
+import { getTriggersForType, invoke } from "./data.js";
+import { rulesByTypeKey } from "./data.js";
 import { getField } from "./entity.js";
 import {
   AnnotatedValue,
@@ -7,6 +8,7 @@ import {
   ValueRuleType,
   ValueType,
   FunctionType,
+  TriggerType,
 } from "./types.js";
 
 const skillXpThresholds = [0, 10, 30, 50, 75, 100, 130];
@@ -144,4 +146,10 @@ export function computeEffectiveValue(
 ) {
   return computeAnnotatedEffectiveValue(player, valueType, valueSubtype)
     .finalValue;
+}
+
+export function evalTriggers(triggerType: TriggerType, player: PlayerEntity) {
+  for (const trigger of getTriggersForType(triggerType)) {
+    invoke<void>(trigger.callback, FunctionType.TriggerCallback, [player]);
+  }
 }

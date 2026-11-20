@@ -2,7 +2,7 @@ import {
   Selection,
   PlayerEntity,
   SelectionChoice,
-  ActivityResult,
+  ActivityNextActive,
   SelectionView,
   FunctionType,
 } from "./types.js";
@@ -71,7 +71,7 @@ function selectedChoices(selection: Selection, selectedIndexes: number[]) {
 export function makeSelection(
   player: PlayerEntity,
   request: SelectionRequest,
-): ActivityResult {
+): void {
   const selection = fetchNextActivityExpectingSelection(
     player,
     request.selectionId,
@@ -81,7 +81,7 @@ export function makeSelection(
   }
   validateSelectionIndexes(selection, request.selectedIndexes);
   const choices = selectedChoices(selection, request.selectedIndexes);
-  return invoke<ActivityResult>(
+  invoke<ActivityNextActive>(
     selection.callback,
     FunctionType.SelectionCallback,
     [selection, player, choices],

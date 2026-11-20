@@ -2,7 +2,7 @@ import type {
   ActiveEncounter as CommonActiveEncounter,
   ActiveEncounterSkillCheck as CommonActiveEncounterSkillCheck,
   ActivityNextActive as CommonActivityNextActive,
-  ActivityResult as CommonActivityResult,
+  Notification as CommonNotification,
   Claim as CommonClaim,
   Condition as CommonCondition,
   EncounterSkillCheck,
@@ -57,6 +57,6 @@ export type AvailableSpecialAction = CommonAvailableSpecialAction;
 export { SpecialActionType } from "../../common/src/types.js";
 export type SelectionChoice = CommonSelectionChoice;
 export type Selection = SelectionBase;
+export type Notification = CommonNotification;
 export type ActivityNextActive = CommonActivityNextActive<Selection>;
-export type ActivityResult = CommonActivityResult<Selection>;
 export type ActiveEncounter = CommonActiveEncounter;

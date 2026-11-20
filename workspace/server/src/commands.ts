@@ -1,7 +1,7 @@
 import {
   ActivityNextActive,
-  ActivityResult,
   ActiveEncounter,
+  Notification,
   ActiveEncounterSkillCheck,
   ApiState,
   Condition,
@@ -30,6 +30,7 @@ import {
   Token,
   ValueType,
   FunctionType,
+  TriggerType,
 } from "./types.js";
 import { createEntity, getField, serializeEntity, setField } from "./entity.js";
 import { randomUUID } from "node:crypto";
@@ -54,9 +55,12 @@ import {
 import {
   computeAnnotatedEffectiveValue,
   computeEffectiveValue,
+  evalTriggers,
 } from "./rule.js";
 import { getRng } from "@common/random.js";
 import { selectionDto } from "./selection.js";
+
+const TABLEAU_LENGTH: number = 3;
 
 export class RulesViolation extends Error {
   constructor(message: string) {
@@ -154,7 +158,20 @@ export function appendActivity(
   queue.push(activity);
 }
 
-export function fetchNextActivityForClient(
+export function makeNotification(
+  title: string,
+  flavorText?: string,
+): Notification {
+  return {
+    id: `notification-${randomUUID()}`,
+    title,
+    flavorText,
+    effects: [],
+    implicitEffects: [],
+  };
+}
+
+export function viewNextActivityForClient(
   player: PlayerEntity,
 ): ActivityNextActive | undefined {
   const state = getApiState();
@@ -166,6 +183,8 @@ export function fetchNextActivityForClient(
     case "selection":
       return { type: "selection", selection: selectionDto(queue[0].selection) };
     case "encounter":
+      return queue[0];
+    case "notification":
       return queue[0];
   }
 }
@@ -208,6 +227,38 @@ export function fetchNextActivityExpectingEncounter(
     queue!.shift();
   }
   return encounter;
+}
+
+function fetchNextActivityExpectingNotification(
+  player: PlayerEntity,
+  notificationId: string,
+  remove: boolean = true,
+): Notification | undefined {
+  const state = getApiState();
+  const queue = state.activitiesQueue.get(player.id);
+  const notification =
+    queue && queue.length > 0 && queue[0].type == "notification"
+      ? queue[0].notification
+      : undefined;
+  if (!notification || notification.id !== notificationId) {
+    return undefined;
+  }
+  if (remove) {
+    queue!.shift();
+  }
+  return notification;
+}
+
+export function ackNotification(
+  player: PlayerEntity,
+  notificationId: string,
+): void {
+  const notification = fetchNextActivityExpectingNotification(
+    player,
+    notificationId,
+  );
+  if (!notification) throw new RulesViolation("Notification not found");
+  // the fetch call popped the notification, so we're done
 }
 
 function encounterState(
@@ -286,6 +337,7 @@ function activeEncounterFor(
     skillChecks,
     skillSource: [...card.skillSource],
     currentSkillChecks: skillChecks,
+    implicitEffects: [],
   };
 }
 
@@ -371,15 +423,10 @@ function skillLevelFromXp(xp: number) {
   return level;
 }
 
-function resolveEncounterEffects(
+function computeEncounterEffects(
   player: PlayerEntity,
   active: ActiveEncounter,
-  conceding = false,
 ) {
-  if (conceding) {
-    active.state = "lost";
-    active.nextPenalty = undefined;
-  }
   const effects: Effect[] = [];
   const meetsFailureThreshold = active.numFailures >= active.failureThreshold;
   const clamp = (val: number, min: number, max: number) =>
@@ -438,16 +485,7 @@ function resolveEncounterEffects(
     );
   }
   effects.push(...xpEffects);
-  applyEffects(player, effects);
   return effects;
-}
-
-function labelForReward(type: RewardType | PenaltyType) {
-  if (type === RewardType.FreeXp) return "Free XP";
-  if (type === RewardType.ControlledTeleport) return "Teleport";
-  if (type === RewardType.GainItem) return "Item";
-  if (type === PenaltyType.RemoveItem) return "Item";
-  return type[0].toUpperCase() + type.slice(1);
 }
 
 function adjustGold(player: PlayerEntity, amount: number) {
@@ -580,6 +618,9 @@ function canAfford(player: PlayerEntity, cost: Effect[]) {
         if (getField(player, "inventory").length < 1) return false;
         break;
       case EffectType.AddTableauCard:
+      case EffectType.RefreshTableau:
+      case EffectType.ControlledTeleport:
+      case EffectType.Teleport:
         return true;
     }
   }
@@ -591,9 +632,14 @@ function adjustSkillXp(player: PlayerEntity, skill: string, amount: number) {
   getField(player, "skill_xp")[skill] = Math.max(0, current + amount);
 }
 
-function applyEffects(player: PlayerEntity, effects: Effect[]) {
+export function applyEffects(
+  player: PlayerEntity,
+  effects: Effect[],
+  maybeNotif: Notification | undefined,
+  implicitEffects: Effect[] = [],
+) {
   const frontQueue: PendingActivity[] = [];
-  for (const effect of effects) {
+  for (const effect of effects.concat(implicitEffects)) {
     switch (effect.type) {
       case EffectType.FreeXp:
         frontQueue.push({
@@ -606,6 +652,20 @@ function applyEffects(player: PlayerEntity, effects: Effect[]) {
           type: "selection",
           selection: controlledTeleportSelection(player, effect.radius),
         });
+        break;
+      case EffectType.Teleport:
+        let dest = effect.centerHex;
+        if (effect.radius > 0) {
+          const center = getApiState().hexByName.get(dest)!;
+          const dests = getApiState().hexes.filter(
+            (hex) => hexDistance(center, hex) <= effect.radius,
+          );
+          dest = getRng().pick(dests).name;
+        }
+        effect.centerHex = dest; // reuse center to log the name of the dest hex
+        effect.radius = -1; // spoil the radius since we're overwriting the center
+        moveToken(getField(player, "tokenId"), dest);
+        setField(player, "location", dest);
         break;
       case EffectType.Gold:
         adjustGold(player, effect.amount);
@@ -650,25 +710,45 @@ function applyEffects(player: PlayerEntity, effects: Effect[]) {
         );
         break;
       }
+      case EffectType.RefreshTableau: {
+        const tableau = getPlayerTableau(player);
+        tableau.splice(0, tableau.length);
+        let qmOverrides: (number | undefined)[] = effect.qualityMods ?? [];
+        while (qmOverrides.length < TABLEAU_LENGTH) {
+          qmOverrides.push(undefined);
+        }
+        qmOverrides = getRng().shuffle(qmOverrides);
+        fillTableau(tableau, encounterTemplates, player, qmOverrides);
+        break;
+      }
     }
   }
-  while (frontQueue.length > 0) {
-    prependActivity(player, frontQueue.pop()!);
+
+  if (maybeNotif) {
+    maybeNotif.effects = effects;
+    maybeNotif.implicitEffects = implicitEffects;
+    frontQueue.unshift({
+      type: "notification",
+      notification: maybeNotif,
+    });
+  }
+
+  for (const aty of frontQueue) {
+    appendActivity(player, aty);
   }
 }
 
-function payCost(player: PlayerEntity, cost: Effect[]) {
-  applyEffects(
-    player,
-    cost.map((effect) =>
-      effect.type === EffectType.RemoveItems ||
-      effect.type === EffectType.ControlledTeleport ||
-      effect.type === EffectType.GainRandomItem ||
-      effect.type === EffectType.RemoveRandomItem ||
-      effect.type === EffectType.AddTableauCard
-        ? effect
-        : { ...effect, amount: -effect.amount },
-    ),
+function invertCost(cost: Effect[]) {
+  return cost.map((effect) =>
+    effect.type === EffectType.RemoveItems ||
+    effect.type === EffectType.ControlledTeleport ||
+    effect.type === EffectType.Teleport ||
+    effect.type === EffectType.GainRandomItem ||
+    effect.type === EffectType.RemoveRandomItem ||
+    effect.type === EffectType.AddTableauCard ||
+    effect.type === EffectType.RefreshTableau
+      ? effect
+      : { ...effect, amount: -effect.amount },
   );
 }
 
@@ -683,20 +763,23 @@ export function controlledTeleportSelectionCallback(
   selection: Selection,
   player: PlayerEntity,
   choices: SelectionChoice[],
-): ActivityResult {
+): void {
   const data = selection.callbackData as
     ControlledTeleportSelectionData | undefined;
   const radius = data?.radius ?? 0;
   const state = getApiState();
   if (choices.length != 1) {
-    return {
-      title: "Controlled Teleport",
-      flavorText: "No selection made.",
-      effects: [],
-    };
+    prependActivity(player, {
+      type: "notification",
+      notification: makeNotification(
+        "Controlled Teleport",
+        "No selection made.",
+      ),
+    });
+    return;
   }
-  const choice = choices[0];
 
+  const choice = choices[0];
   const origin = state.hexByName.get(getField(player, "location"));
   if (!origin) throw new RulesViolation("Origin hex not found");
   const target = state.hexByName.get(choice.data);
@@ -704,31 +787,28 @@ export function controlledTeleportSelectionCallback(
   if (hexDistance(origin, target) > radius) {
     throw new RulesViolation("Selected hex is out of range");
   }
-  moveToken(getField(player, "tokenId"), target.name);
-  setField(player, "location", target.name);
-  return {
-    title: "Controlled Teleport",
-    flavorText: `Teleported to ${target.name}.`,
-    effects: [],
-  };
+  applyEffects(
+    player,
+    [{ type: EffectType.Teleport, radius: 0, centerHex: target.name }],
+    makeNotification("Controlled Teleport"),
+  );
 }
 
 export function freeXpSelectionCallback(
   selection: Selection,
   player: PlayerEntity,
   choices: SelectionChoice[],
-): ActivityResult {
+): void {
   const data = selection.callbackData as FreeXpSelectionData | undefined;
   const amount = data?.amount ?? 0;
-  if (choices.length !== 1) {
-    return {
-      title: "Free XP",
-      flavorText: "No selection made.",
-      effects: [],
-    };
+  if (choices.length != 1) {
+    prependActivity(player, {
+      type: "notification",
+      notification: makeNotification("Free XP", "No selection made."),
+    });
+    return;
   }
   const choice = choices[0];
-  const state = getApiState();
   const currentXp = getField(player, "skill_xp")[choice.data] ?? 0;
   const nextXp = currentXp + amount;
   const effect =
@@ -744,33 +824,34 @@ export function freeXpSelectionCallback(
           skill: choice.data,
           amount,
         } satisfies Effect);
-  applyEffects(player, [effect]);
-  return {
-    title: "Free XP",
-    effects: [effect],
-  };
+  applyEffects(player, [effect], makeNotification("Free XP"));
 }
 
 export function travelContinueSelectionCallback(
   selection: Selection,
   player: PlayerEntity,
   choices: SelectionChoice[],
-): ActivityResult | void {
+): void {
   const data = selection.callbackData as
     TravelContinueSelectionData | undefined;
+  let notification: Notification;
   if (choices.length != 1 || choices[0].data == "") {
-    return {
-      title: "Travel Done",
-      effects: [],
-    };
+    prependActivity(player, {
+      type: "notification",
+      notification: makeNotification("Travel Done", "No selection made."),
+    });
+    return;
   }
+
   const choice = choices[0];
   if (!data) throw new RulesViolation("Selection data missing");
   if (getField(player, "location") !== data.encounterHexName)
     throw new RulesViolation("You can't continue since you've moved.");
-  const state = getApiState();
-  moveToken(getField(player, "tokenId"), data.destination);
-  setField(player, "location", data.destination);
+  applyEffects(
+    player,
+    [{ type: EffectType.Teleport, radius: 0, centerHex: data.destination }],
+    makeNotification("Continue Travel"),
+  );
   endTurn(player, "travel-continuation");
 }
 
@@ -798,6 +879,7 @@ function controlledTeleportSelection(
     hexSelection: { originHex: getField(player, "location"), radius },
     callback: "selection-controlled-teleport",
     callbackData: { radius },
+    implicitEffects: [],
   };
   return selection;
 }
@@ -817,6 +899,7 @@ function freeXpSelection(amount: number): Selection {
     useDropdown: true,
     callback: "selection-free-xp",
     callbackData: { amount },
+    implicitEffects: [],
   };
   return selection;
 }
@@ -845,6 +928,7 @@ function travelContinueSelection(
       destination: destinationHex,
       encounterHexName: currentHex,
     },
+    implicitEffects: [],
   };
   return selection;
 }
@@ -964,6 +1048,17 @@ function computePenalty(
     }
     case PenaltyType.RemoveItem:
       return [{ type: EffectType.RemoveRandomItem }];
+    case PenaltyType.RandomTeleport:
+      if (numFailures == 0) {
+        return [];
+      }
+      return [
+        {
+          type: EffectType.Teleport,
+          centerHex: getField(player, "location"),
+          radius: numFailures * 2,
+        },
+      ];
   }
 }
 
@@ -1054,7 +1149,7 @@ export function getSpecialActions(
 export function performSpecialAction(
   player: PlayerEntity,
   request: SpecialActionRequest,
-): ActivityResult {
+): void {
   const state = getApiState();
   const action = specialActions.find(
     (item) => item.id === request.specialActionId,
@@ -1098,22 +1193,17 @@ export function performSpecialAction(
     throw new RulesViolation("Special action cannot be performed here");
   if (!canAfford(player, action.cost))
     throw new RulesViolation("You can't afford to perform this action.");
-  payCost(player, action.cost);
   const effects = invoke<Effect[]>(
     action.execute,
     FunctionType.SpecialActionExecute,
     params,
   );
-  applyEffects(player, effects);
-  setField(
+  applyEffects(
     player,
-    "location",
-    locationForToken(state.hexes, getField(player, "tokenId")),
-  );
-  return {
     effects,
-    nextActive: fetchNextActivityForClient(player),
-  };
+    makeNotification(action.name),
+    invertCost(action.cost),
+  );
 }
 
 export function getGame() {
@@ -1183,57 +1273,49 @@ function endTurn(player: PlayerEntity, reason: string) {
   const beforeFill = nextTableau.length;
   fillTableau(nextTableau, encounterTemplates, player);
   if (nextTableau.length !== beforeFill) changed = true;
+  evalTriggers(TriggerType.EndOfTurn, player);
   return changed;
 }
 
-export function scoutEntity(player: PlayerEntity): ActivityResult {
+export function scoutEntity(player: PlayerEntity): void {
   const state = getApiState();
-  const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
+  const cost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
   assertNoActivities(player);
-  if (!canAfford(player, turnCost))
+  if (!canAfford(player, cost))
     throw new RulesViolation("You can't afford to perform this action.");
-  payCost(player, turnCost);
-  const tableau = getPlayerTableau(player);
-  tableau.splice(0, tableau.length);
   // Make one encounter they scout guaranteed higher quality
-  let qmOverrides = getRng().shuffle([+2, undefined, undefined]);
-  fillTableau(tableau, encounterTemplates, player, qmOverrides);
+  let effects: Effect[] = [
+    { type: EffectType.RefreshTableau, qualityMods: [+2] },
+  ];
+  applyEffects(
+    player,
+    effects,
+    makeNotification("Scout Results"),
+    invertCost(cost),
+  );
   endTurn(player, "scout");
-  return {
-    title: "Scout Results",
-    flavorText: "Tableau refreshed",
-    effects: [],
-    implicitEffects: [{ type: EffectType.Turns, amount: -1 }],
-    nextActive: fetchNextActivityForClient(player),
-  };
 }
 
-export function campEntity(player: PlayerEntity): ActivityResult {
+export function campEntity(player: PlayerEntity): void {
   const state = getApiState();
-  const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
+  const cost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
   assertNoActivities(player);
-  if (!canAfford(player, turnCost))
+  if (!canAfford(player, cost))
     throw new RulesViolation("You can't afford to perform this action.");
-  payCost(player, turnCost);
-  adjustHealth(player, 1);
-  setField(
+  let effects: Effect[] = [{ type: EffectType.Health, amount: 1 }];
+  applyEffects(
     player,
-    "location",
-    locationForToken(state.hexes, getField(player, "tokenId")),
+    effects,
+    makeNotification("A Restful Night"),
+    invertCost(cost),
   );
   endTurn(player, "camp");
-  return {
-    title: "A Restful Night",
-    effects: [{ type: EffectType.Health, amount: 1 }],
-    implicitEffects: [{ type: EffectType.Turns, amount: -1 }],
-    nextActive: fetchNextActivityForClient(player),
-  };
 }
 
 export function travelEntity(
   player: PlayerEntity,
   request: TravelRequest,
-): ActivityResult {
+): void {
   const state = getApiState();
   assertNoActivities(player);
   const route = request.route;
@@ -1254,10 +1336,9 @@ export function travelEntity(
       throw new RulesViolation("There are gaps in the route");
   }
 
-  const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
-  if (!canAfford(player, turnCost))
+  const cost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
+  if (!canAfford(player, cost))
     throw new RulesViolation("You can't afford to perform this action.");
-  payCost(player, turnCost);
 
   const destination = route[route.length - 1];
   const encounterRoute = route.slice(1);
@@ -1265,18 +1346,30 @@ export function travelEntity(
     encounterRoute.length > 0 && getRng().next() < 0.5
       ? getRng().pick(encounterRoute)
       : undefined;
-  if (encounterHexName) {
-    const encounterHex = state.hexByName.get(encounterHexName);
-    if (encounterHex) {
-      moveToken(getField(player, "tokenId"), encounterHexName);
-      setField(player, "location", encounterHexName);
-    }
+  const encounterHex = encounterHexName
+    ? state.hexByName.get(encounterHexName)
+    : undefined;
+  if (encounterHex) {
     const templates = encounterHex
       ? (terrainEncounterTemplates[encounterHex.terrain] ?? encounterTemplates)
       : encounterTemplates;
     const template = getRng().pick(templates);
+    let effects: Effect[] = [];
+    let implicitEffects = invertCost(cost).concat([
+      { type: EffectType.Teleport, radius: 0, centerHex: encounterHex.name },
+    ]);
+    applyEffects(
+      player,
+      effects,
+      makeNotification(
+        "Travel Interrupted",
+        `You are interrupted at ${encounterHex.name}!`,
+      ),
+      implicitEffects,
+    );
+
     const encounterCard = instantiateEncounterTemplate(template, player);
-    encounterCard.location = encounterHexName;
+    encounterCard.location = encounterHex.name;
     const active = {
       ...activeEncounterFor(player, encounterCard),
       tableauId: undefined,
@@ -1288,9 +1381,9 @@ export function travelEntity(
 
     // If they didn't stop in the last hex, then queue up a selection to
     // let them continue for free
-    if (encounterHexName != encounterRoute[encounterRoute.length - 1]) {
+    if (encounterHex.name != encounterRoute[encounterRoute.length - 1]) {
       const selection = travelContinueSelection(
-        encounterHexName,
+        encounterHex.name,
         encounterRoute[encounterRoute.length - 1],
       );
       appendActivity(player, {
@@ -1298,53 +1391,47 @@ export function travelEntity(
         selection,
       });
     }
-
-    return {
-      effects: [],
-      implicitEffects: [{ type: EffectType.Turns, amount: -1 }],
-      nextActive: { type: "encounter", encounter: active },
-    };
   }
 
-  moveToken(getField(player, "tokenId"), destination);
-  setField(player, "location", destination);
+  let effects: Effect[] = [];
+  let implicitEffects: Effect[] = invertCost(cost).concat([
+    { type: EffectType.Teleport, radius: 0, centerHex: destination },
+  ]);
+  applyEffects(
+    player,
+    effects,
+    makeNotification("Travel Complete", `You reach ${destination}`),
+    implicitEffects,
+  );
   endTurn(player, "travel-complete");
-  return {
-    effects: [],
-    implicitEffects: [{ type: EffectType.Turns, amount: -1 }],
-    nextActive: fetchNextActivityForClient(player),
-  };
 }
 
 export function runEncounter(
   player: PlayerEntity,
   request: EncounterRequest,
-): ActivityResult {
+): void {
   const state = getApiState();
-  const turnCost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
+  const cost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
   assertNoActivities(player);
-  if (!canAfford(player, turnCost))
+  if (!canAfford(player, cost))
     throw new RulesViolation("You can't afford to perform this action.");
-  payCost(player, turnCost);
   const tableau = getPlayerTableau(player);
   const encounter = tableau.find((card) => card.id === request.encounterId);
   if (!encounter) throw new RulesViolation("Encounter not found");
   const active = activeEncounterFor(player, encounter);
+  active.implicitEffects = invertCost(cost);
+  // apply the cost here
+  applyEffects(player, active.implicitEffects, undefined);
   appendActivity(player, {
     type: "encounter",
     encounter: active,
   });
-  return {
-    effects: [],
-    implicitEffects: [{ type: EffectType.Turns, amount: -1 }],
-    nextActive: { type: "encounter", encounter: active },
-  };
 }
 
 export function continueEncounter(
   player: PlayerEntity,
   request: EncounterRequest,
-): ActivityResult {
+): void {
   const active = fetchNextActivityExpectingEncounter(
     player,
     request.encounterId,
@@ -1393,18 +1480,16 @@ export function continueEncounter(
       ? randomPenalty(tableauEncounter)
       : randomPenalty({ penalties: active.penalties } as TableauCard);
   }
+  // clear this out since it doesn't get charged again
+  active.implicitEffects = [];
   // Put this back on the queue, since we popped it off at the beginning
   prependActivity(player, { type: "encounter", encounter: active });
-  return {
-    effects: [],
-    nextActive: { type: "encounter", encounter: active },
-  };
 }
 
 export function finishEncounter(
   player: PlayerEntity,
   request: EncounterRequest & { conceding?: boolean },
-): ActivityResult {
+): void {
   const state = getApiState();
   const encounterId = request.tableauId ?? request.encounterId;
   const active = fetchNextActivityExpectingEncounter(player, encounterId);
@@ -1419,15 +1504,12 @@ export function finishEncounter(
     active.state = "lost";
     active.nextPenalty = undefined;
   }
-  const effects = resolveEncounterEffects(player, active, request.conceding);
+  const effects = computeEncounterEffects(player, active);
+  applyEffects(player, effects, makeNotification("Encounter Results"));
   if (tableauEncounter) {
     removeEncounterFromTableau(tableau, encounterId);
     endTurn(player, "finish-encounter");
   }
-  return {
-    effects,
-    nextActive: fetchNextActivityForClient(player),
-  };
 }
 
 export function fillTableau(
@@ -1436,7 +1518,7 @@ export function fillTableau(
   player: PlayerEntity,
   qualityMods: (number | undefined)[] = [],
 ) {
-  while (tableau.length < 3 && templates.length > 0) {
+  while (tableau.length < TABLEAU_LENGTH && templates.length > 0) {
     const template = getRng().pick(templates);
     const qm =
       tableau.length < qualityMods.length

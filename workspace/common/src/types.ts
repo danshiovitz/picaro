@@ -16,6 +16,7 @@ export enum FunctionType {
   SelectionCallback = "selection_callback",
   SpecialActionAvailability = "special_action_availability",
   SpecialActionExecute = "special_action_execute",
+  TriggerCallback = "trigger_callback",
 }
 export enum FunctionParamType {
   Player = "player",
@@ -62,6 +63,7 @@ export enum PenaltyType {
   Luck = "luck",
   Resource = "resource",
   RemoveItem = "remove_item",
+  RandomTeleport = "random_teleport",
 }
 export enum EffectType {
   Gold = "gold",
@@ -77,6 +79,8 @@ export enum EffectType {
   GainRandomItem = "gain_random_item",
   RemoveRandomItem = "remove_random_item",
   AddTableauCard = "add_tableau_card",
+  RefreshTableau = "refresh_tableau",
+  Teleport = "teleport",
 }
 
 export type EncounterSkillCheck = { name: string; target: number };
@@ -116,7 +120,34 @@ export type Effect =
       type: EffectType.AddTableauCard;
       encounterTemplate?: EncounterTemplate;
       qualityMod?: number;
-    };
+    }
+  | {
+      type: EffectType.RefreshTableau;
+      qualityMods?: number[];
+    }
+  | { type: EffectType.Teleport; radius: number; centerHex: string };
+
+export enum TriggerType {
+  EndOfTurn = "end_of_turn",
+  Death = "death",
+  HexEntered = "hex_entered",
+}
+
+export type Trigger = {
+  id: string;
+  name: string;
+  priority: number;
+  type: TriggerType;
+  callback: string;
+};
+
+export type Notification = {
+  id: string;
+  title: string;
+  flavorText?: string;
+  effects: Effect[];
+  implicitEffects: Effect[];
+};
 
 export type EncounterState = "active" | "lost" | "succeeded" | "critical";
 export type ActiveEncounterSkillCheck = {
@@ -173,6 +204,7 @@ export type SelectionBase = {
   useDropdown?: boolean;
   hexSelection?: { originHex: string; radius: number };
   callbackData?: unknown;
+  implicitEffects: Effect[];
 };
 export type ActiveEncounter = {
   id: string;
@@ -193,20 +225,18 @@ export type ActiveEncounter = {
   skillChecks: ActiveEncounterSkillCheck[];
   skillSource: string[];
   currentSkillChecks: ActiveEncounterSkillCheck[];
+  implicitEffects: Effect[];
 };
 export type ActivityNextActive<
   SelectionT extends SelectionBase = SelectionBase,
 > =
   | { type: "encounter"; encounter: ActiveEncounter }
-  | { type: "selection"; selection: SelectionT };
+  | { type: "selection"; selection: SelectionT }
+  | { type: "notification"; notification: Notification };
+
 export type SpecialActionRequest = {
   specialActionId: string;
   entityId?: string;
 };
-export type ActivityResult<SelectionT extends SelectionBase = SelectionBase> = {
-  title?: string;
-  flavorText?: string;
-  effects: Effect[];
-  implicitEffects?: Effect[];
-  nextActive?: ActivityNextActive<SelectionT>;
-};
+export type ActivityResult<SelectionT extends SelectionBase = SelectionBase> =
+  Notification;

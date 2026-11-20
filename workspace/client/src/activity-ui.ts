@@ -1,5 +1,5 @@
 import { EffectType } from "./types";
-import type { ActivityResult, Effect } from "./types";
+import type { Notification, Effect } from "./types";
 
 export type ActivityKind =
   "Selection" | "Action" | "Encounter" | "Camp" | "Scout" | "Travel";
@@ -8,10 +8,7 @@ export function activityErrorTitle(kind: ActivityKind) {
   return `${kind} Error`;
 }
 
-export function activityResultTitle(
-  kind: ActivityKind,
-  result: ActivityResult,
-) {
+export function activityResultTitle(kind: ActivityKind, result: Notification) {
   return result.title ?? `${kind} Results`;
 }
 
@@ -54,11 +51,17 @@ export async function renderEffectText(
   if (effect.type === EffectType.AddTableauCard) {
     return "Added tableau card";
   }
+  if (effect.type === EffectType.RefreshTableau) {
+    return "Refreshed tableau";
+  }
+  if (effect.type === EffectType.Teleport) {
+    return `Teleported to: ${effect.centerHex}`;
+  }
   return `${effect.amount >= 0 ? "+" : "-"}${Math.abs(effect.amount)} ${labelForType(effect.type)}`;
 }
 
 export async function renderActivityLines(
-  result: ActivityResult,
+  result: Notification,
   resolveItemName?: ItemNameResolver,
 ) {
   const lines: string[] = [];
@@ -66,7 +69,7 @@ export async function renderActivityLines(
     lines.push(
       ...result.flavorText.split(/\n+/).filter((line) => line.length > 0),
     );
-  if (result.effects.length)
+  if (result.effects?.length)
     lines.push(
       ...(await Promise.all(
         result.effects.map((effect) =>
@@ -74,16 +77,18 @@ export async function renderActivityLines(
         ),
       )),
     );
-  if (!result.flavorText && result.effects.length === 0 && !result.nextActive)
+  if (!result.flavorText && (result.effects?.length ?? 0) === 0)
     lines.push("Action Complete");
   return lines;
 }
 
 function labelForType(type: string) {
   if (type === EffectType.FreeXp) return "Free XP";
-  if (type === EffectType.ControlledTeleport) return "Teleport";
-  if (type === EffectType.GainRandomItem) return "Item";
-  if (type === EffectType.RemoveRandomItem) return "Item";
+  if (type === EffectType.ControlledTeleport || type === EffectType.Teleport)
+    return "Teleport";
+  if (type === EffectType.GainRandomItem || type == EffectType.RemoveRandomItem)
+    return "Item";
   if (type === EffectType.AddTableauCard) return "Tableau Card";
+  if (type === EffectType.RefreshTableau) return "Tableau Refresh";
   return type[0].toUpperCase() + type.slice(1);
 }
