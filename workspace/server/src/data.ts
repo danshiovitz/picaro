@@ -651,7 +651,7 @@ export const specialActions: SpecialActionDefinition[] = [
     name: "Medical Visit",
     type: SpecialActionType.General,
     locations: ["C10"],
-    cost: [{ type: EffectType.Gold, amount: 2 }],
+    cost: [{ type: EffectType.Gold, amount: -2 }],
     availability: "special-medical-visit-availability",
     execute: "special-medical-visit-execute",
   },

@@ -252,7 +252,7 @@ function formatEffects(effects: Effect[]) {
           effect.type === EffectType.AddTableauCard ||
           effect.type === EffectType.RefreshTableau
             ? effectLabel(effect)
-            : `-${effect.amount} ${effectLabel(effect)}`,
+            : `${effect.amount} ${effectLabel(effect)}`,
         )
         .join(", ")
     : "none";
@@ -265,19 +265,21 @@ function canAffordEffects(player: PlayerEntity, effects: Effect[]) {
       case EffectType.GainRandomItem:
         return false;
       case EffectType.Gold:
-        return player.gold >= effect.amount;
+        return player.gold + effect.amount >= 0;
       case EffectType.Reputation:
-        return player.reputation >= effect.amount;
+        return player.reputation + effect.amount >= 0;
       case EffectType.Health:
-        return player.curHealth >= effect.amount;
+        return player.curHealth + effect.amount >= 0;
       case EffectType.Turns:
-        return player.turns >= effect.amount;
+        return player.turns + effect.amount >= 0;
       case EffectType.Luck:
-        return player.curLuck >= effect.amount;
+        return player.curLuck + effect.amount >= 0;
       case EffectType.Resource:
-        return (player.resources[effect.resourceType] ?? 0) >= effect.amount;
+        return (
+          (player.resources[effect.resourceType] ?? 0) + effect.amount >= 0
+        );
       case EffectType.SkillXp:
-        return (player.skill_xp[effect.skill] ?? 0) >= effect.amount;
+        return (player.skill_xp[effect.skill] ?? 0) + effect.amount >= 0;
       case EffectType.RemoveItems: {
         const inventoryIds = new Set(player.inventory.map((item) => item.id));
         return effect.itemIds.every((itemId) => inventoryIds.has(itemId));

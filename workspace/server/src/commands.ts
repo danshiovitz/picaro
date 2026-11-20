@@ -465,24 +465,9 @@ function computeEncounterEffects(
           .slice(0, 3 - failedChecks.length);
 
   const xpEffects: Effect[] = [];
-  const runningSkillXp = { ...getField(player, "skill_xp") };
   for (const check of [...selectedFailedChecks, ...selectedSucceededChecks]) {
     const amount = check.success ? 1 : 2;
-    const currentXp = runningSkillXp[check.name] ?? 0;
-    const currentLevel = skillLevelFromXp(currentXp);
-    const nextXp = currentXp + amount;
-    const nextLevel = skillLevelFromXp(nextXp);
-    runningSkillXp[check.name] = nextXp;
-    xpEffects.push(
-      nextLevel > currentLevel
-        ? {
-            type: EffectType.SkillXp,
-            skill: check.name,
-            amount,
-            newLevel: nextLevel,
-          }
-        : { type: EffectType.SkillXp, skill: check.name, amount },
-    );
+    xpEffects.push({ type: EffectType.SkillXp, skill: check.name, amount });
   }
   effects.push(...xpEffects);
   return effects;
@@ -581,29 +566,33 @@ function canAfford(player: PlayerEntity, cost: Effect[]) {
       case EffectType.GainRandomItem:
         throw new RulesViolation("This effect cannot be used as a cost.");
       case EffectType.Gold:
-        if (getField(player, "gold") < effect.amount) return false;
+        if (getField(player, "gold") + effect.amount < 0) return false;
         break;
       case EffectType.Reputation:
-        if (getField(player, "reputation") < effect.amount) return false;
+        if (getField(player, "reputation") + effect.amount < 0) return false;
         break;
       case EffectType.Health:
-        if (getField(player, "curHealth") < effect.amount) return false;
+        if (getField(player, "curHealth") + effect.amount < 0) return false;
         break;
       case EffectType.Turns:
-        if (getField(player, "turns") < effect.amount) return false;
+        if (getField(player, "turns") + effect.amount < 0) return false;
         break;
       case EffectType.Luck:
-        if (getField(player, "curLuck") < effect.amount) return false;
+        if (getField(player, "curLuck") + effect.amount < 0) return false;
         break;
       case EffectType.Resource:
         if (
-          (getField(player, "resources")[effect.resourceType] ?? 0) <
-          effect.amount
+          (getField(player, "resources")[effect.resourceType] ?? 0) +
+            effect.amount <
+          0
         )
           return false;
         break;
       case EffectType.SkillXp:
-        if ((getField(player, "skill_xp")[effect.skill] ?? 0) < effect.amount)
+        if (
+          (getField(player, "skill_xp")[effect.skill] ?? 0) + effect.amount <
+          0
+        )
           return false;
         break;
       case EffectType.RemoveItems: {
@@ -686,7 +675,14 @@ export function applyEffects(
         adjustResource(player, effect.resourceType, effect.amount);
         break;
       case EffectType.SkillXp:
+        const currentXp = getField(player, "skill_xp")[effect.skill] ?? 0;
+        const currentLevel = skillLevelFromXp(currentXp);
         adjustSkillXp(player, effect.skill, effect.amount);
+        const nextXp = getField(player, "skill_xp")[effect.skill] ?? 0;
+        const nextLevel = skillLevelFromXp(nextXp);
+        if (nextLevel != currentLevel) {
+          effect.newLevel = nextLevel;
+        }
         break;
       case EffectType.RemoveItems:
         removeItems(player, effect.itemIds);
@@ -724,7 +720,7 @@ export function applyEffects(
     }
   }
 
-  if (maybeNotif) {
+  if (maybeNotif && (effects.length > 0 || implicitEffects.length > 0)) {
     maybeNotif.effects = effects;
     maybeNotif.implicitEffects = implicitEffects;
     frontQueue.unshift({
@@ -736,20 +732,6 @@ export function applyEffects(
   for (const aty of frontQueue) {
     appendActivity(player, aty);
   }
-}
-
-function invertCost(cost: Effect[]) {
-  return cost.map((effect) =>
-    effect.type === EffectType.RemoveItems ||
-    effect.type === EffectType.ControlledTeleport ||
-    effect.type === EffectType.Teleport ||
-    effect.type === EffectType.GainRandomItem ||
-    effect.type === EffectType.RemoveRandomItem ||
-    effect.type === EffectType.AddTableauCard ||
-    effect.type === EffectType.RefreshTableau
-      ? effect
-      : { ...effect, amount: -effect.amount },
-  );
 }
 
 type ControlledTeleportSelectionData = { radius: number };
@@ -809,22 +791,10 @@ export function freeXpSelectionCallback(
     return;
   }
   const choice = choices[0];
-  const currentXp = getField(player, "skill_xp")[choice.data] ?? 0;
-  const nextXp = currentXp + amount;
-  const effect =
-    skillLevelFromXp(nextXp) > skillLevelFromXp(currentXp)
-      ? ({
-          type: EffectType.SkillXp,
-          skill: choice.data,
-          amount,
-          newLevel: skillLevelFromXp(nextXp),
-        } satisfies Effect)
-      : ({
-          type: EffectType.SkillXp,
-          skill: choice.data,
-          amount,
-        } satisfies Effect);
-  applyEffects(player, [effect], makeNotification("Free XP"));
+  const effects: Effect[] = [
+    { type: EffectType.SkillXp, skill: choice.data, amount },
+  ];
+  applyEffects(player, effects, makeNotification("Free XP"));
 }
 
 export function travelContinueSelectionCallback(
@@ -1198,12 +1168,7 @@ export function performSpecialAction(
     FunctionType.SpecialActionExecute,
     params,
   );
-  applyEffects(
-    player,
-    effects,
-    makeNotification(action.name),
-    invertCost(action.cost),
-  );
+  applyEffects(player, effects, makeNotification(action.name), action.cost);
 }
 
 export function getGame() {
@@ -1279,7 +1244,7 @@ function endTurn(player: PlayerEntity, reason: string) {
 
 export function scoutEntity(player: PlayerEntity): void {
   const state = getApiState();
-  const cost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
+  const cost: Effect[] = [{ type: EffectType.Turns, amount: -1 }];
   assertNoActivities(player);
   if (!canAfford(player, cost))
     throw new RulesViolation("You can't afford to perform this action.");
@@ -1287,28 +1252,18 @@ export function scoutEntity(player: PlayerEntity): void {
   let effects: Effect[] = [
     { type: EffectType.RefreshTableau, qualityMods: [+2] },
   ];
-  applyEffects(
-    player,
-    effects,
-    makeNotification("Scout Results"),
-    invertCost(cost),
-  );
+  applyEffects(player, effects, makeNotification("Scout Results"), cost);
   endTurn(player, "scout");
 }
 
 export function campEntity(player: PlayerEntity): void {
   const state = getApiState();
-  const cost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
+  const cost: Effect[] = [{ type: EffectType.Turns, amount: -1 }];
   assertNoActivities(player);
   if (!canAfford(player, cost))
     throw new RulesViolation("You can't afford to perform this action.");
   let effects: Effect[] = [{ type: EffectType.Health, amount: 1 }];
-  applyEffects(
-    player,
-    effects,
-    makeNotification("A Restful Night"),
-    invertCost(cost),
-  );
+  applyEffects(player, effects, makeNotification("A Restful Night"), cost);
   endTurn(player, "camp");
 }
 
@@ -1336,7 +1291,7 @@ export function travelEntity(
       throw new RulesViolation("There are gaps in the route");
   }
 
-  const cost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
+  const cost: Effect[] = [{ type: EffectType.Turns, amount: -1 }];
   if (!canAfford(player, cost))
     throw new RulesViolation("You can't afford to perform this action.");
 
@@ -1355,7 +1310,7 @@ export function travelEntity(
       : encounterTemplates;
     const template = getRng().pick(templates);
     let effects: Effect[] = [];
-    let implicitEffects = invertCost(cost).concat([
+    let implicitEffects = cost.concat([
       { type: EffectType.Teleport, radius: 0, centerHex: encounterHex.name },
     ]);
     applyEffects(
@@ -1394,7 +1349,7 @@ export function travelEntity(
   }
 
   let effects: Effect[] = [];
-  let implicitEffects: Effect[] = invertCost(cost).concat([
+  let implicitEffects: Effect[] = cost.concat([
     { type: EffectType.Teleport, radius: 0, centerHex: destination },
   ]);
   applyEffects(
@@ -1411,7 +1366,7 @@ export function runEncounter(
   request: EncounterRequest,
 ): void {
   const state = getApiState();
-  const cost: Effect[] = [{ type: EffectType.Turns, amount: 1 }];
+  const cost: Effect[] = [{ type: EffectType.Turns, amount: -1 }];
   assertNoActivities(player);
   if (!canAfford(player, cost))
     throw new RulesViolation("You can't afford to perform this action.");
@@ -1419,7 +1374,7 @@ export function runEncounter(
   const encounter = tableau.find((card) => card.id === request.encounterId);
   if (!encounter) throw new RulesViolation("Encounter not found");
   const active = activeEncounterFor(player, encounter);
-  active.implicitEffects = invertCost(cost);
+  active.implicitEffects = cost;
   // apply the cost here
   applyEffects(player, active.implicitEffects, undefined);
   appendActivity(player, {
