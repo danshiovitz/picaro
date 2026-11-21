@@ -1,7 +1,7 @@
+export type PrimitiveType = "int" | "string" | "bool";
+
 export type FieldType =
-  | "int"
-  | "string"
-  | "bool"
+  | PrimitiveType
   | { type: "list"; of: FieldType }
   | { type: "map"; value: FieldType }
   | { type: "ref"; schemaId: string };
@@ -18,13 +18,72 @@ export interface EntitySchema {
   fields: Record<string, SchemaField>;
 }
 
+export type SchemaCatalog = Record<string, EntitySchema>;
+export type SchemaCatalogLike = SchemaCatalog | Map<string, EntitySchema>;
+
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
+
+type UnionToIntersection<U> = (
+  U extends unknown ? (value: U) => void : never
+) extends (value: infer I) => void
+  ? I
+  : never;
+
+type InferFieldValue<T> = T extends "int"
+  ? number
+  : T extends "string"
+    ? string
+    : T extends "bool"
+      ? boolean
+      : T extends { type: "ref"; schemaId: infer S }
+        ? S extends SchemaId
+          ? EntityOf<S>
+          : never
+        : T extends { type: "list"; of: infer U }
+          ? InferValue<U>[]
+          : T extends { type: "map"; value: infer V }
+            ? Record<string, InferValue<V>>
+            : never;
+
+export type InferValue<T> = T extends FieldType ? InferFieldValue<T> : never;
+
+type InferFieldValues<Fields extends Record<string, SchemaField>> = {
+  [K in keyof Fields]: InferValue<Fields[K]["type"]>;
+};
+
+type ResolvedSchemaData<
+  Catalog extends SchemaCatalog,
+  Id extends keyof Catalog & string,
+  Seen extends string = never,
+> = Id extends Seen
+  ? {}
+  : Catalog[Id] extends {
+        extends?: readonly (infer ParentId extends keyof Catalog & string)[];
+        fields: infer Fields extends Record<string, SchemaField>;
+      }
+    ? UnionToIntersection<
+        ParentId extends unknown
+          ? ResolvedSchemaData<Catalog, ParentId, Seen | Id>
+          : never
+      > &
+        InferFieldValues<Fields>
+    : InferFieldValues<Catalog[Id]["fields"]>;
+
 export const SCHEMAS = {
+  token: {
+    id: "token",
+    name: "Token",
+    fields: {
+      icon: { type: "string", defaultValue: "" },
+      location: { type: "string", defaultValue: "" },
+    },
+  },
   city: {
     id: "city",
     name: "City",
+    extends: ["token"],
     fields: {
-      entityName: { type: "string", defaultValue: "" },
-      icon: { type: "string", defaultValue: "city" },
+      name: { type: "string", defaultValue: "" },
     },
   },
   item: {
@@ -63,15 +122,14 @@ export const SCHEMAS = {
       terrain: { type: "string", defaultValue: "" },
       region_id: { type: "string", defaultValue: "" },
       claims: { type: { type: "list", of: "string" }, defaultValue: [] },
-      tokens: { type: { type: "list", of: "string" }, defaultValue: [] },
     },
   },
   player: {
     id: "player",
     name: "Player",
+    extends: ["token"],
     fields: {
       name: { type: "string", defaultValue: "" },
-      tokenId: { type: "string", defaultValue: "" },
       curHealth: { type: "int", defaultValue: 0 },
       maxHealth: { type: "int", defaultValue: 0 },
       curLuck: { type: "int", defaultValue: 0 },
@@ -80,7 +138,6 @@ export const SCHEMAS = {
       gold: { type: "int", defaultValue: 0 },
       reputation: { type: "int", defaultValue: 0 },
       turns: { type: "int", defaultValue: 0 },
-      location: { type: "string", defaultValue: "" },
       resources: {
         type: { type: "map", value: "int" },
         defaultValue: {},
@@ -103,32 +160,12 @@ export const SCHEMAS = {
 
 export type SchemaId = keyof typeof SCHEMAS;
 
-type InferLeaf<T> = T extends "int"
-  ? number
-  : T extends "string"
-    ? string
-    : T extends "bool"
-      ? boolean
-      : T extends { type: "ref"; schemaId: infer S }
-        ? S extends SchemaId
-          ? EntityOf<S>
-          : never
-        : T extends { type: "list"; of: infer U }
-          ? InferValue<U>[]
-          : T extends { type: "map"; value: infer V }
-            ? Record<string, InferValue<V>>
-            : never;
-
-export type InferValue<T> = T extends FieldType ? InferLeaf<T> : never;
-
-type Mutable<T> = { -readonly [K in keyof T]: T[K] };
-
-export type InferSchema<S extends EntitySchema> = {
-  -readonly [K in keyof S["fields"]]: InferValue<S["fields"][K]["type"]>;
-};
+export type InferSchema<S extends EntitySchema> = Mutable<
+  InferFieldValues<S["fields"]>
+>;
 
 export type SchemaRegistry = {
-  [K in SchemaId]: Mutable<InferSchema<(typeof SCHEMAS)[K]>>;
+  [K in SchemaId]: Mutable<ResolvedSchemaData<typeof SCHEMAS, K>>;
 };
 
 export type EntityOf<S extends SchemaId> = {
@@ -138,3 +175,73 @@ export type EntityOf<S extends SchemaId> = {
 } & SchemaRegistry[S];
 
 export type Entity = EntityOf<SchemaId>;
+
+function fieldError(message: string) {
+  return new Error(message);
+}
+
+function getSchemaFromCatalog(
+  catalog: SchemaCatalogLike,
+  schemaId: string,
+): EntitySchema | undefined {
+  return catalog instanceof Map
+    ? catalog.get(schemaId)
+    : catalog[schemaId as keyof SchemaCatalog];
+}
+
+export function resolveSchemaFields<
+  Catalog extends SchemaCatalogLike,
+  Id extends string,
+>(
+  catalog: Catalog,
+  schemaId: Id,
+  visited = new Set<string>(),
+): Record<string, SchemaField> {
+  if (visited.has(schemaId)) {
+    throw fieldError(
+      `Circular schema inheritance detected: ${[...visited, schemaId].join(" -> ")}`,
+    );
+  }
+  const schema = getSchemaFromCatalog(catalog, schemaId);
+  if (!schema) throw fieldError(`Entity schema not found: ${schemaId}`);
+
+  const nextVisited = new Set(visited);
+  nextVisited.add(schemaId);
+
+  const fields: Record<string, SchemaField> = {};
+  for (const parentId of schema.extends ?? []) {
+    Object.assign(fields, resolveSchemaFields(catalog, parentId, nextVisited));
+  }
+  Object.assign(fields, schema.fields);
+  return fields;
+}
+
+export function schemaExtends(
+  catalog: SchemaCatalogLike,
+  schemaId: string,
+  targetSchemaId: string,
+  visited = new Set<string>(),
+): boolean {
+  if (schemaId === targetSchemaId) return true;
+  if (visited.has(schemaId)) return false;
+  const schema = getSchemaFromCatalog(catalog, schemaId);
+  if (!schema) return false;
+
+  const nextVisited = new Set(visited);
+  nextVisited.add(schemaId);
+  return (schema.extends ?? []).some((parentId) =>
+    schemaExtends(catalog, parentId, targetSchemaId, nextVisited),
+  );
+}
+
+export function resolveSchema<
+  Catalog extends SchemaCatalogLike,
+  Id extends string,
+>(catalog: Catalog, schemaId: Id) {
+  const schema = getSchemaFromCatalog(catalog, schemaId);
+  if (!schema) throw fieldError(`Entity schema not found: ${schemaId}`);
+  return {
+    ...schema,
+    fields: resolveSchemaFields(catalog, schemaId),
+  };
+}

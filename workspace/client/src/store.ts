@@ -1,82 +1,91 @@
 import { createEntity, hydrateEntity } from "./entity";
-import type { Entity, GameData, Hex, Token } from "./types";
+import type { Entity, GameData, Hex, Region, Token } from "./types";
+import { SCHEMAS, schemaExtends } from "@common/schemas.js";
 
 export class GameStore {
+  terrains = new Map<string, GameData["terrains"][number]>();
+  claims = new Map<string, GameData["claims"][number]>();
   entities = new Map<string, Entity>();
   hexes = new Map<string, Hex>();
-  tokens = new Map<string, Token>();
-  tokenHex = new Map<string, Hex>();
-  terrains = new Map<string, GameData["terrains"][number]>();
   regions = new Map<string, GameData["regions"][number]>();
-  claims = new Map<string, GameData["claims"][number]>();
+  // helper data struct mapping hex name to list of entity ids in that hex:
+  hexTokens = new Map<string, string[]>();
+  // ids of various entity types
+  playerIds: string[] = [];
+  tokenIds: string[] = []; // have location and icon
 
   constructor(public data: GameData) {
-    const hydratedHexes = data.hexes.map((hex) =>
-      createEntity("hex", hex.name, hex),
-    );
-    const hydratedTokens = data.tokens.map((token) =>
-      createEntity("city", token.id, token),
-    );
-    const hydratedRegions = data.regions.map((region) =>
-      createEntity("region", region.id, region),
-    );
-
-    this.data.hexes = hydratedHexes;
-    this.data.tokens = hydratedTokens;
-    this.data.regions = hydratedRegions;
-
-    const entities = data.entities ?? [
-      ...hydratedHexes,
-      ...hydratedRegions,
-      ...hydratedTokens,
-    ];
-    for (const entity of entities)
-      this.entities.set(entity.id, hydrateEntity(entity));
-
-    for (const h of hydratedHexes) {
-      this.hexes.set(h.name, h);
-      h.tokens.forEach((t) => this.tokenHex.set(t, h));
-      this.entities.set(h.id, h);
-    }
-    for (const t of hydratedTokens) {
-      this.tokens.set(t.id, t);
-      this.entities.set(t.id, t);
-    }
-    for (const r of hydratedRegions) {
-      this.regions.set(r.id, r);
-      this.entities.set(r.id, r);
-    }
     data.terrains.forEach((t) => this.terrains.set(t.name, t));
     data.claims.forEach((c) => this.claims.set(c.name, c));
+    for (const entity of data.entities) {
+      let hydrated = hydrateEntity(entity);
+      if (hydrated.schemaId === "hex") {
+        // note hexes is keyed by name, not id
+        this.hexes.set(hydrated.name, hydrated as Hex);
+      } else if (hydrated.schemaId === "region") {
+        this.regions.set(hydrated.id, hydrated as Region);
+      } else {
+        this.entities.set(hydrated.id, hydrated);
+        if (hydrated.schemaId === "player") {
+          this.playerIds.push(hydrated.id);
+        }
+        if (schemaExtends(SCHEMAS, hydrated.schemaId, "token")) {
+          this.tokenIds.push(hydrated.id);
+        }
+      }
+    }
+
+    for (const locId of this.tokenIds) {
+      const entity = this.entities.get(locId)! as Token;
+      if (this.hexes.has(entity.location)) {
+        let toks = this.hexTokens.get(entity.location);
+        if (toks === undefined) {
+          this.hexTokens.set(entity.location, [entity.id]);
+        } else {
+          toks.push(entity.id);
+        }
+      }
+    }
   }
 
   entity<T extends Entity = Entity>(id: string) {
     return this.entities.get(id) as T | undefined;
   }
 
-  entitiesBySchema<T extends Entity = Entity>(schemaId: T["schemaId"]) {
-    return [...this.entities.values()].filter(
-      (entity): entity is T => entity.schemaId === schemaId,
-    );
+  tokensForHex(name: string) {
+    const ids = this.hexTokens.get(name) || [];
+    return ids
+      .map((id) => this.entities.get(id))
+      .filter((e): e is NonNullable<typeof e> => Boolean(e));
   }
 
-  distance(a: Hex, b: Hex) {
-    return (
-      (Math.abs(a.q - b.q) +
-        Math.abs(a.q + a.r - b.q - b.r) +
-        Math.abs(a.r - b.r)) /
-      2
-    );
-  }
+  moveToken(id: string, fromHex: string, toHex: string) {
+    const entity = this.entities.get(id) as Token;
+    if (!entity) {
+      console.error("Can't find token to move:", id);
+    }
+    entity.location = toHex;
+    const fromTokens = this.hexTokens.get(fromHex);
+    if (fromTokens) {
+      if (fromTokens.length == 1) {
+        this.hexTokens.delete(fromHex);
+      }
+      {
+        this.hexTokens.set(
+          fromHex,
+          fromTokens.filter((cid) => cid !== id),
+        );
+      }
+    }
 
-  hexForToken(id: string) {
-    return this.tokenHex.get(id);
-  }
-
-  tokensInHex(name: string) {
-    return (this.hexes.get(name)?.tokens ?? []).map((id) =>
-      this.tokens.get(id),
-    );
+    const toTokens = this.hexTokens.get(toHex);
+    if (toTokens) {
+      if (toTokens.findIndex((i) => i === id) === -1) {
+        toTokens.push(id);
+      }
+    } else {
+      this.hexTokens.set(toHex, [id]);
+    }
   }
 
   fullHex(name: string) {
@@ -87,7 +96,9 @@ export class GameStore {
         terrainObj: this.terrains.get(h.terrain),
         regionObj: this.regions.get(h.region_id),
         claimObjs: h.claims.map((c) => this.claims.get(c)),
-        tokenObjs: h.tokens.map((t) => this.tokens.get(t)),
+        tokenObjs: (this.hexTokens.get(name) || [])
+          .map((i) => this.entities.get(i))
+          .filter((t): t is NonNullable<typeof t> => Boolean(t)),
       }
     );
   }

@@ -1,6 +1,16 @@
-import { SCHEMAS, type Entity, type EntityOf, type SchemaId } from "./schemas";
+import {
+  SCHEMAS,
+  resolveSchemaFields,
+  type Entity,
+  type EntityOf,
+  type SchemaId,
+} from "./schemas";
 
-type AnyEntity = Entity;
+type AnyEntity = Record<string, unknown> & {
+  id: string;
+  schemaId: string;
+  data?: Record<string, unknown>;
+};
 
 function cloneDefaultValue<T>(value: T): T {
   if (Array.isArray(value))
@@ -16,18 +26,16 @@ function cloneDefaultValue<T>(value: T): T {
   return value;
 }
 
-export function hydrateEntity<T extends SchemaId>(
-  entity: AnyEntity,
-): EntityOf<T> {
+export function hydrateEntity<T extends AnyEntity>(entity: T): T {
   const extras = Object.fromEntries(
     Object.entries(entity as Record<string, unknown>).filter(
       ([key]) => key !== "id" && key !== "schemaId" && key !== "data",
     ),
   );
-  return createEntity<T>(entity.schemaId as T, entity.id, {
+  return createEntity(entity.schemaId as SchemaId, entity.id, {
     ...(entity.data as Record<string, unknown>),
     ...extras,
-  });
+  }) as unknown as T;
 }
 
 export function createEntity<T extends SchemaId>(
@@ -35,9 +43,9 @@ export function createEntity<T extends SchemaId>(
   id: string,
   initialData: Record<string, unknown> = {},
 ): EntityOf<T> {
-  const schema = SCHEMAS[schemaId];
+  const fields = resolveSchemaFields(SCHEMAS, schemaId);
   const data: Record<string, unknown> = {};
-  for (const [fieldName, field] of Object.entries(schema.fields)) {
+  for (const [fieldName, field] of Object.entries(fields)) {
     data[fieldName] = cloneDefaultValue(field.defaultValue);
   }
   for (const [fieldName, value] of Object.entries(initialData)) {
@@ -56,7 +64,7 @@ export function createEntity<T extends SchemaId>(
     writable: false,
     configurable: false,
   });
-  for (const [fieldName] of Object.entries(schema.fields)) {
+  for (const [fieldName] of Object.entries(fields)) {
     Object.defineProperty(entity, fieldName, {
       enumerable: true,
       configurable: true,
@@ -67,7 +75,7 @@ export function createEntity<T extends SchemaId>(
     });
   }
   for (const fieldName of Object.keys(initialData)) {
-    if (fieldName in schema.fields) continue;
+    if (fieldName in fields) continue;
     Object.defineProperty(entity, fieldName, {
       enumerable: true,
       configurable: true,
@@ -80,21 +88,22 @@ export function createEntity<T extends SchemaId>(
   return entity as EntityOf<T>;
 }
 
-export function getField<T extends Entity, K extends keyof T & string>(
-  entity: T,
-  fieldName: K,
-): T[K] {
+export function getField<
+  T extends Record<string, unknown>,
+  K extends keyof T & string,
+>(entity: T, fieldName: K): T[K] {
   return entity[fieldName];
 }
 
-export function setField<T extends Entity, K extends keyof T & string>(
-  entity: T,
-  fieldName: K,
-  value: T[K],
-) {
+export function setField<
+  T extends Record<string, unknown>,
+  K extends keyof T & string,
+>(entity: T, fieldName: K, value: T[K]) {
   (entity as Record<string, unknown>)[fieldName] = value;
 }
 
-export function entityEntries(entity: Entity) {
+export function entityEntries(
+  entity: Record<string, unknown> & { data?: Record<string, unknown> },
+) {
   return Object.entries(entity.data ?? {});
 }

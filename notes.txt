@@ -3,3 +3,6 @@ Misc notes
 docker build -t picaro-pi -f Dockerfile .
 
 docker run --rm -it -v C:\users\dansh\Projects\Picaro\workspace:/workspace -v C:\users\dansh\Projects\Picaro\pi_agent_home:/root/.pi/agent -p 3131:8080 -e OPENAI_API_KEY=$((Get-Content C:\users\dansh\projects\credentials\openai_picaro.txt -Raw).Trim()) picaro-pi
+
+npm --workspace client exec -- tsc -p tsconfig.json --noEmit
+npm --workspace server exec -- tsc -p tsconfig.json --noEmit

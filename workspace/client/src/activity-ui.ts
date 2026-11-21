@@ -1,17 +1,6 @@
 import { EffectType } from "./types";
 import type { Notification, Effect } from "./types";
 
-export type ActivityKind =
-  "Selection" | "Action" | "Encounter" | "Camp" | "Scout" | "Travel";
-
-export function activityErrorTitle(kind: ActivityKind) {
-  return `${kind} Error`;
-}
-
-export function activityResultTitle(kind: ActivityKind, result: Notification) {
-  return result.title ?? `${kind} Results`;
-}
-
 type ItemNameResolver = (
   itemId: string,
 ) => Promise<string | undefined> | string | undefined;

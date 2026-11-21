@@ -1,9 +1,16 @@
 import { randomUUID } from "node:crypto";
 
-import { Entity, EntitySchema, FieldType, SchemaId } from "./schemas.js";
+import {
+  SCHEMAS,
+  Entity,
+  EntitySchema,
+  FieldType,
+  SchemaId,
+  resolveSchemaFields,
+  schemaExtends,
+} from "./schemas.js";
 
 const schemaRegistry = new Map<string, EntitySchema>();
-const resolvedSchemaCache = new Map<string, EntitySchema>();
 
 function cloneDefaultValue<T>(value: T): T {
   if (Array.isArray(value)) {
@@ -21,30 +28,12 @@ function cloneDefaultValue<T>(value: T): T {
 }
 
 function resolvedSchema(schemaId: string): EntitySchema {
-  const cached = resolvedSchemaCache.get(schemaId);
-  if (cached) return cached;
   const schema = schemaRegistry.get(schemaId);
   if (!schema) throw new Error(`Entity schema not found: ${schemaId}`);
-  const inheritedFields: Record<string, EntitySchema["fields"][string]> = {};
-  for (const parentId of schema.extends ?? []) {
-    const parent = resolvedSchema(parentId);
-    Object.assign(inheritedFields, parent.fields);
-  }
-  const resolved: EntitySchema = {
+  return {
     ...schema,
-    fields: { ...inheritedFields, ...schema.fields },
+    fields: resolveSchemaFields(schemaRegistry, schemaId),
   };
-  resolvedSchemaCache.set(schemaId, resolved);
-  return resolved;
-}
-
-function schemaExtends(schemaId: string, targetSchemaId: string): boolean {
-  if (schemaId === targetSchemaId) return true;
-  const schema = schemaRegistry.get(schemaId);
-  if (!schema) return false;
-  return (schema.extends ?? []).some((parentId) =>
-    schemaExtends(parentId, targetSchemaId),
-  );
 }
 
 function fieldError(fieldName: string, message: string) {
@@ -98,7 +87,7 @@ function validateFieldValue(
     if (typeof entity.id !== "string" || typeof entity.schemaId !== "string") {
       throw fieldError(fieldName, `expected ref to ${fieldType.schemaId}`);
     }
-    if (!schemaExtends(entity.schemaId, fieldType.schemaId)) {
+    if (!schemaExtends(SCHEMAS, entity.schemaId, fieldType.schemaId)) {
       throw fieldError(fieldName, `expected ref to ${fieldType.schemaId}`);
     }
   }
@@ -115,12 +104,10 @@ function validateEntityData(
 
 export function registerEntitySchema(schema: EntitySchema) {
   schemaRegistry.set(schema.id, schema);
-  resolvedSchemaCache.delete(schema.id);
 }
 
 export function createEntity<T extends Entity = Entity>(
   schemaId: SchemaId | string,
-  id: string = randomUUID(),
   initialData: Record<string, unknown> = {},
 ): T {
   const schema = resolvedSchema(schemaId);
@@ -135,7 +122,7 @@ export function createEntity<T extends Entity = Entity>(
   }
   validateEntityData(schema, data);
 
-  const entity = { id } as Entity & Record<string, unknown>;
+  const entity = { id: randomUUID() } as Entity & Record<string, unknown>;
   Object.defineProperty(entity, "schemaId", {
     value: schemaId,
     enumerable: false,
@@ -195,7 +182,7 @@ export function setField<T extends Entity, K extends keyof T & string>(
 }
 
 export function hydrateEntity<T extends Entity = Entity>(entity: Entity): T {
-  return createEntity<T>(entity.schemaId, entity.id, entity.data);
+  return createEntity<T>(entity.schemaId, entity.data);
 }
 
 export function serializeEntity(entity: Entity): Entity {
@@ -237,13 +224,14 @@ export class EntityStore {
 
   getBySchema<T extends Entity = Entity>(schemaId: string) {
     return this.values<T>().filter((entity) =>
-      schemaExtends(entity.schemaId, schemaId),
+      schemaExtends(SCHEMAS, entity.schemaId, schemaId),
     );
   }
 
   replaceSchema<T extends Entity = Entity>(schemaId: string, next: T[]) {
     for (const [id, entity] of this.entities) {
-      if (schemaExtends(entity.schemaId, schemaId)) this.entities.delete(id);
+      if (schemaExtends(SCHEMAS, entity.schemaId, schemaId))
+        this.entities.delete(id);
     }
     for (const entity of next) this.add(entity);
   }

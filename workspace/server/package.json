@@ -3,7 +3,8 @@
   "scripts": {
     "dev": "node ../node_modules/typescript/bin/tsc && tsc-alias -p tsconfig.json && node dist/server/src/index.js",
     "build": "node ../node_modules/typescript/bin/tsc && tsc-alias -p tsconfig.json",
-    "start": "node dist/server/src/index.js"
+    "start": "node dist/server/src/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "cors": "^2.8.5",

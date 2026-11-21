@@ -1,4 +1,18 @@
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
+
+function runTypecheck(name, workspace) {
+  const result = spawnSync(
+    "npm",
+    ["--workspace", workspace, "exec", "--", "tsc", "-p", "tsconfig.json", "--noEmit"],
+    { stdio: "inherit", shell: false },
+  );
+
+  if ((result.status ?? 1) !== 0) {
+    process.exit(result.status ?? 1);
+  }
+
+  console.log(`[${name}] typecheck passed`);
+}
 
 function start(name, args) {
   const child = spawn("npm", args, {
@@ -19,6 +33,9 @@ function start(name, args) {
   );
   return child;
 }
+
+runTypecheck("typecheck:server", "server");
+runTypecheck("typecheck:client", "client");
 
 const server = start("dev:server", ["--workspace", "server", "run", "dev"]);
 const client = start("dev:client", ["--workspace", "client", "run", "dev"]);

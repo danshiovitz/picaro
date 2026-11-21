@@ -16,11 +16,8 @@ import {
 import { createEntity } from "./entity.js";
 import {
   entityStore,
-  makeConditionId,
   makeEmptyResources,
   makeEmptySkills,
-  makeItemId,
-  makeTokenId,
   encounterTemplates,
   setApiState,
 } from "./data.js";
@@ -28,6 +25,7 @@ import { loadOrGenerateWorld, MapGeneratorName } from "./map_generator.js";
 import { getRng } from "@common/random.js";
 import {
   RulesViolation,
+  addPlayer,
   campEntity,
   fillTableau,
   continueEncounter,
@@ -38,11 +36,9 @@ import {
   getGame,
   getHexes,
   getRegions,
-  getSpecialActionCatalog,
   getSpecialActions,
   getTableau,
   getTerrain,
-  getTokens,
   getItem,
   initSystemFunctions,
   performSpecialAction,
@@ -52,7 +48,6 @@ import {
   viewNextActivityForClient,
 } from "./commands.js";
 import { makeSelection } from "./selection.js";
-import { setEncounterContext } from "./encounter.js";
 
 const defaultGenerator: MapGeneratorName =
   process.env["MAP_GENERATOR"] === "allRandom" ||
@@ -66,49 +61,12 @@ const world = await loadOrGenerateWorld({
   seed: defaultSeed,
 });
 const hexes = world.hexes;
-const hexByName = world.hexByName;
 const regions = world.regions;
 for (const entity of world.entities) entityStore.add(entity);
 
-const playerTokens = [1, 2, 3, 4].map((i) => ({
-  id: makeTokenId(),
-  entityName: `Player ${i}`,
-  icon: `player${i}`,
-}));
-
-function clearPlayerTokens() {
-  for (const hex of hexes)
-    hex.tokens = hex.tokens.filter(
-      (id) => !playerTokens.some((player) => player.id === id),
-    );
-}
-
-function placePlayersAfterLoad() {
-  const rng = getRng();
-  clearPlayerTokens();
-  const used = new Set<number>();
-  const place = (tokenId: string, index: number | undefined) => {
-    let idx = index ?? rng.int(hexes.length);
-    while (used.has(idx)) idx = rng.int(hexes.length);
-    used.add(idx);
-    hexes[idx].tokens.push(tokenId);
-  };
-  place(playerTokens[0].id, 42);
-  for (const token of playerTokens.slice(1)) place(token.id, undefined);
-}
-placePlayersAfterLoad();
-for (const hex of hexes) {
-  const entity = entityStore.getById<HexEntity>(hex.name);
-  if (entity) entity.tokens = [...hex.tokens];
-}
-
-function locationForToken(tokenId: string) {
-  return hexes.find((hex) => hex.tokens.includes(tokenId))?.name ?? "Unknown";
-}
-
 function startingInventory(): Item[] {
   const createItem = (name: string, speed_boost: number | undefined) => {
-    const item = createEntity<Item>("item", makeItemId(), {
+    const item = createEntity<Item>("item", {
       name,
       speed_boost,
     });
@@ -124,7 +82,7 @@ function startingInventory(): Item[] {
 
 function startingConditions() {
   return [
-    createEntity<Condition>("condition", makeConditionId(), {
+    createEntity<Condition>("condition", {
       name: "Flatulent",
       duration: 5,
     }),
@@ -149,11 +107,26 @@ function startingSkills() {
   return skill_xp;
 }
 
-for (const token of playerTokens) {
-  entityStore.add(
-    createEntity<PlayerEntity>("player", token.id, {
-      name: token.entityName,
-      tokenId: token.id,
+function addPlayers() {
+  const rng = getRng();
+  const used = new Set<number>();
+  const getUnused = (index: number | undefined) => {
+    let idx = index ?? rng.int(hexes.length);
+    while (used.has(idx)) idx = rng.int(hexes.length);
+    used.add(idx);
+    return hexes[idx].name;
+  };
+
+  const playerVals = [1, 2, 3, 4].map((i) => ({
+    name: `Player ${i}`,
+    icon: `player${i}`,
+    location: getUnused(i == 1 ? 42 : undefined),
+  }));
+
+  for (const pv of playerVals) {
+    addPlayer(pv.location, {
+      name: pv.name,
+      icon: pv.icon,
       curHealth: 10,
       maxHealth: 10,
       curLuck: 3,
@@ -162,34 +135,17 @@ for (const token of playerTokens) {
       gold: 0,
       reputation: 10,
       turns: 20,
-      location: locationForToken(token.id),
       resources: startingResources(),
       inventory: startingInventory(),
       conditions: startingConditions(),
       skill_xp: startingSkills(),
-    }),
-  );
-}
-const tableau = new Map<string, TableauCard[]>();
-setEncounterContext({ hexes, regions });
-for (const player of entityStore.getBySchema<PlayerEntity>("player")) {
-  const playerTableau: TableauCard[] = [];
-  fillTableau(playerTableau, encounterTemplates, player);
-  tableau.set(player.id, playerTableau);
+    });
+  }
 }
 
-const apiState: ApiState = {
-  hexes,
-  hexByName,
-  regions,
-  tokens: playerTokens,
-  entities: entityStore,
-  activitiesQueue: new Map<string, PendingActivity[]>(),
-  curActivity: new Map<string, PendingActivity>(),
-  tableau,
-};
-setApiState(apiState);
+setApiState(hexes, regions, entityStore);
 initSystemFunctions();
+addPlayers();
 
 function sendJson(res: http.ServerResponse, status: number, data: unknown) {
   const body = JSON.stringify(data);
@@ -235,8 +191,6 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, getRegions());
     if (req.method === "GET" && path === "/api/claims")
       return sendJson(res, 200, getClaims());
-    if (req.method === "GET" && path === "/api/tokens")
-      return sendJson(res, 200, getTokens());
     if (req.method === "GET" && path === "/api/tableau") {
       const playerId = url.searchParams.get("player");
       if (!playerId) return sendJson(res, 400, { error: "Player id required" });
@@ -246,8 +200,6 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "GET" && path === "/api/game")
       return sendJson(res, 200, getGame());
-    if (req.method === "GET" && path === "/api/special_actions")
-      return sendJson(res, 200, getSpecialActionCatalog());
 
     const itemMatch = path.match(/^\/api\/items\/([^/]+)$/);
     if (itemMatch && req.method === "GET") {

@@ -12,6 +12,7 @@ import type {
   Hex as CommonHex,
   Item as CommonItem,
   AnnotatedValue as CommonAnnotatedValue,
+  Token as CommonToken,
   PlayerEntity as CommonPlayerEntity,
   PlayerEntityDto as CommonPlayerEntityDto,
   PlayerSummary as CommonPlayerSummary,
@@ -25,7 +26,6 @@ import type {
   TableauCard as CommonTableauCard,
   TableauData as CommonTableauData,
   Terrain as CommonTerrain,
-  Token as CommonToken,
 } from "../../common/src/types.js";
 import type { Entity as CommonEntity } from "../../common/src/schemas.js";
 
@@ -33,10 +33,10 @@ export type Entity = CommonEntity;
 export type Terrain = CommonTerrain;
 export type Region = CommonRegion;
 export type Claim = CommonClaim;
-export type Token = CommonToken;
 export type Item = CommonItem;
 export type Condition = CommonCondition;
 export type Hex = CommonHex;
+export type Token = CommonToken;
 export type PlayerEntityDto = CommonPlayerEntityDto;
 export type PlayerEntity = PlayerEntityDto & {
   skills: Record<string, number>;

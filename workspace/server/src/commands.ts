@@ -28,6 +28,7 @@ import {
   Entity,
   HexEntity,
   Token,
+  GameData,
   ValueType,
   FunctionType,
   TriggerType,
@@ -47,6 +48,7 @@ import {
   getApiState,
   invoke,
   registerFunction,
+  moveToken,
 } from "./data.js";
 import {
   instantiateEncounterTemplate,
@@ -76,11 +78,6 @@ export type EncounterRequest = {
   conceding?: boolean;
 };
 
-function allTokens() {
-  const state = getApiState();
-  return [...state.tokens, ...state.entities.getBySchema<CityEntity>("city")];
-}
-
 function specialActionBase(action: SpecialActionDefinition) {
   const { availability: _availability, execute: _execute, ...rest } = action;
   return rest;
@@ -89,32 +86,27 @@ function specialActionBase(action: SpecialActionDefinition) {
 function nearbyEntitiesForPlayer(player: PlayerEntity) {
   const state = getApiState();
   const location = getField(player, "location");
-  const hex = state.hexByName.get(location);
-  if (!hex) return [];
-  return hex.tokens
-    .filter((tokenId) => tokenId !== getField(player, "tokenId"))
-    .map((tokenId) => state.entities.getById<Entity>(tokenId))
+  return (state.hexTokens.get(location) ?? [])
+    .filter((entId) => entId !== player.id)
+    .map((entId) => state.entities.getById<Entity>(entId))
     .filter((entity): entity is Entity => Boolean(entity));
 }
 
-function locationForToken(hexes: Hex[], tokenId: string) {
-  return hexes.find((hex) => hex.tokens.includes(tokenId))?.name ?? "Unknown";
-}
-
-function moveToken(tokenId: string, to: string) {
+export function addPlayer(
+  location: string,
+  initialData: Record<string, unknown>,
+) {
   const state = getApiState();
-  const fromHex = state.hexes.find((hex) => hex.tokens.includes(tokenId));
-  if (fromHex) fromHex.tokens = fromHex.tokens.filter((id) => id !== tokenId);
-  const targetHex = state.hexByName.get(to);
-  targetHex?.tokens.push(tokenId);
-  if (fromHex) {
-    const entity = state.entities.getById<HexEntity>(fromHex.name);
-    if (entity) setField(entity, "tokens", [...fromHex.tokens]);
-  }
-  if (targetHex) {
-    const entity = state.entities.getById<HexEntity>(targetHex.name);
-    if (entity) setField(entity, "tokens", [...targetHex.tokens]);
-  }
+
+  initialData.location = location;
+  let player = createEntity<PlayerEntity>("player", initialData);
+  state.entities.add(player);
+
+  const playerTableau: TableauCard[] = [];
+  fillTableau(playerTableau, encounterTemplates, player);
+  state.tableau.set(player.id, playerTableau);
+
+  moveToken(player.id, "", location);
 }
 
 function getPlayerTableau(player: PlayerEntity) {
@@ -410,11 +402,6 @@ function effectiveSkills(player: PlayerEntity) {
 type PlayerDto = PlayerEntityDto & { skills: Record<string, number> };
 
 function playerDto(hexes: Hex[], player: PlayerEntity) {
-  setField(
-    player,
-    "location",
-    locationForToken(hexes, getField(player, "tokenId")),
-  );
   return {
     ...(serializeEntity(player) as PlayerEntity),
     skill_xp: cloneSkillXp(getField(player, "skill_xp")),
@@ -422,8 +409,8 @@ function playerDto(hexes: Hex[], player: PlayerEntity) {
     speed: computeAnnotatedEffectiveValue(player, ValueType.speed),
     skills: effectiveSkills(player),
     resources: cloneResources(getField(player, "resources")),
-    inventory: cloneInventory(getField(player, "inventory")),
-    conditions: cloneConditions(getField(player, "conditions")),
+    inventory: cloneInventory(player.inventory as Item[]),
+    conditions: cloneConditions(player.conditions as Condition[]),
   } satisfies PlayerDto;
 }
 
@@ -441,8 +428,8 @@ function playerUpdates(player: PlayerEntity) {
     skill_xp: cloneSkillXp(getField(player, "skill_xp")),
     skills: effectiveSkills(player),
     resources: cloneResources(getField(player, "resources")),
-    inventory: cloneInventory(getField(player, "inventory")),
-    conditions: cloneConditions(getField(player, "conditions")),
+    inventory: cloneInventory(player.inventory as Item[]),
+    conditions: cloneConditions(player.conditions as Condition[]),
   } satisfies Partial<PlayerEntityDto> & { skills: Record<string, number> };
 }
 
@@ -541,7 +528,7 @@ function removeItems(player: PlayerEntity, itemIds: string[]) {
   setField(
     player,
     "inventory",
-    getField(player, "inventory").filter((item) => !ids.has(item.id)),
+    (player.inventory as Item[]).filter((item) => !ids.has(item.id)),
   );
 }
 
@@ -578,14 +565,14 @@ function gainRandomItem(player: PlayerEntity, quality: number) {
     Math.max(1, getRng().int(randomItemTable.length) + 1 + quality),
   );
   const itemName = randomItemTable[roll - 1];
-  const item = createEntity<Item>("item", randomUUID(), { name: itemName });
+  const item = createEntity<Item>("item", { name: itemName });
   state.entities.add(item);
-  getField(player, "inventory").push(item);
+  (player.inventory as Item[]).push(item);
   return item;
 }
 
 function removeRandomItem(player: PlayerEntity) {
-  const inventory = getField(player, "inventory");
+  const inventory = player.inventory as Item[];
   if (inventory.length === 0) return undefined;
   const index = getRng().int(inventory.length);
   const [item] = inventory.splice(index, 1);
@@ -630,14 +617,14 @@ function canAfford(player: PlayerEntity, cost: Effect[]) {
         break;
       case EffectType.RemoveItems: {
         const inventoryIds = new Set(
-          getField(player, "inventory").map((item) => item.id),
+          (player.inventory as Item[]).map((item) => item.id),
         );
         if (!effect.itemIds.every((itemId) => inventoryIds.has(itemId)))
           return false;
         break;
       }
       case EffectType.RemoveRandomItem:
-        if (getField(player, "inventory").length < 1) return false;
+        if ((player.inventory as Item[]).length < 1) return false;
         break;
       case EffectType.AddTableauCard:
       case EffectType.RefreshTableau:
@@ -687,8 +674,7 @@ export function applyEffects(
         }
         effect.centerHex = dest; // reuse center to log the name of the dest hex
         effect.radius = -1; // spoil the radius since we're overwriting the center
-        moveToken(getField(player, "tokenId"), dest);
-        setField(player, "location", dest);
+        moveToken(player.id, player.location, dest);
         break;
       case EffectType.Gold:
         adjustGold(player, effect.amount);
@@ -1107,11 +1093,6 @@ export function getClaims() {
   return claims;
 }
 
-export function getTokens() {
-  const state = getApiState();
-  return allTokens();
-}
-
 export function getItem(itemId: string) {
   const state = getApiState();
   return state.entities.getById<Item>(itemId);
@@ -1120,10 +1101,6 @@ export function getItem(itemId: string) {
 export function getTableau(player: PlayerEntity): TableauData {
   const state = getApiState();
   return { encounters: getPlayerTableau(player) };
-}
-
-export function getSpecialActionCatalog(): SpecialAction[] {
-  return specialActions.map(specialActionBase);
 }
 
 export function getSpecialActions(
@@ -1145,7 +1122,7 @@ export function getSpecialActions(
       continue;
     }
     if (action.type === SpecialActionType.Item) {
-      for (const item of getField(player, "inventory")) {
+      for (const item of player.inventory as Item[]) {
         if (
           invoke<boolean>(
             action.availability,
@@ -1158,15 +1135,17 @@ export function getSpecialActions(
       }
       continue;
     }
-    for (const entity of nearbyEntitiesForPlayer(player)) {
-      if (
-        invoke<boolean>(
-          action.availability,
-          FunctionType.SpecialActionAvailability,
-          [player, entity],
-        )
-      ) {
-        available.push({ ...specialActionBase(action), entityId: entity.id });
+    if (action.type === SpecialActionType.NearbyEntity) {
+      for (const entity of nearbyEntitiesForPlayer(player)) {
+        if (
+          invoke<boolean>(
+            action.availability,
+            FunctionType.SpecialActionAvailability,
+            [player, entity],
+          )
+        ) {
+          available.push({ ...specialActionBase(action), entityId: entity.id });
+        }
       }
     }
   }
@@ -1189,7 +1168,7 @@ export function performSpecialAction(
     case SpecialActionType.General:
       break;
     case SpecialActionType.Item: {
-      target = getField(player, "inventory").find(
+      target = (player.inventory as Item[]).find(
         (item) => item.id === request.entityId,
       );
       if (!target) throw new RulesViolation("Special action item not found");
@@ -1230,21 +1209,15 @@ export function performSpecialAction(
 
 export function getGame() {
   const state = getApiState();
-  return {
+  const ret: GameData = {
     hexes: state.hexes,
     terrains: terrainSpecs,
     regions: state.regions,
     claims,
-    tokens: allTokens(),
-    players: state.entities
-      .getBySchema<PlayerEntity>("player")
-      .map((player) => ({
-        id: player.id,
-        name: getField(player, "name"),
-      })),
     entities: state.entities.values().map(serializeEntity),
     resourceTypes,
   };
+  return ret;
 }
 
 export function getEntity(player: PlayerEntity) {
@@ -1267,12 +1240,12 @@ function endTurn(player: PlayerEntity) {
   console.log(
     `[endTurn] for ${getField(player, "name")} @ ${getField(player, "location")}`,
   );
-  for (const condition of getField(player, "conditions"))
+  for (const condition of player.conditions as Condition[])
     setField(condition, "duration", getField(condition, "duration") - 1);
   setField(
     player,
     "conditions",
-    getField(player, "conditions").filter(
+    (player.conditions as Condition[]).filter(
       (condition) => getField(condition, "duration") > 0,
     ),
   );
@@ -1331,7 +1304,7 @@ export function travelEntity(
   const state = getApiState();
   assertNoActivities(player);
   const route = request.route;
-  const current = locationForToken(state.hexes, getField(player, "tokenId"));
+  const current = getField(player, "location");
   if (route.length < 1 || route[0] !== current)
     throw new RulesViolation("There are gaps in the route");
   const speed = computeEffectiveValue(player, ValueType.speed);

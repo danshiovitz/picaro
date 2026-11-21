@@ -38,32 +38,13 @@ import type { EntityStore } from "./entity.js";
 
 export type Entity = CommonEntity;
 export type Terrain = CommonTerrain;
-export type Region = { id: string; name: string; base_difficulty: number };
-export type Claim = { name: string; icon: string };
-export type Token = { id: string; entityName: string; icon: string };
+export type Region = CommonRegion;
+export type Claim = CommonClaim;
+export type Token = CommonToken;
 export type Item = CommonItem;
 export type Condition = CommonCondition;
-export type Hex = {
-  name: string;
-  x: number;
-  y: number;
-  q: number;
-  r: number;
-  terrain: string;
-  region_id: string;
-  claims: string[];
-  tokens: string[];
-};
-export type GameData = {
-  hexes: Hex[];
-  terrains: Terrain[];
-  regions: Region[];
-  claims: Claim[];
-  tokens: Token[];
-  players: PlayerSummary[];
-  resourceTypes: string[];
-  entities?: Entity[];
-};
+export type Hex = CommonHex;
+export type GameData = CommonGameData;
 export type PlayerSummary = CommonPlayerSummary;
 export {
   RewardType,
@@ -164,8 +145,8 @@ export type SpecialActionRequest = CommonSpecialActionRequest;
 export type ApiState = {
   hexes: Hex[];
   hexByName: Map<string, Hex>;
+  hexTokens: Map<string, string[]>;
   regions: Region[];
-  tokens: { id: string; entityName: string; icon: string }[];
   entities: EntityStore;
   activitiesQueue: Map<string, PendingActivity[]>;
   curActivity: Map<string, PendingActivity>;

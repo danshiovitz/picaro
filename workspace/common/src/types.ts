@@ -4,10 +4,10 @@ export type Terrain = { name: string; color: string; icon: string };
 export type Region = EntityOf<"region">;
 export type Claim = { name: string; icon: string };
 export type AxialPoint = { q: number; r: number };
-export type Token = EntityOf<"city">;
 export type Item = EntityOf<"item">;
 export type Condition = EntityOf<"condition">;
 export type Hex = EntityOf<"hex">;
+export type Token = EntityOf<"token">;
 export type PlayerEntity = EntityOf<"player">;
 export type PlayerSummary = { id: string; name: string };
 export enum FunctionType {
@@ -41,10 +41,8 @@ export type GameData = {
   terrains: Terrain[];
   regions: Region[];
   claims: Claim[];
-  tokens: Token[];
-  players: PlayerSummary[];
   resourceTypes: string[];
-  entities?: Entity[];
+  entities: Entity[];
 };
 export enum RewardType {
   Gold = "gold",

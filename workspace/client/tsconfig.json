@@ -4,6 +4,9 @@
     "module": "ESNext",
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "moduleResolution": "Bundler",
+    "paths": {
+      "@common/*": ["../common/src/*"]
+    },
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true

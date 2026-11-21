@@ -6,12 +6,7 @@ import {
   RewardType,
   SpecialActionType,
 } from "./types";
-import {
-  activityErrorTitle,
-  activityResultTitle,
-  renderActivityLines,
-  type ActivityKind,
-} from "./activity-ui";
+import { renderActivityLines } from "./activity-ui";
 import type {
   ActivityNextActive,
   Notification,
@@ -23,6 +18,7 @@ import type {
   Hex,
   Condition,
   Item,
+  Token,
   PlayerEntity,
   Selection,
   AvailableSpecialAction,
@@ -30,6 +26,7 @@ import type {
   TableauCard,
   TableauData,
 } from "./types";
+import { hexDistance } from "@common/hexmap.js";
 
 const API = import.meta.env.VITE_API_URL ?? "";
 const url = new URL(window.location.href);
@@ -93,37 +90,30 @@ async function apiJson<T>(
 (async () => {
   try {
     const game = await apiJson<GameData>("/api/game", undefined, 20);
+    const store = new GameStore(game);
     if (!playerId) {
-      playerId = game.players[0]?.id ?? "";
+      playerId = store.playerIds.length > 0 ? store.playerIds[0] : "";
       if (!playerId) throw new Error("No players available");
       url.searchParams.set("player", playerId);
       history.replaceState(null, "", url);
     }
-    if (!game.players.some((player) => player.id === playerId)) {
+    if (!store.playerIds.some((pid) => pid === playerId)) {
       throw new Error(`Player not found: ${playerId}`);
     }
-    const [playerRaw, tableau, specialActionCatalog, specialActions] =
-      await Promise.all([
-        apiJson<PlayerEntity>(
-          `/api/entities/${encodeURIComponent(playerId)}`,
-          undefined,
-          20,
-        ),
-        apiJson<TableauData>("/api/tableau", undefined, 20),
-        apiJson<SpecialAction[]>("/api/special_actions", undefined, 20),
-        apiJson<AvailableSpecialAction[]>(
-          `/api/entities/${encodeURIComponent(playerId)}/special_actions`,
-          undefined,
-          20,
-        ),
-      ]);
-    render(
-      new GameStore(game),
-      hydrateEntity(playerRaw),
-      tableau,
-      specialActionCatalog,
-      specialActions,
-    );
+    const [playerRaw, tableau, specialActions] = await Promise.all([
+      apiJson<PlayerEntity>(
+        `/api/entities/${encodeURIComponent(playerId)}`,
+        undefined,
+        20,
+      ),
+      apiJson<TableauData>("/api/tableau", undefined, 20),
+      apiJson<AvailableSpecialAction[]>(
+        `/api/entities/${encodeURIComponent(playerId)}/special_actions`,
+        undefined,
+        20,
+      ),
+    ]);
+    render(store, hydrateEntity(playerRaw), tableau, specialActions);
   } catch (err) {
     console.error("[client bootstrap] Failed to load game data");
     console.error(err instanceof Error ? (err.stack ?? err) : err);
@@ -142,6 +132,7 @@ function isAnnotatedValue(value: unknown): value is AnnotatedValue {
   return (
     Boolean(value) &&
     typeof value === "object" &&
+    value !== null &&
     "finalValue" in value &&
     "baseValue" in value &&
     "modifierValues" in value
@@ -226,7 +217,7 @@ function effectLabel(effect: Effect) {
   if (effect.type === EffectType.FreeXp) return labelForType(effect.type);
   if (effect.type === EffectType.ControlledTeleport)
     return `${labelForType(effect.type)} (radius ${effect.radius})`;
-  if (effect.type === EffectType.RandomTeleport)
+  if (effect.type === EffectType.Teleport)
     return `${labelForType(effect.type)} (radius ${effect.radius} of ${effect.centerHex})`;
   if (effect.type === EffectType.SkillXp)
     return `xp for ${effect.skill}${effect.newLevel ? ` (now level ${effect.newLevel})` : ""}`;
@@ -281,7 +272,9 @@ function canAffordEffects(player: PlayerEntity, effects: Effect[]) {
       case EffectType.SkillXp:
         return (player.skill_xp[effect.skill] ?? 0) + effect.amount >= 0;
       case EffectType.RemoveItems: {
-        const inventoryIds = new Set(player.inventory.map((item) => item.id));
+        const inventoryIds = new Set(
+          (player.inventory as Item[]).map((item) => item.id),
+        );
         return effect.itemIds.every((itemId) => inventoryIds.has(itemId));
       }
       case EffectType.RemoveRandomItem:
@@ -289,7 +282,7 @@ function canAffordEffects(player: PlayerEntity, effects: Effect[]) {
       case EffectType.AddTableauCard:
       case EffectType.RefreshTableau:
       case EffectType.ControlledTeleport:
-      case EffectType.RandomTeleport:
+      case EffectType.Teleport:
         return true;
     }
   });
@@ -491,7 +484,6 @@ function render(
   store: GameStore,
   player: PlayerEntity,
   tableau: TableauData,
-  initialSpecialActionCatalog: SpecialAction[],
   initialSpecialActions: AvailableSpecialAction[],
 ) {
   let tableauData = tableau;
@@ -536,7 +528,6 @@ function render(
   let manualZoom = false;
   let centerPlayerAfterDraw = false;
   let specialActions = initialSpecialActions;
-  let specialActionCatalog = initialSpecialActionCatalog;
 
   type OngoingTravelData = {
     route: string[];
@@ -626,8 +617,8 @@ function render(
     // If arrived in destination hex
     if (ridx == ongoingTravel.route.length - 1) {
       if (ongoingTravel.specialActionId) {
-        const action = specialActionCatalog.find(
-          (item) => item.id === ongoingTravel.specialActionId,
+        const action = specialActions.find(
+          (item) => item.id === ongoingTravel?.specialActionId,
         );
         if (!action) return false;
         showSpecialActionPrompt(
@@ -673,7 +664,7 @@ function render(
       if (!choice) return "Selection choice not found.";
       const target = store.hexes.get(choice.data);
       if (!target) return "Selected hex is not valid.";
-      if (store.distance(origin, target) > selection.hexSelection.radius) {
+      if (hexDistance(origin, target) > selection.hexSelection.radius) {
         return "Selected hex is out of range.";
       }
     }
@@ -714,7 +705,7 @@ function render(
     const selectionId = activeSelection.id;
     activeSelection = null;
     updateMapCursor();
-    await executeActivity("Selection", () =>
+    await executeActivity(() =>
       apiJson<ActivityNextActive>(
         `/api/entities/${encodeURIComponent(player.id)}/actions/make_selection`,
         {
@@ -799,15 +790,15 @@ function render(
     for (const location of action.locations) {
       const hex = store.hexes.get(location);
       if (!hex) continue;
-      const distance = store.distance(origin, hex);
+      const distance = hexDistance(origin, hex);
       if (!best || distance < best.distance)
         best = { name: location, distance };
     }
     return best?.name;
   }
 
-  function catalogSpecialActionsForHex(hexName: string) {
-    return specialActionCatalog.filter((action) =>
+  function specialActionsForHex(hexName: string) {
+    return specialActions.filter((action) =>
       action.locations?.includes(hexName),
     );
   }
@@ -817,18 +808,18 @@ function render(
     if (!hex) return [];
     const groups = new Map<
       string,
-      { entityId: string; name: string; actions: SpecialAction[] }
+      { entityId: string; name: string; actions: AvailableSpecialAction[] }
     >();
-    for (const tokenId of hex.tokens) {
-      const entity = store.tokens.get(tokenId);
-      if (!entity) continue;
-      const actions = specialActionCatalog.filter(
-        (action) => action.type === SpecialActionType.NearbyEntity,
+    for (const entity of store.tokensForHex(hex.name)) {
+      const actions = specialActions.filter(
+        (action) =>
+          action.type === SpecialActionType.NearbyEntity &&
+          action.entityId === entity.id,
       );
       if (!actions.length) continue;
-      groups.set(tokenId, {
-        entityId: tokenId,
-        name: entity.entityName ?? entity.name ?? tokenId,
+      groups.set(entity.id, {
+        entityId: entity.id,
+        name: entity.name ?? entity.id,
         actions,
       });
     }
@@ -844,7 +835,7 @@ function render(
       return action.locations.some((location) => {
         const hex = store.hexes.get(location);
         return hex
-          ? store.distance(origin, hex) <= finalValue(player.speed)
+          ? hexDistance(origin, hex) <= finalValue(player.speed)
           : false;
       });
     });
@@ -899,12 +890,7 @@ function render(
     const nearbyHtml = [...nearbyGroups.entries()]
       .map(([entityId, actions]) => {
         const entity = store.entity(entityId);
-        const name =
-          (entity as { entityName?: string; name?: string } | undefined)
-            ?.entityName ??
-          (entity as { entityName?: string; name?: string } | undefined)
-            ?.name ??
-          entityId;
+        const name = entity?.name ?? entityId;
         return `<div class="special-action-entity-group"><span class="special-action-entity-name">${esc(name)}</span> ${actions
           .map((action) =>
             renderSpecialActionButton(action, {
@@ -959,12 +945,16 @@ function render(
   function specialActionTargetName(action: AvailableSpecialAction) {
     if (!action.entityId) return undefined;
     if (action.type === SpecialActionType.Item) {
-      return player.inventory.find((item) => item.id === action.entityId)?.name;
+      return (player.inventory as Item[]).find(
+        (item) => item.id === action.entityId,
+      )?.name;
     }
     if (action.type === SpecialActionType.NearbyEntity) {
-      const entity = store.entity(action.entityId) as
-        { entityName?: string; name?: string } | undefined;
-      return entity?.entityName ?? entity?.name;
+      if (store.entities.has(action.entityId)) {
+        const entity = store.entities.get(action.entityId)! as Token;
+        return entity.name;
+      }
+      return action.entityId;
     }
     return undefined;
   }
@@ -1022,7 +1012,7 @@ function render(
     entityId?: string,
     targetName?: string,
   ) {
-    const action = specialActionCatalog.find((item) => item.id === actionId);
+    const action = specialActions.find((item) => item.id === actionId);
     if (!action) return;
     const hexName =
       targetHex ??
@@ -1037,7 +1027,7 @@ function render(
     specialActionId: string,
     entityId?: string,
   ) {
-    await executeActivity("Action", () =>
+    await executeActivity(() =>
       apiJson<ActivityNextActive>(
         `/api/entities/${encodeURIComponent(player.id)}/actions/special_action`,
         {
@@ -1153,7 +1143,7 @@ function render(
     return [matches[0], matches[1]] as const;
   }
   function isAdjacent(a: Hex, b: Hex) {
-    return store.distance(a, b) === 1;
+    return hexDistance(a, b) === 1;
   }
   function clamp(value: number, min: number, max: number) {
     return Math.max(min, Math.min(max, value));
@@ -1261,7 +1251,6 @@ function render(
       "schemaId",
       "data",
       "name",
-      "tokenId",
       "curHealth",
       "maxHealth",
       "curLuck",
@@ -1320,8 +1309,8 @@ function render(
       });
   }
 
-  function showActivityError(kind: ActivityKind, message: string) {
-    const title = activityErrorTitle(kind);
+  function showActivityError(message: string) {
+    const title = "Error";
     setPlay(
       `<article class="play-card error-card"><h3>${esc(title)}</h3><div class="play-card-body"><p>${esc(message)}</p></div></article><button id="card-ok" class="card-ok" type="button">OK</button>`,
       title,
@@ -1330,12 +1319,8 @@ function render(
     document.querySelector("#card-ok")!.addEventListener("click", clearPlay);
   }
 
-  async function showNotification(
-    kind: ActivityKind,
-    notification: Notification,
-    onClosed?: (nextActive?: ActivityNextActive | null) => void,
-  ) {
-    const title = activityResultTitle(kind, notification);
+  async function showNotification(notification: Notification) {
+    const title = notification.title ?? "Results";
     const lines = await renderActivityLines(notification, async (itemId) => {
       const cached = itemNameCache.get(itemId);
       if (cached) return cached;
@@ -1396,11 +1381,13 @@ function render(
     }
     for (const item of getField(updatedPlayer, "inventory"))
       itemNameCache.set(item.id, item.name);
-    if (getField(updatedPlayer, "location") !== previousLocation)
-      moveLocalPlayerToken(
+    if (getField(updatedPlayer, "location") !== previousLocation) {
+      store.moveToken(
+        player.id,
         previousLocation,
         getField(updatedPlayer, "location"),
       );
+    }
     const updatedTableau = await apiJson<TableauData>(
       "/api/tableau",
       undefined,
@@ -1413,7 +1400,6 @@ function render(
   }
 
   async function executeActivity(
-    kind: string,
     request: () => Promise<ActivityNextActive>,
     onComplete: (result: ActivityNextActive) => void = () => {},
   ) {
@@ -1426,7 +1412,7 @@ function render(
       showNextActivity(result);
     } catch (err) {
       console.error(err);
-      showActivityError(kind, err instanceof Error ? err.message : String(err));
+      showActivityError(err instanceof Error ? err.message : String(err));
     } finally {
       busy = false;
       updateActionButtons();
@@ -1443,10 +1429,9 @@ function render(
     } else if (result.type === "encounter") {
       showActiveEncounter(result.encounter);
     } else if (result.type === "notification") {
-      // Kind here is vestigal and shouldn't be used in practice
-      showNotification("Unknown", result.notification);
+      showNotification(result.notification);
     } else {
-      console.error("Unknown result type", result.type);
+      console.error("Unknown result type", result);
       clearPlay();
     }
   }
@@ -1475,8 +1460,8 @@ function render(
   }
 
   async function ackNotification(notificationId: string) {
-    await executeActivity("Notification", () =>
-      apiJson<ActivityNextActive | null>(
+    await executeActivity(() =>
+      apiJson<ActivityNextActive>(
         `/api/entities/${encodeURIComponent(player.id)}/actions/ack_notification`,
         {
           method: "POST",
@@ -1488,7 +1473,7 @@ function render(
   }
 
   async function runEncounter(encounterId: string) {
-    await executeActivity("Encounter", () =>
+    await executeActivity(() =>
       apiJson<ActivityNextActive>(
         `/api/entities/${encodeURIComponent(player.id)}/actions/run_encounter`,
         {
@@ -1501,7 +1486,7 @@ function render(
   }
 
   async function continueEncounter(encounterId: string) {
-    await executeActivity("Encounter", () =>
+    await executeActivity(() =>
       apiJson<ActivityNextActive>(
         `/api/entities/${encodeURIComponent(player.id)}/actions/continue_encounter`,
         {
@@ -1515,7 +1500,6 @@ function render(
 
   async function finishEncounter(encounterId: string, conceding = false) {
     await executeActivity(
-      "Encounter",
       () =>
         apiJson<ActivityNextActive>(
           `/api/entities/${encodeURIComponent(player.id)}/actions/finish_encounter`,
@@ -1604,7 +1588,7 @@ function render(
   }
 
   async function goCamp() {
-    await executeActivity("Camp", () =>
+    await executeActivity(() =>
       apiJson<ActivityNextActive>(
         `/api/entities/${encodeURIComponent(player.id)}/actions/camp`,
         { method: "POST" },
@@ -1613,7 +1597,7 @@ function render(
   }
 
   async function goScout() {
-    await executeActivity("Scout", () =>
+    await executeActivity(() =>
       apiJson<ActivityNextActive>(
         `/api/entities/${encodeURIComponent(player.id)}/actions/scout`,
         { method: "POST" },
@@ -1692,7 +1676,6 @@ function render(
     map.classList.remove("travel-mode");
     draw();
     await executeActivity(
-      "Travel",
       () =>
         apiJson<ActivityNextActive>(
           `/api/entities/${encodeURIComponent(player.id)}/actions/travel`,
@@ -1707,20 +1690,13 @@ function render(
         if (remainingRoute?.length) {
           ongoingTravel = {
             route: remainingRoute,
+            specialActionId: ongoingTravel
+              ? ongoingTravel.specialActionId
+              : null,
           };
         }
       },
     );
-  }
-
-  function moveLocalPlayerToken(from: string, to: string) {
-    const fromHex = store.hexes.get(from),
-      toHex = store.hexes.get(to);
-    if (!fromHex || !toHex) return;
-    fromHex.tokens = fromHex.tokens.filter((id) => id !== player.tokenId);
-    if (!toHex.tokens.includes(player.tokenId))
-      toHex.tokens.push(player.tokenId);
-    store.tokenHex.set(player.tokenId, toHex);
   }
 
   function fitInitialZoom() {
@@ -1790,7 +1766,7 @@ function render(
     const highlightedSelectionHex = selectedSelectionHexName();
     for (const [index, hex] of store.data.hexes.entries()) {
       const { x: cx, y: cy } = hexCenter(hex);
-      const terr = store.terrains.get(hex.terrain);
+      const terr = store.terrains.get(hex.terrain)!;
       const g = document.createElementNS(svgNS, "g");
       g.classList.add("hex");
       if (highlightedSelectionHex === hex.name)
@@ -1805,21 +1781,19 @@ function render(
       g.innerHTML = `<polygon points="${pts}" fill="${terr.color}" stroke="#222"/><polygon points="${pts}" fill="url(#p-${terr.icon})" opacity=".35" stroke="#222"/>`;
       if (zoom > 0.45)
         g.innerHTML += `<text x="${cx}" y="${cy - 24}" text-anchor="middle" class="name">${hex.name}</text>`;
-      const toks = hex.tokens.map((id) => store.tokens.get(id)!);
+      const toks = store.tokensForHex(hex.name);
       toks.forEach((t, i) => {
         const separate = zoom > 0.38;
         g.innerHTML += `<image href="/images/tokens/${t.icon}.svg" x="${cx - 18 + (separate ? (i - (toks.length - 1) / 2) * 24 : 0)}" y="${cy - 18}" width="36" height="36"/>`;
       });
       if (zoom > 0.55)
         hex.claims.forEach((c, i) => {
-          const cl = store.claims.get(c);
+          const cl = store.claims.get(c)!;
           g.innerHTML += `<image href="/images/claims/${cl.icon}.svg" x="${cx - 24 + i * 16}" y="${cy + 22}" width="14" height="14"/>`;
         });
       if (
         encounterByLocation.has(hex.name) ||
-        specialActionCatalog.some((action) =>
-          action.locations?.includes(hex.name),
-        )
+        specialActions.some((action) => action.locations?.includes(hex.name))
       )
         g.innerHTML += `<text x="${cx}" y="${cy + 10}" text-anchor="middle" class="encounter-star" aria-hidden="true">★</text>`;
       g.onclick = (e) => {
@@ -1902,10 +1876,6 @@ function render(
       .join(", ");
   }
 
-  function formatTokens(tokens: { entityName: string }[]) {
-    return tokens.map((token) => token.entityName).join(", ");
-  }
-
   function showTip(hex: Hex, anchor: DOMRect) {
     const f = store.fullHex(hex.name)!;
     const moveHereDisabled = busy || activityBlocksControls;
@@ -1914,13 +1884,9 @@ function render(
         .filter((claim): claim is NonNullable<typeof claim> => Boolean(claim))
         .map((claim) => claim.name),
     );
-    const tokenText = formatTokens(
-      f.tokenObjs.filter((token): token is NonNullable<typeof token> =>
-        Boolean(token),
-      ),
-    );
+    const entityText = f.tokenObjs.map((obj) => obj.name).join(", ");
     const encounter = encounterByLocation.get(hex.name);
-    const specialActionsHere = catalogSpecialActionsForHex(hex.name);
+    const specialActionsHere = specialActionsForHex(hex.name);
     const nearbyEntityGroups = nearbyEntityGroupsForHex(hex.name);
     const regionStars = f.regionObj
       ? "★".repeat(f.regionObj.base_difficulty)
@@ -1935,7 +1901,7 @@ function render(
       ],
     ];
     if (claimsText) lines.push(["Claims", esc(claimsText)]);
-    if (tokenText) lines.push(["Tokens", esc(tokenText)]);
+    if (entityText) lines.push(["Entities", esc(entityText)]);
     if (encounter)
       lines.push([
         "Encounter",
@@ -1957,7 +1923,7 @@ function render(
         nearbyEntityGroups
           .map(
             (group) =>
-              `<div><a class="special-action-entity-link" href="#" data-target-hex="${esc(hex.name)}">${esc(group.name)}</a> ${group.actions
+              `<div>${esc(group.name)} ${group.actions
                 .map(
                   (action) =>
                     `<a class="special-action-popup-link" href="#" data-action-id="${esc(action.id)}" data-target-hex="${esc(hex.name)}" data-target-name="${esc(group.name)}" data-entity-id="${esc(group.entityId)}">${esc(action.name)}</a>`,

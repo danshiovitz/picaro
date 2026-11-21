@@ -7,9 +7,13 @@ import {
   Effect,
   EncounterTemplate,
   CityEntity,
+  Hex,
   Item,
+  Token,
   PenaltyType,
+  PendingActivity,
   PlayerEntity,
+  Region,
   RewardType,
   Rule,
   RuleType,
@@ -17,6 +21,7 @@ import {
   SelectionChoice,
   SpecialActionDefinition,
   SpecialActionType,
+  TableauCard,
   Trigger,
   TriggerType,
   Notification,
@@ -25,12 +30,7 @@ import {
   FunctionType,
   FunctionParamType,
 } from "./types.js";
-import {
-  createEntity,
-  EntityStore,
-  getField,
-  registerEntitySchema,
-} from "./entity.js";
+import { EntityStore, getField, registerEntitySchema } from "./entity.js";
 import { SCHEMAS } from "./schemas.js";
 import { computeEffectiveValue } from "./rule.js";
 import {
@@ -79,7 +79,8 @@ export const resourceTypes = [
   "Wood",
   "Wine",
 ];
-export let claims: Claim[] = claimColors.map((icon, i) => ({
+
+export const claims: Claim[] = claimColors.map((icon, i) => ({
   name: `Faction ${i + 1}`,
   icon,
 }));
@@ -128,7 +129,6 @@ export const skillNames = [
 
 const terrainLoreSkills: Record<string, string[]> = {
   Forest: ["Forest Lore", "Stealth", "Observation"],
-  "Deep Forest": ["Forest Lore", "Stealth", "Observation"],
   Desert: ["Desert Lore", "Endurance", "Navigation"],
   Water: ["Sea Lore", "Navigation", "Observation"],
   Plains: ["Plains Lore", "Ride", "Observation"],
@@ -260,14 +260,9 @@ export const encounterTemplates: EncounterTemplate[] = [
   },
 ];
 
-let nextTokenId = 1;
-export const makeTokenId = () => `token-${nextTokenId++}`;
-
-let nextItemId = 1;
-export const makeItemId = () => `item-${nextItemId++}`;
-
-let nextConditionId = 1;
-export const makeConditionId = () => `condition-${nextConditionId++}`;
+export function makeEmptySkills() {
+  return Object.fromEntries(skillNames.map((skill) => [skill, 0] as const));
+}
 
 export function makeEmptyResources(): Record<string, number> {
   return Object.fromEntries(resourceTypes.map((type) => [type, 0] as const));
@@ -420,16 +415,74 @@ export function invoke<T>(
 }
 
 let apiState: ApiState | undefined;
-export function setApiState(state: ApiState) {
-  apiState = state;
+export function setApiState(
+  hexes: Hex[],
+  regions: Region[],
+  entities: EntityStore,
+) {
+  const hexByName = new Map<string, Hex>();
+  const hexTokens = new Map<string, string[]>();
+  for (const hex of hexes) {
+    hexByName.set(hex.name, hex);
+  }
+  for (const ent of entities.getBySchema<Token>("token")) {
+    if (!ent.location || !hexByName.has(ent.location)) {
+      continue;
+    }
+    let ents = hexTokens.get(ent.location);
+    if (ents) {
+      ents.push(ent.id);
+    } else {
+      hexTokens.set(ent.location, [ent.id]);
+    }
+  }
+
+  apiState = {
+    hexes,
+    hexByName,
+    hexTokens,
+    regions,
+    entities: entityStore,
+    activitiesQueue: new Map<string, PendingActivity[]>(),
+    curActivity: new Map<string, PendingActivity>(),
+    tableau: new Map<string, TableauCard[]>(),
+  };
 }
+
 export function getApiState() {
   if (!apiState) throw new Error("ApiState has not been initialized");
   return apiState;
 }
 
-export function makeEmptySkills() {
-  return Object.fromEntries(skillNames.map((skill) => [skill, 0] as const));
+export function moveToken(id: string, fromHex: string, toHex: string) {
+  const state = getApiState();
+
+  const entity = state.entities.get(id) as Token;
+  if (!entity) {
+    console.error("Can't find token to move:", id);
+  }
+  entity.location = toHex;
+  const fromTokens = state.hexTokens.get(fromHex);
+  if (fromTokens) {
+    if (fromTokens.length == 1) {
+      state.hexTokens.delete(fromHex);
+    }
+    {
+      state.hexTokens.set(
+        fromHex,
+        fromTokens.filter((cid) => cid !== id),
+      );
+    }
+  }
+
+  const toTokens = state.hexTokens.get(toHex);
+  if (toTokens) {
+    if (toTokens.findIndex((i) => i === id) === -1) {
+      toTokens.push(id);
+    }
+  } else {
+    state.hexTokens.set(toHex, [id]);
+  }
 }
 
 export const rulesByTypeKey = new Map<RuleType, Map<string, Rule[]>>();

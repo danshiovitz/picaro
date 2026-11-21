@@ -9,22 +9,16 @@ import {
   TableauCard,
   ValueType,
 } from "./types.js";
-import { generalPenaltyTypes, generalRewardTypes, skillNames } from "./data.js";
+import {
+  generalPenaltyTypes,
+  generalRewardTypes,
+  getApiState,
+  skillNames,
+} from "./data.js";
 import { hexDistance } from "@common/hexmap.js";
 import { getField } from "./entity.js";
 import { computeEffectiveValue } from "./rule.js";
 import { getRng } from "@common/random.js";
-
-let encounterHexes: Hex[] = [];
-let encounterRegions: Region[] = [];
-
-export function setEncounterContext(context: {
-  hexes: Hex[];
-  regions: Region[];
-}) {
-  encounterHexes = context.hexes;
-  encounterRegions = context.regions;
-}
 
 function pickTemplateOrGeneral<T>(items: T[], generalItems: T[]) {
   return items.length > 0 && getRng().next() < 0.8
@@ -37,21 +31,21 @@ function difficultySwing() {
 }
 
 function hexesNearPlayer(player: PlayerEntity) {
-  const origin = encounterHexes.find(
+  const state = getApiState();
+  const origin = state.hexes.find(
     (hex) => hex.name === getField(player, "location"),
   );
-  if (!origin) return [...encounterHexes];
+  if (!origin) return [...state.hexes];
   const speed = computeEffectiveValue(player, ValueType.speed);
-  const nearby = encounterHexes.filter(
-    (hex) => hexDistance(origin, hex) <= speed,
-  );
-  return nearby.length > 0 ? nearby : [...encounterHexes];
+  const nearby = state.hexes.filter((hex) => hexDistance(origin, hex) <= speed);
+  return nearby.length > 0 ? nearby : [...state.hexes];
 }
 
 function regionDifficultyForHex(hex: Hex | undefined) {
+  const state = getApiState();
   if (!hex) return 0;
   return (
-    encounterRegions.find((region) => region.id === hex.region_id)
+    state.regions.find((region) => region.id === hex.region_id)
       ?.base_difficulty ?? 0
   );
 }
@@ -75,16 +69,16 @@ export function instantiateEncounterTemplate(
   player: PlayerEntity,
   qualityModOverride: number | undefined = undefined,
 ): TableauCard {
+  const state = getApiState();
   const nearbyHexes = hexesNearPlayer(player);
   const skillSource = template.skills.length > 0 ? template.skills : skillNames;
 
-  const locationCandidates =
-    nearbyHexes.length > 0 ? nearbyHexes : encounterHexes;
+  const locationCandidates = nearbyHexes.length > 0 ? nearbyHexes : state.hexes;
   const location =
     locationCandidates.length > 0
       ? getRng().pick(locationCandidates).name
       : getField(player, "location");
-  const locationHex = encounterHexes.find((hex) => hex.name === location);
+  const locationHex = state.hexes.find((hex) => hex.name === location);
   const difficulty =
     regionDifficultyForHex(locationHex) +
     template.difficulty_mod +
