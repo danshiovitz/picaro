@@ -170,7 +170,6 @@ for (const token of playerTokens) {
     }),
   );
 }
-const activitiesQueue = new Map<string, PendingActivity[]>();
 const tableau = new Map<string, TableauCard[]>();
 setEncounterContext({ hexes, regions });
 for (const player of entityStore.getBySchema<PlayerEntity>("player")) {
@@ -185,7 +184,8 @@ const apiState: ApiState = {
   regions,
   tokens: playerTokens,
   entities: entityStore,
-  activitiesQueue,
+  activitiesQueue: new Map<string, PendingActivity[]>(),
+  curActivity: new Map<string, PendingActivity>(),
   tableau,
 };
 setApiState(apiState);

@@ -30,15 +30,13 @@ import {
   EntityStore,
   getField,
   registerEntitySchema,
-  setField,
 } from "./entity.js";
 import { SCHEMAS } from "./schemas.js";
 import { computeEffectiveValue } from "./rule.js";
 import {
-  appendActivity,
   applyEffects,
-  prependActivity,
   makeNotification,
+  queueActivity,
   RulesViolation,
 } from "./commands.js";
 
@@ -584,10 +582,14 @@ registerFunction(
       callback: "selection-wish-callback",
       implicitEffects: [],
     };
-    appendActivity(player, {
-      type: "selection",
-      selection,
-    });
+    queueActivity(
+      player,
+      {
+        type: "selection",
+        selection,
+      },
+      0,
+    );
     return [];
   },
   [FunctionParamType.Player],
@@ -601,7 +603,7 @@ registerFunction(
         "Wish Granted",
         "No selection made",
       );
-      appendActivity(player, { type: "notification", notification });
+      queueActivity(player, { type: "notification", notification }, 0);
       return;
     }
     let effects: Effect[] = [];

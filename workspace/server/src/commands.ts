@@ -126,36 +126,77 @@ function getPlayerTableau(player: PlayerEntity) {
 
 function assertNoActivities(player: PlayerEntity) {
   const state = getApiState();
-  let queue = state.activitiesQueue.get(player.id);
-  if (queue && queue.length > 0) {
+  shiftActivityIfNeeded(player, state);
+  if (state.curActivity.has(player.id)) {
     throw new RulesViolation("You must finish pending items first.");
   }
 }
 
-export function prependActivity(
-  player: PlayerEntity,
-  activity: PendingActivity,
-) {
-  const state = getApiState();
-  let queue = state.activitiesQueue.get(player.id);
-  if (!queue || queue.length == 0) {
-    queue = [];
-    state.activitiesQueue.set(player.id, queue);
+function shiftActivityIfNeeded(player: PlayerEntity, state: ApiState) {
+  // nothing to do if there's already an active activity
+  if (state.curActivity.has(player.id)) {
+    return;
   }
-  queue.unshift(activity);
+  let queue = state.activitiesQueue.get(player.id);
+  if (queue && queue.length > 0) {
+    let cur = queue.shift()!;
+    // TODO apply effects
+    state.curActivity.set(player.id, cur);
+
+    if (cur.type === "placeholder") {
+      handlePlaceholder(player, cur.value);
+      state.curActivity.delete(player.id);
+      // then go on to the next one
+      shiftActivityIfNeeded(player, state);
+    }
+  } else {
+    return; // no pending either
+  }
 }
 
-export function appendActivity(
+function handlePlaceholder(player: PlayerEntity, placeholderType: string) {
+  if (placeholderType === "endturn") {
+    endTurn(player);
+  } else {
+    throw new RulesViolation("Unknown placeholder: " + placeholderType);
+  }
+}
+
+function dbgact(activity: PendingActivity) {
+  return (
+    "[" +
+    activity.type +
+    "/" +
+    (activity.phase ?? 0) +
+    (activity.type === "notification"
+      ? "/" + activity.notification.title
+      : "") +
+    "]"
+  );
+}
+export function queueActivity(
   player: PlayerEntity,
   activity: PendingActivity,
+  phaseMod: number,
 ) {
   const state = getApiState();
+  shiftActivityIfNeeded(player, state);
+
+  let cur = state.curActivity.get(player.id);
+  activity.phase = (cur?.phase ?? 0) + phaseMod;
   let queue = state.activitiesQueue.get(player.id);
   if (!queue || queue.length == 0) {
-    queue = [];
+    queue = [activity];
     state.activitiesQueue.set(player.id, queue);
+    console.log("queue single activity", dbgact(activity));
+  } else {
+    const index = queue.findLastIndex(
+      (existing) => (existing.phase ?? 0) <= (activity.phase ?? 0),
+    );
+    if (index === -1) queue.unshift(activity);
+    else queue.splice(index + 1, 0, activity);
+    console.log("queue now", queue.map((a) => dbgact(a)).join(", "));
   }
-  queue.push(activity);
 }
 
 export function makeNotification(
@@ -175,78 +216,70 @@ export function viewNextActivityForClient(
   player: PlayerEntity,
 ): ActivityNextActive | undefined {
   const state = getApiState();
-  const queue = state.activitiesQueue.get(player.id);
-  if (!queue || queue.length == 0) {
+  shiftActivityIfNeeded(player, state);
+
+  let cur = state.curActivity.get(player.id);
+  if (!cur) {
     return undefined;
   }
-  switch (queue[0].type) {
+  switch (cur.type) {
     case "selection":
-      return { type: "selection", selection: selectionDto(queue[0].selection) };
+      return { type: "selection", selection: selectionDto(cur.selection) };
     case "encounter":
-      return queue[0];
     case "notification":
-      return queue[0];
+      return cur;
   }
+}
+
+export function clearCurrentActivity(player: PlayerEntity) {
+  const state = getApiState();
+  state.curActivity.delete(player.id);
 }
 
 export function fetchNextActivityExpectingSelection(
   player: PlayerEntity,
   selectionId: string,
-  remove: boolean = true,
 ): Selection | undefined {
   const state = getApiState();
-  const queue = state.activitiesQueue.get(player.id);
-  const selection =
-    queue && queue.length > 0 && queue[0].type == "selection"
-      ? queue[0].selection
-      : undefined;
-  if (!selection || selection.id !== selectionId) {
+  shiftActivityIfNeeded(player, state);
+
+  let cur = state.curActivity.get(player.id);
+  if (!cur || cur.type !== "selection" || cur.selection.id !== selectionId) {
     return undefined;
   }
-  if (remove) {
-    queue!.shift();
-  }
-  return selection;
+  return cur.selection;
 }
 
 export function fetchNextActivityExpectingEncounter(
   player: PlayerEntity,
   encounterId: string,
-  remove: boolean = true,
 ): ActiveEncounter | undefined {
   const state = getApiState();
-  const queue = state.activitiesQueue.get(player.id);
-  const encounter =
-    queue && queue.length > 0 && queue[0].type == "encounter"
-      ? queue[0].encounter
-      : undefined;
-  if (!encounter || encounter.id !== encounterId) {
+  shiftActivityIfNeeded(player, state);
+
+  let cur = state.curActivity.get(player.id);
+  if (!cur || cur.type !== "encounter" || cur.encounter.id !== encounterId) {
     return undefined;
   }
-  if (remove) {
-    queue!.shift();
-  }
-  return encounter;
+  return cur.encounter;
 }
 
 function fetchNextActivityExpectingNotification(
   player: PlayerEntity,
   notificationId: string,
-  remove: boolean = true,
 ): Notification | undefined {
   const state = getApiState();
-  const queue = state.activitiesQueue.get(player.id);
-  const notification =
-    queue && queue.length > 0 && queue[0].type == "notification"
-      ? queue[0].notification
-      : undefined;
-  if (!notification || notification.id !== notificationId) {
+  shiftActivityIfNeeded(player, state);
+
+  let cur = state.curActivity.get(player.id);
+  if (
+    !cur ||
+    cur.type !== "notification" ||
+    cur.notification.id !== notificationId
+  ) {
     return undefined;
   }
-  if (remove) {
-    queue!.shift();
-  }
-  return notification;
+  return cur.notification;
 }
 
 export function ackNotification(
@@ -258,7 +291,7 @@ export function ackNotification(
     notificationId,
   );
   if (!notification) throw new RulesViolation("Notification not found");
-  // the fetch call popped the notification, so we're done
+  clearCurrentActivity(player);
 }
 
 function encounterState(
@@ -626,6 +659,7 @@ export function applyEffects(
   effects: Effect[],
   maybeNotif: Notification | undefined,
   implicitEffects: Effect[] = [],
+  phaseMod: number = 0,
 ) {
   const frontQueue: PendingActivity[] = [];
   for (const effect of effects.concat(implicitEffects)) {
@@ -730,7 +764,7 @@ export function applyEffects(
   }
 
   for (const aty of frontQueue) {
-    appendActivity(player, aty);
+    queueActivity(player, aty, phaseMod);
   }
 }
 
@@ -751,13 +785,17 @@ export function controlledTeleportSelectionCallback(
   const radius = data?.radius ?? 0;
   const state = getApiState();
   if (choices.length != 1) {
-    prependActivity(player, {
-      type: "notification",
-      notification: makeNotification(
-        "Controlled Teleport",
-        "No selection made.",
-      ),
-    });
+    queueActivity(
+      player,
+      {
+        type: "notification",
+        notification: makeNotification(
+          "Controlled Teleport",
+          "No selection made.",
+        ),
+      },
+      0,
+    );
     return;
   }
 
@@ -784,10 +822,14 @@ export function freeXpSelectionCallback(
   const data = selection.callbackData as FreeXpSelectionData | undefined;
   const amount = data?.amount ?? 0;
   if (choices.length != 1) {
-    prependActivity(player, {
-      type: "notification",
-      notification: makeNotification("Free XP", "No selection made."),
-    });
+    queueActivity(
+      player,
+      {
+        type: "notification",
+        notification: makeNotification("Free XP", "No selection made."),
+      },
+      0,
+    );
     return;
   }
   const choice = choices[0];
@@ -795,6 +837,10 @@ export function freeXpSelectionCallback(
     { type: EffectType.SkillXp, skill: choice.data, amount },
   ];
   applyEffects(player, effects, makeNotification("Free XP"));
+}
+
+function queueEndTurn(player: PlayerEntity) {
+  queueActivity(player, { type: "placeholder", value: "endturn" }, 2);
 }
 
 export function travelContinueSelectionCallback(
@@ -806,10 +852,18 @@ export function travelContinueSelectionCallback(
     TravelContinueSelectionData | undefined;
   let notification: Notification;
   if (choices.length != 1 || choices[0].data == "") {
-    prependActivity(player, {
-      type: "notification",
-      notification: makeNotification("Travel Done", "No selection made."),
-    });
+    queueActivity(
+      player,
+      {
+        type: "notification",
+        notification: makeNotification(
+          "Travel Done",
+          "You remain in the current hex.",
+        ),
+      },
+      0,
+    );
+    queueEndTurn(player);
     return;
   }
 
@@ -820,9 +874,12 @@ export function travelContinueSelectionCallback(
   applyEffects(
     player,
     [{ type: EffectType.Teleport, radius: 0, centerHex: data.destination }],
-    makeNotification("Continue Travel"),
+    makeNotification(
+      "Continue Travel",
+      "You complete your travel uneventfully.",
+    ),
   );
-  endTurn(player, "travel-continuation");
+  queueEndTurn(player);
 }
 
 function controlledTeleportSelection(
@@ -1205,10 +1262,10 @@ function removeEncounterFromTableau(
   return true;
 }
 
-function endTurn(player: PlayerEntity, reason: string) {
+function endTurn(player: PlayerEntity) {
   const state = getApiState();
   console.log(
-    `[endTurn] ${reason} for ${getField(player, "name")} @ ${getField(player, "location")}`,
+    `[endTurn] for ${getField(player, "name")} @ ${getField(player, "location")}`,
   );
   for (const condition of getField(player, "conditions"))
     setField(condition, "duration", getField(condition, "duration") - 1);
@@ -1253,7 +1310,7 @@ export function scoutEntity(player: PlayerEntity): void {
     { type: EffectType.RefreshTableau, qualityMods: [+2] },
   ];
   applyEffects(player, effects, makeNotification("Scout Results"), cost);
-  endTurn(player, "scout");
+  queueEndTurn(player);
 }
 
 export function campEntity(player: PlayerEntity): void {
@@ -1264,7 +1321,7 @@ export function campEntity(player: PlayerEntity): void {
     throw new RulesViolation("You can't afford to perform this action.");
   let effects: Effect[] = [{ type: EffectType.Health, amount: 1 }];
   applyEffects(player, effects, makeNotification("A Restful Night"), cost);
-  endTurn(player, "camp");
+  queueEndTurn(player);
 }
 
 export function travelEntity(
@@ -1329,10 +1386,14 @@ export function travelEntity(
       ...activeEncounterFor(player, encounterCard),
       tableauId: undefined,
     };
-    appendActivity(player, {
-      type: "encounter",
-      encounter: active,
-    });
+    queueActivity(
+      player,
+      {
+        type: "encounter",
+        encounter: active,
+      },
+      0,
+    );
 
     // If they didn't stop in the last hex, then queue up a selection to
     // let them continue for free
@@ -1341,10 +1402,16 @@ export function travelEntity(
         encounterHex.name,
         encounterRoute[encounterRoute.length - 1],
       );
-      appendActivity(player, {
-        type: "selection",
-        selection,
-      });
+      queueActivity(
+        player,
+        {
+          type: "selection",
+          selection,
+        },
+        3,
+      );
+      // don't call endTurn() here, we'll do it in the continuation selection
+      return;
     }
   }
 
@@ -1355,10 +1422,11 @@ export function travelEntity(
   applyEffects(
     player,
     effects,
-    makeNotification("Travel Complete", `You reach ${destination}`),
+    makeNotification("Travel Complete", `You reach ${destination}.`),
     implicitEffects,
+    1,
   );
-  endTurn(player, "travel-complete");
+  queueEndTurn(player);
 }
 
 export function runEncounter(
@@ -1377,10 +1445,14 @@ export function runEncounter(
   active.implicitEffects = cost;
   // apply the cost here
   applyEffects(player, active.implicitEffects, undefined);
-  appendActivity(player, {
-    type: "encounter",
-    encounter: active,
-  });
+  queueActivity(
+    player,
+    {
+      type: "encounter",
+      encounter: active,
+    },
+    0,
+  );
 }
 
 export function continueEncounter(
@@ -1435,10 +1507,6 @@ export function continueEncounter(
       ? randomPenalty(tableauEncounter)
       : randomPenalty({ penalties: active.penalties } as TableauCard);
   }
-  // clear this out since it doesn't get charged again
-  active.implicitEffects = [];
-  // Put this back on the queue, since we popped it off at the beginning
-  prependActivity(player, { type: "encounter", encounter: active });
 }
 
 export function finishEncounter(
@@ -1461,9 +1529,10 @@ export function finishEncounter(
   }
   const effects = computeEncounterEffects(player, active);
   applyEffects(player, effects, makeNotification("Encounter Results"));
+  clearCurrentActivity(player);
   if (tableauEncounter) {
     removeEncounterFromTableau(tableau, encounterId);
-    endTurn(player, "finish-encounter");
+    queueEndTurn(player);
   }
 }
 

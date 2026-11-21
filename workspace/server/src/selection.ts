@@ -7,6 +7,7 @@ import {
   FunctionType,
 } from "./types.js";
 import {
+  clearCurrentActivity,
   fetchNextActivityExpectingSelection,
   RulesViolation,
 } from "./commands.js";
@@ -86,4 +87,5 @@ export function makeSelection(
     FunctionType.SelectionCallback,
     [selection, player, choices],
   );
+  clearCurrentActivity(player);
 }

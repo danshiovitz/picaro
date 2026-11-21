@@ -151,9 +151,10 @@ export type Notification = CommonNotification;
 export type Trigger = CommonTrigger;
 export { TriggerType } from "@common/types.js";
 export type PendingActivity =
-  | { type: "encounter"; encounter: ActiveEncounter }
-  | { type: "selection"; selection: Selection }
-  | { type: "notification"; notification: Notification };
+  | { type: "encounter"; phase?: number; encounter: ActiveEncounter }
+  | { type: "selection"; phase?: number; selection: Selection }
+  | { type: "notification"; phase?: number; notification: Notification }
+  | { type: "placeholder"; phase?: number; value: string };
 export type PlayCard = { title: string; lines: string[] };
 export type SpecialActionDefinition = SpecialAction & {
   availability: string;
@@ -167,6 +168,7 @@ export type ApiState = {
   tokens: { id: string; entityName: string; icon: string }[];
   entities: EntityStore;
   activitiesQueue: Map<string, PendingActivity[]>;
+  curActivity: Map<string, PendingActivity>;
   tableau: Map<string, TableauCard[]>;
 };
 export type ActivityNextActive = CommonActivityNextActive<SelectionView>;
