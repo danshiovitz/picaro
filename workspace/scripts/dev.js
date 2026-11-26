@@ -3,7 +3,16 @@ const { spawn, spawnSync } = require("node:child_process");
 function runTypecheck(name, workspace) {
   const result = spawnSync(
     "npm",
-    ["--workspace", workspace, "exec", "--", "tsc", "-p", "tsconfig.json", "--noEmit"],
+    [
+      "--workspace",
+      workspace,
+      "exec",
+      "--",
+      "tsc",
+      "-p",
+      "tsconfig.json",
+      "--noEmit",
+    ],
     { stdio: "inherit", shell: false },
   );
 

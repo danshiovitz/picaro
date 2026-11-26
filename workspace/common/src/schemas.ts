@@ -92,6 +92,8 @@ export const SCHEMAS = {
     fields: {
       name: { type: "string", defaultValue: "" },
       speed_boost: { type: "int", defaultValue: 0 },
+      use_function: { type: "string", defaultValue: "" },
+      is_artifact: { type: "bool", defaultValue: false },
     },
   },
   condition: {

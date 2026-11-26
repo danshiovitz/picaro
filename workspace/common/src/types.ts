@@ -186,6 +186,7 @@ export type SpecialAction = {
 };
 export type AvailableSpecialAction = SpecialAction & {
   entityId?: string;
+  execute?: string;
 };
 export type SelectionChoice = {
   description: string;

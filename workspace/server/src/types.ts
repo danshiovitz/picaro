@@ -42,6 +42,7 @@ export type Region = CommonRegion;
 export type Claim = CommonClaim;
 export type Token = CommonToken;
 export type Item = CommonItem;
+export type ItemEntity = CommonItem;
 export type Condition = CommonCondition;
 export type Hex = CommonHex;
 export type GameData = CommonGameData;
@@ -151,6 +152,7 @@ export type ApiState = {
   activitiesQueue: Map<string, PendingActivity[]>;
   curActivity: Map<string, PendingActivity>;
   tableau: Map<string, TableauCard[]>;
+  lostItems: ItemEntity[];
 };
 export type ActivityNextActive = CommonActivityNextActive<SelectionView>;
 export type ActivityResult = CommonActivityResult<SelectionView>;

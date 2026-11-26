@@ -446,6 +446,7 @@ export function setApiState(
     activitiesQueue: new Map<string, PendingActivity[]>(),
     curActivity: new Map<string, PendingActivity>(),
     tableau: new Map<string, TableauCard[]>(),
+    lostItems: [],
   };
 }
 
@@ -585,18 +586,32 @@ registerFunction(
   [FunctionParamType.Player],
 );
 registerFunction(
-  "special-drink-availability",
+  "special-use-availability",
   FunctionType.SpecialActionAvailability,
-  (_player, item) => getField(item, "name") === "can of coke",
+  (_player, item) => getField(item, "use_function") !== "",
   [FunctionParamType.Player, FunctionParamType.Item],
 );
 registerFunction(
-  "special-drink-execute",
+  "special-use-execute",
   FunctionType.SpecialActionExecute,
-  (_player, item) => [
-    { type: EffectType.RemoveItems, itemIds: [item.id] },
-    { type: EffectType.Health, amount: 2 },
-  ],
+  (player, item) =>
+    invoke<Effect[]>(
+      getField(item, "use_function"),
+      FunctionType.SpecialActionExecute,
+      [player, item],
+    ),
+  [FunctionParamType.Player, FunctionParamType.Item],
+);
+registerFunction(
+  "special-discard-availability",
+  FunctionType.SpecialActionAvailability,
+  () => true,
+  [FunctionParamType.Player, FunctionParamType.Item],
+);
+registerFunction(
+  "special-discard-execute",
+  FunctionType.SpecialActionExecute,
+  (_player, item) => [{ type: EffectType.RemoveItems, itemIds: [item.id] }],
   [FunctionParamType.Player, FunctionParamType.Item],
 );
 registerFunction(
@@ -610,6 +625,15 @@ registerFunction(
   FunctionType.SpecialActionExecute,
   (_player) => [{ type: EffectType.Gold, amount: 2 }],
   [FunctionParamType.Player, FunctionParamType.Entity],
+);
+registerFunction(
+  "coke-use-execute",
+  FunctionType.SpecialActionExecute,
+  (_player, item) => [
+    { type: EffectType.RemoveItems, itemIds: [item.id] },
+    { type: EffectType.Health, amount: 2 },
+  ],
+  [FunctionParamType.Player, FunctionParamType.Item],
 );
 registerFunction(
   "special-wish-availability",
@@ -629,6 +653,7 @@ registerFunction(
         { description: "1 gold", data: "gold", index: 0 },
         { description: "1 luck", data: "luck", index: 1 },
         { description: "1 Silk", data: "Silk", index: 2 },
+        { description: "1 item", data: "item", index: 2 },
       ],
       minChoices: 0,
       maxChoices: 1,
@@ -672,6 +697,9 @@ registerFunction(
           { type: EffectType.Resource, amount: 1, resourceType: "Silk" },
         ];
         break;
+      case "item":
+        effects = [{ type: EffectType.GainRandomItem, quality: 1 }];
+        break;
       default:
         throw new RulesViolation("Unknown wish type");
     }
@@ -691,6 +719,57 @@ registerFunction(
   },
   [FunctionParamType.Player],
 );
+registerFunction(
+  "selection-discard-excess-items",
+  FunctionType.SelectionCallback,
+  (selection: Selection, player: PlayerEntity, choices: SelectionChoice[]) => {
+    const itemIds = choices.map((choice) => choice.data as string);
+    if (itemIds.length === 0) return;
+    applyEffects(
+      player,
+      [{ type: EffectType.RemoveItems, itemIds }],
+      makeNotification(selection.title),
+    );
+  },
+  [
+    FunctionParamType.Selection,
+    FunctionParamType.Player,
+    FunctionParamType.SelectionChoices,
+  ],
+);
+registerFunction(
+  "trigger-discard-excess-items",
+  FunctionType.TriggerCallback,
+  (player) => {
+    const itemLimit = 3;
+    const inventory = player.inventory as Item[];
+    const excess = inventory.length - itemLimit;
+    if (excess <= 0) return;
+    const selection: Selection = {
+      id: `selection-discard-excess-items-${Math.random().toString(36).slice(2)}`,
+      title: "Discard Items",
+      description: `You must discard down to ${itemLimit} items.`,
+      choices: inventory.map((item, index) => ({
+        description: item.name,
+        data: item.id,
+        index,
+      })),
+      minChoices: excess,
+      maxChoices: excess,
+      callback: "selection-discard-excess-items",
+      implicitEffects: [],
+    };
+    queueActivity(
+      player,
+      {
+        type: "selection",
+        selection,
+      },
+      0,
+    );
+  },
+  [FunctionParamType.Player],
+);
 
 addTrigger({
   id: "trigger-wasting-disease",
@@ -698,6 +777,13 @@ addTrigger({
   priority: 0,
   type: TriggerType.EndOfTurn,
   callback: "trigger-wasting-disease",
+});
+addTrigger({
+  id: "trigger-discard-excess-items",
+  name: "Discard Excess Items",
+  priority: 10,
+  type: TriggerType.EndOfTurn,
+  callback: "trigger-discard-excess-items",
 });
 
 export const specialActions: SpecialActionDefinition[] = [
@@ -711,12 +797,20 @@ export const specialActions: SpecialActionDefinition[] = [
     execute: "special-medical-visit-execute",
   },
   {
-    id: "drink",
-    name: "Drink",
+    id: "use",
+    name: "Use",
     type: SpecialActionType.Item,
     cost: [],
-    availability: "special-drink-availability",
-    execute: "special-drink-execute",
+    availability: "special-use-availability",
+    execute: "special-use-execute",
+  },
+  {
+    id: "discard",
+    name: "Discard",
+    type: SpecialActionType.Item,
+    cost: [],
+    availability: "special-discard-availability",
+    execute: "special-discard-execute",
   },
   {
     id: "trade",

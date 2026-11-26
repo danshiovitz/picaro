@@ -1,4 +1,5 @@
 import { entityEntries, getField, hydrateEntity, setField } from "./entity";
+import { SCHEMAS, resolveSchemaFields } from "./schemas";
 import { GameStore } from "./store";
 import {
   EffectType,
@@ -91,14 +92,11 @@ async function apiJson<T>(
   try {
     const game = await apiJson<GameData>("/api/game", undefined, 20);
     const store = new GameStore(game);
-    if (!playerId) {
+    if (!playerId || !store.playerIds.some((pid) => pid === playerId)) {
       playerId = store.playerIds.length > 0 ? store.playerIds[0] : "";
       if (!playerId) throw new Error("No players available");
       url.searchParams.set("player", playerId);
       history.replaceState(null, "", url);
-    }
-    if (!store.playerIds.some((pid) => pid === playerId)) {
-      throw new Error(`Player not found: ${playerId}`);
     }
     const [playerRaw, tableau, specialActions] = await Promise.all([
       apiJson<PlayerEntity>(
@@ -499,7 +497,7 @@ function render(
   );
   const itemNameCache = new Map<string, string>();
   for (const item of player.inventory) itemNameCache.set(item.id, item.name);
-  app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button><label class="map-toggle"><input type="checkbox" id="show-region-borders"/> show region borders</label><button id="fit">Fit</button><button id="snap">Snap</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableauData.encounters.map(renderEncounterCard).join("")}</section></div></div></div><section class="character-panel"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><div class="action-buttons-row"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="scout" class="action-button" type="button"><img src="/images/actions/telescope.svg" alt=""/><span>Scout</span></button></div><div id="special-actions" class="special-actions"></div></section></section></main><aside class="right-panel"><section class="activity-panel"><h2 id="activity-panel-title" hidden></h2><div id="activity-panel-content"></div></section></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div>`;
+  app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button><label class="map-toggle"><input type="checkbox" id="show-region-borders"/> show region borders</label><button id="fit">Fit</button><button id="snap">Snap</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableauData.encounters.map(renderEncounterCard).join("")}</section></div></div></div><section class="character-panel"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><div class="action-buttons-row"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="scout" class="action-button" type="button"><img src="/images/actions/telescope.svg" alt=""/><span>Scout</span></button></div><div id="special-actions" class="special-actions"></div></section></section></main><aside class="right-panel"><section class="activity-panel"><h2 id="activity-panel-title" hidden></h2><div id="activity-panel-content"></div></section></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div><div id="entity-popup" class="entity-popup" hidden><div class="entity-popup-backdrop" data-entity-popup-close></div><article class="play-card entity-popup-card"><button id="entity-popup-close" class="entity-popup-close" type="button" aria-label="Close">×</button><div id="entity-popup-content" class="entity-popup-content"></div></article></div>`;
   const map = document.querySelector("#map") as HTMLElement;
   const mapScroll = document.querySelector("#map-scroll") as HTMLElement;
   const tip = document.querySelector("#tip") as HTMLElement;
@@ -518,6 +516,13 @@ function render(
   const specialActionsEl = document.querySelector(
     "#special-actions",
   ) as HTMLElement;
+  const entityPopup = document.querySelector("#entity-popup") as HTMLElement;
+  const entityPopupContent = document.querySelector(
+    "#entity-popup-content",
+  ) as HTMLElement;
+  const entityPopupClose = document.querySelector(
+    "#entity-popup-close",
+  ) as HTMLButtonElement;
   let zoom = 0.72;
   const size = 44;
   const w = Math.sqrt(3) * size,
@@ -528,6 +533,7 @@ function render(
   let manualZoom = false;
   let centerPlayerAfterDraw = false;
   let specialActions = initialSpecialActions;
+  let activeEntityPopup: Item | Condition | null = null;
 
   type OngoingTravelData = {
     route: string[];
@@ -1197,7 +1203,7 @@ function render(
                   )
                   .join(" ")}`
               : "";
-            return `<li>${esc(item.name)}${actionHtml}</li>`;
+            return `<li class="inventory-entry" data-inventory-entity-id="${esc(item.id)}"><span class="inventory-entry-name">${esc(item.name)}</span>${actionHtml}</li>`;
           })
           .join("")}</ul>`
       : `<p class="inventory-empty">None</p>`;
@@ -1208,8 +1214,8 @@ function render(
       ? `<ul class="condition-list">${conditions
           .map((condition) =>
             condition.duration == 1
-              ? `<li>${esc(condition.name)} (1 turn)</li>`
-              : `<li>${esc(condition.name)} (${esc(condition.duration)} turns)</li>`,
+              ? `<li class="condition-entry" data-condition-entity-id="${esc(condition.id)}"><span class="condition-entry-name">${esc(condition.name)}</span> <span class="condition-entry-duration">(1 turn)</span></li>`
+              : `<li class="condition-entry" data-condition-entity-id="${esc(condition.id)}"><span class="condition-entry-name">${esc(condition.name)}</span> <span class="condition-entry-duration">(${esc(condition.duration)} turns)</span></li>`,
           )
           .join("")}</ul>`
       : `<p class="condition-empty">None</p>`;
@@ -1251,6 +1257,7 @@ function render(
       "schemaId",
       "data",
       "name",
+      "icon",
       "curHealth",
       "maxHealth",
       "curLuck",
@@ -1307,6 +1314,82 @@ function render(
         hideZeroSkills = (event.target as HTMLInputElement).checked;
         renderSummary();
       });
+  }
+
+  function formatSignedNumber(value: number) {
+    return `${value >= 0 ? "+" : ""}${value}`;
+  }
+
+  function hideEntityPopup() {
+    activeEntityPopup = null;
+    entityPopup.hidden = true;
+    entityPopupContent.innerHTML = "";
+  }
+
+  function valueEquals(a: unknown, b: unknown) {
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+
+  function showEntityPopup(entity: Item | Condition) {
+    activeEntityPopup = entity;
+    const schemaId =
+      entity.schemaId ?? ("duration" in entity ? "condition" : "item");
+    const schemaFields = resolveSchemaFields(SCHEMAS, schemaId);
+    const title = getField(entity, "name") || "Entity";
+    const headerLines: string[] = [];
+    const bodyLines: string[] = [];
+
+    if (schemaId === "item" && getField(entity as Item, "is_artifact")) {
+      headerLines.push(`<div class="entity-popup-subtitle">Artifact</div>`);
+    }
+    if (schemaId === "condition") {
+      const duration = Number(getField(entity as Condition, "duration"));
+      if (duration !== 0) {
+        headerLines.push(
+          `<div class="entity-popup-subtitle">Duration: ${esc(duration)} turn${duration === 1 ? "" : "s"}</div>`,
+        );
+      }
+    }
+
+    bodyLines.push(`<p class="entity-popup-id">id ${esc(entity.id)}</p>`);
+    for (const [fieldName, field] of Object.entries(schemaFields)) {
+      if (fieldName === "name") continue;
+      const value = (entity as Record<string, unknown>)[fieldName];
+      if (value === undefined || valueEquals(value, field.defaultValue))
+        continue;
+      if (entity.schemaId === "item" && fieldName === "speed_boost") {
+        bodyLines.push(
+          `<p class="entity-popup-ability">Speed bonus: ${esc(formatSignedNumber(Number(value)))}</p>`,
+        );
+      } else if (entity.schemaId === "item" && fieldName === "is_artifact") {
+        continue;
+      } else if (entity.schemaId === "item" && fieldName === "use_function") {
+        bodyLines.push(
+          `<p class="entity-popup-ability">Use function: ${esc(value)}</p>`,
+        );
+      } else if (entity.schemaId === "condition" && fieldName === "duration") {
+        continue;
+      } else {
+        const label = fieldName
+          .split("_")
+          .join(" ")
+          .replace(/\b\w/g, (ch: string) => ch.toUpperCase());
+        bodyLines.push(
+          `<p class="entity-popup-ability">${esc(label)}: ${renderEntityValue(value)}</p>`,
+        );
+      }
+    }
+
+    entityPopupContent.innerHTML = `
+      <div class="entity-popup-header">
+        <h3 class="entity-popup-title">${esc(title)}</h3>
+        ${headerLines.join("")}
+      </div>
+      <div class="entity-popup-body">
+        ${bodyLines.join("")}
+      </div>
+    `;
+    entityPopup.hidden = false;
   }
 
   function showActivityError(message: string) {
@@ -2047,6 +2130,38 @@ function render(
 
   document.addEventListener("click", (e) => {
     if (!(e.target as HTMLElement).closest("#tip")) tip.style.display = "none";
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !entityPopup.hidden) {
+      hideEntityPopup();
+    }
+  });
+  entityPopupClose.addEventListener("click", hideEntityPopup);
+  entityPopup.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest("[data-entity-popup-close]")) {
+      hideEntityPopup();
+    }
+  });
+  stats.addEventListener("click", (e) => {
+    const target = e.target as HTMLElement;
+    if (target.closest("button[data-special-action-id]")) return;
+    const itemEl = target.closest<HTMLElement>("[data-inventory-entity-id]");
+    if (itemEl) {
+      const item = (player.inventory as Item[]).find(
+        (entry) => entry.id === itemEl.dataset.inventoryEntityId,
+      );
+      if (item) showEntityPopup(item);
+      return;
+    }
+    const conditionEl = target.closest<HTMLElement>(
+      "[data-condition-entity-id]",
+    );
+    if (conditionEl) {
+      const condition = (player.conditions as Condition[]).find(
+        (entry) => entry.id === conditionEl.dataset.conditionEntityId,
+      );
+      if (condition) showEntityPopup(condition);
+    }
   });
   map.addEventListener("scroll", () => {
     tip.style.display = "none";

@@ -29,13 +29,13 @@ export async function renderEffectText(
     const name = effect.itemId
       ? ((await resolveItemName?.(effect.itemId)) ?? effect.itemId)
       : undefined;
-    return `Gained: ${name ? `a ${name}` : "a random item"}`;
+    return `Gained: ${name ? `${name}` : "a random item"}`;
   }
   if (effect.type === EffectType.RemoveRandomItem) {
     const name = effect.itemId
       ? ((await resolveItemName?.(effect.itemId)) ?? effect.itemId)
       : undefined;
-    return `Removed: ${name ? `a ${name}` : "a random item"}`;
+    return `Removed: ${name ? `${name}` : "a random item"}`;
   }
   if (effect.type === EffectType.AddTableauCard) {
     return "Added tableau card";

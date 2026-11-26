@@ -65,18 +65,28 @@ const regions = world.regions;
 for (const entity of world.entities) entityStore.add(entity);
 
 function startingInventory(): Item[] {
-  const createItem = (name: string, speed_boost: number | undefined) => {
-    const item = createEntity<Item>("item", {
-      name,
-      speed_boost,
-    });
+  const createItem = (
+    name: string,
+    extra: {
+      name?: string;
+      speed_boost?: number;
+      is_artifact?: boolean;
+      use_function?: string;
+    },
+  ) => {
+    let fields = extra;
+    fields.name = name;
+    const item = createEntity<Item>("item", fields);
     entityStore.add(item);
     return item;
   };
   return [
-    createItem("sword", undefined),
-    createItem("shield", -1),
-    createItem("can of coke", 2),
+    createItem("Excalibur", { is_artifact: true }),
+    createItem("shield", { speed_boost: -1 }),
+    createItem("can of coke", {
+      speed_boost: 2,
+      use_function: "coke-use-execute",
+    }),
   ];
 }
 

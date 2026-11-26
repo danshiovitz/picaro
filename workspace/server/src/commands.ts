@@ -79,7 +79,7 @@ export type EncounterRequest = {
 };
 
 function specialActionBase(action: SpecialActionDefinition) {
-  const { availability: _availability, execute: _execute, ...rest } = action;
+  const { availability: _availability, ...rest } = action;
   return rest;
 }
 
@@ -367,11 +367,11 @@ function activeEncounterFor(
 }
 
 function cloneInventory(inventory: Item[]) {
-  return inventory.map((item) => ({ ...item }));
+  return inventory.map((item) => serializeEntity(item) as Item);
 }
 
 function cloneConditions(conditions: Condition[]) {
-  return conditions.map((condition) => ({ ...condition }));
+  return conditions.map((condition) => serializeEntity(condition) as Condition);
 }
 
 function cloneResources(resources: Record<string, number>) {
@@ -524,11 +524,20 @@ function adjustResource(
 }
 
 function removeItems(player: PlayerEntity, itemIds: string[]) {
+  const state = getApiState();
   const ids = new Set(itemIds);
+  const inventory = player.inventory as Item[];
+  for (const item of inventory) {
+    if (ids.has(item.id) && getField(item, "is_artifact")) {
+      if (!state.lostItems.some((lostItem) => lostItem.id === item.id)) {
+        state.lostItems.push(item);
+      }
+    }
+  }
   setField(
     player,
     "inventory",
-    (player.inventory as Item[]).filter((item) => !ids.has(item.id)),
+    inventory.filter((item) => !ids.has(item.id)),
   );
 }
 
@@ -559,6 +568,16 @@ const randomItemTable = [
 
 function gainRandomItem(player: PlayerEntity, quality: number) {
   const state = getApiState();
+  const shouldRecoverLostItem =
+    state.lostItems.length > 0 && getRng().int(4) === 0;
+  if (shouldRecoverLostItem) {
+    const index = getRng().int(state.lostItems.length);
+    const [item] = state.lostItems.splice(index, 1);
+    if (item) {
+      (player.inventory as Item[]).push(item);
+      return item;
+    }
+  }
   if (randomItemTable.length === 0) return undefined;
   const roll = Math.min(
     randomItemTable.length,

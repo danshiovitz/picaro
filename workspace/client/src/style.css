@@ -734,6 +734,28 @@ button {
   gap: 6px;
 }
 
+.inventory-entry,
+.condition-entry {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 2px 4px;
+  margin-left: -4px;
+}
+
+.inventory-entry:hover,
+.condition-entry:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.inventory-entry-name,
+.condition-entry-name {
+  font-weight: 700;
+}
+
+.condition-entry-duration {
+  color: #cdd5df;
+}
+
 .inventory-list .special-action-link,
 .special-action-entity-group .special-action-link {
   width: auto;
@@ -750,6 +772,106 @@ button {
   display: flex;
   gap: 10px;
   justify-content: center;
+}
+
+.entity-popup {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.entity-popup[hidden] {
+  display: none;
+}
+
+.entity-popup-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.entity-popup-card {
+  position: relative;
+  z-index: 1;
+  width: min(300px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  padding: 0;
+}
+
+.entity-popup-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #7b6038;
+  border-radius: 999px;
+  background: #f6ead1;
+  color: #4d3518;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  z-index: 2;
+}
+
+.entity-popup-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+
+.entity-popup-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 12px 10px;
+  background: #d7b36f;
+  color: #2a1b0b;
+  border-bottom: 2px solid #7b6038;
+}
+
+.play-card .entity-popup-title {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border-bottom: 0;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.entity-popup-subtitle {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.entity-popup-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 14px;
+}
+
+.entity-popup-id {
+  margin: 0;
+  color: #685d52;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.entity-popup-ability {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.3;
 }
 
 .selection-card .play-card-body {
