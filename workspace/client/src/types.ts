@@ -38,9 +38,7 @@ export type Condition = CommonCondition;
 export type Hex = CommonHex;
 export type Token = CommonToken;
 export type PlayerEntityDto = CommonPlayerEntityDto;
-export type PlayerEntity = PlayerEntityDto & {
-  skills: Record<string, number>;
-};
+export type PlayerEntity = PlayerEntityDto;
 export type AnnotatedValue = CommonAnnotatedValue;
 export type SingleValueEntry = CommonSingleValueEntry;
 export type PlayerSummary = CommonPlayerSummary;

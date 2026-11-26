@@ -53,3 +53,19 @@
 - If a server action is missing an expected target id, it may still need fallback lookup by current player inventory or location.
 - Some action labels were previously rendered with square brackets; avoid reintroducing that formatting.
 - If player movement appears not to update visually, check whether rendering reads from a different hex copy than the one being mutated.
+
+## Recent implementation notes
+
+- `npm run dev` is now intended to do a one-time preflight typecheck for both workspaces before starting the client/server. If it regresses, check `scripts/dev.js`.
+- Item/condition popup UI in `client/src/main.ts` relies on entity `schemaId`. If an entity loses `schemaId` during serialization, popup resolution can fail. Use `serializeEntity(...)` instead of spreading hydrated entities when returning them to the client.
+- Popup styling lives in `client/src/style.css`; the header/body split is intentional, with the header matching encounter-card styling and the title itself not carrying the divider.
+- Item popup content should only show non-default fields from the schema. `is_artifact` is shown in the header, not the body. `use_function` should only be shown if it exists on the item.
+- Inventory items and conditions are clickable in the character panel and should open the detail popup.
+- The client now renders annotated values in several places:
+  - player `maxHealth`, `maxLuck`, and `skills`
+  - encounter skill modifiers and skill names on encounter cards
+  - effect logs for health, gold, reputation, luck, and resource effects when `annotatedValue` is present
+- Server-side `computeEffectiveValue` / `computeAnnotatedEffectiveValue` accept an optional base value override. This is used for special cases like health gain/loss annotations.
+- When adding new effect types that should display in the UI as annotated values, add an optional `annotatedValue?: AnnotatedValue` field to the effect union in `common/src/types.ts`, populate it in `server/src/commands.ts`, and render it in `client/src/activity-ui.ts`.
+- Health adjustment is split into health-loss / health-gain value types on the server. If you add more signed stat adjustments, follow the same pattern so the display text and effect logs remain consistent.
+- Artifact items are tracked in `server/src/data.ts` / `server/src/commands.ts` via `lostItems`; removing an artifact from inventory should preserve it for possible re-acquisition later.

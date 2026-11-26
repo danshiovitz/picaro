@@ -1,16 +1,53 @@
 import { EffectType } from "./types";
-import type { Notification, Effect } from "./types";
+import type { AnnotatedValue, Notification, Effect } from "./types";
 
 type ItemNameResolver = (
   itemId: string,
 ) => Promise<string | undefined> | string | undefined;
 
+function esc(value: unknown) {
+  return String(value).replace(
+    /[&<>"']/g,
+    (ch) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[ch]!,
+  );
+}
+
+function renderAnnotatedValue(value: AnnotatedValue) {
+  return `<span class="annotated-value" title="${esc(
+    [
+      `${value.baseValue.value} base value from ${value.baseValue.text}`,
+      ...value.modifierValues.map(
+        (modifier) =>
+          `${modifier.value >= 0 ? "+" : ""}${modifier.value} ${modifier.text}`,
+      ),
+      `=${value.finalValue} final`,
+    ].join("\n"),
+  )}">${esc(value.finalValue)}</span>`;
+}
+
 export async function renderEffectText(
   effect: Effect,
   resolveItemName?: ItemNameResolver,
 ) {
-  if (effect.type === EffectType.Resource)
-    return `${effect.amount >= 0 ? "+" : "-"}${Math.abs(effect.amount)} ${labelForType(effect.type)} (${effect.resourceType})`;
+  if (
+    effect.annotatedValue &&
+    (effect.type === EffectType.Gold ||
+      effect.type === EffectType.Reputation ||
+      effect.type === EffectType.Health ||
+      effect.type === EffectType.Luck ||
+      effect.type === EffectType.Resource)
+  ) {
+    const suffix =
+      effect.type === EffectType.Resource ? ` (${effect.resourceType})` : "";
+    return `${renderAnnotatedValue(effect.annotatedValue)} ${labelForType(effect.type)}${suffix}`;
+  }
   if (effect.type === EffectType.FreeXp)
     return `${effect.amount >= 0 ? "+" : "-"}${Math.abs(effect.amount)} ${labelForType(effect.type)}`;
   if (effect.type === EffectType.ControlledTeleport)
@@ -46,6 +83,9 @@ export async function renderEffectText(
   if (effect.type === EffectType.Teleport) {
     return `Teleported to: ${effect.centerHex}`;
   }
+  if (effect.annotatedValue) {
+    return `${renderAnnotatedValue(effect.annotatedValue)} ${labelForType(effect.type)}`;
+  }
   return `${effect.amount >= 0 ? "+" : "-"}${Math.abs(effect.amount)} ${labelForType(effect.type)}`;
 }
 
@@ -56,7 +96,10 @@ export async function renderActivityLines(
   const lines: string[] = [];
   if (result.flavorText)
     lines.push(
-      ...result.flavorText.split(/\n+/).filter((line) => line.length > 0),
+      ...result.flavorText
+        .split(/\n+/)
+        .filter((line) => line.length > 0)
+        .map((line) => esc(line)),
     );
   if (result.effects?.length)
     lines.push(

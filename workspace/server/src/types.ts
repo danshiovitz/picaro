@@ -68,7 +68,10 @@ export type AxialPoint = CommonAxialPoint;
 export enum ValueType {
   speed = "speed",
   maxHealth = "max_health",
+  maxLuck = "max_luck",
   skill = "skill",
+  healthLoss = "health_loss",
+  healthGain = "health_gain",
 }
 export enum RuleType {
   BaseValue = "BaseValue",

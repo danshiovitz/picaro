@@ -4,6 +4,7 @@ import {
   Notification,
   ActiveEncounterSkillCheck,
   ApiState,
+  AnnotatedValue,
   Condition,
   Effect,
   EffectType,
@@ -313,8 +314,12 @@ function rollSkillChecks(
 ) {
   return checks.map((check): ActiveEncounterSkillCheck => {
     const roll = getRng().d10();
-    const modifier = computeEffectiveValue(player, ValueType.skill, check.name);
-    const total = roll + modifier;
+    const modifier = computeAnnotatedEffectiveValue(
+      player,
+      ValueType.skill,
+      check.name,
+    );
+    const total = roll + modifier.finalValue;
     return {
       name: check.name,
       target: check.target,
@@ -394,18 +399,22 @@ function effectiveSkills(player: PlayerEntity) {
   return Object.fromEntries(
     skillNames.map(
       (skill) =>
-        [skill, computeEffectiveValue(player, ValueType.skill, skill)] as const,
+        [
+          skill,
+          computeAnnotatedEffectiveValue(player, ValueType.skill, skill),
+        ] as const,
     ),
   );
 }
 
-type PlayerDto = PlayerEntityDto & { skills: Record<string, number> };
+type PlayerDto = PlayerEntityDto;
 
 function playerDto(hexes: Hex[], player: PlayerEntity) {
   return {
     ...(serializeEntity(player) as PlayerEntity),
     skill_xp: cloneSkillXp(getField(player, "skill_xp")),
     maxHealth: computeAnnotatedEffectiveValue(player, ValueType.maxHealth),
+    maxLuck: computeAnnotatedEffectiveValue(player, ValueType.maxLuck),
     speed: computeAnnotatedEffectiveValue(player, ValueType.speed),
     skills: effectiveSkills(player),
     resources: cloneResources(getField(player, "resources")),
@@ -418,11 +427,11 @@ function playerUpdates(player: PlayerEntity) {
   return {
     curHealth: getField(player, "curHealth"),
     curLuck: getField(player, "curLuck"),
-    maxLuck: getField(player, "maxLuck"),
     gold: getField(player, "gold"),
     reputation: getField(player, "reputation"),
     turns: getField(player, "turns"),
     maxHealth: computeAnnotatedEffectiveValue(player, ValueType.maxHealth),
+    maxLuck: computeAnnotatedEffectiveValue(player, ValueType.maxLuck),
     speed: computeAnnotatedEffectiveValue(player, ValueType.speed),
     location: getField(player, "location"),
     skill_xp: cloneSkillXp(getField(player, "skill_xp")),
@@ -430,7 +439,7 @@ function playerUpdates(player: PlayerEntity) {
     resources: cloneResources(getField(player, "resources")),
     inventory: cloneInventory(player.inventory as Item[]),
     conditions: cloneConditions(player.conditions as Condition[]),
-  } satisfies Partial<PlayerEntityDto> & { skills: Record<string, number> };
+  } satisfies Partial<PlayerEntityDto>;
 }
 
 const skillXpThresholds = [0, 10, 30, 50, 75, 100, 130];
@@ -493,25 +502,53 @@ function computeEncounterEffects(
   return effects;
 }
 
+function annotatedAmount(value: number, text: string): AnnotatedValue {
+  return {
+    finalValue: value,
+    baseValue: { value, text },
+    modifierValues: [],
+  };
+}
+
 function adjustGold(player: PlayerEntity, amount: number) {
+  const annotated = annotatedAmount(amount, "gold change");
   setField(player, "gold", Math.max(0, getField(player, "gold") + amount));
+  return annotated;
 }
 
 function adjustReputation(player: PlayerEntity, amount: number) {
+  const annotated = annotatedAmount(amount, "reputation change");
   setField(
     player,
     "reputation",
     Math.max(0, getField(player, "reputation") + amount),
   );
+  return annotated;
 }
 
 function adjustHealth(player: PlayerEntity, amount: number) {
   const maxHealth = computeEffectiveValue(player, ValueType.maxHealth);
+  const valueType = amount < 0 ? ValueType.healthLoss : ValueType.healthGain;
+  const annotated = computeAnnotatedEffectiveValue(
+    player,
+    valueType,
+    undefined,
+    amount,
+  );
+  const adjustedAmount =
+    amount < 0
+      ? Math.min(0, annotated.finalValue)
+      : Math.max(0, annotated.finalValue);
   setField(
     player,
     "curHealth",
-    Math.max(0, Math.min(maxHealth, getField(player, "curHealth") + amount)),
+    Math.max(
+      0,
+      Math.min(maxHealth, getField(player, "curHealth") + adjustedAmount),
+    ),
   );
+  annotated.finalValue = adjustedAmount;
+  return annotated;
 }
 
 function adjustResource(
@@ -519,8 +556,10 @@ function adjustResource(
   resourceType: string,
   amount: number,
 ) {
+  const annotated = annotatedAmount(amount, `${resourceType} change`);
   const current = getField(player, "resources")[resourceType] ?? 0;
   getField(player, "resources")[resourceType] = Math.max(0, current + amount);
+  return annotated;
 }
 
 function removeItems(player: PlayerEntity, itemIds: string[]) {
@@ -546,6 +585,7 @@ function adjustTurns(player: PlayerEntity, amount: number) {
 }
 
 function adjustLuck(player: PlayerEntity, amount: number) {
+  const annotated = annotatedAmount(amount, "luck change");
   setField(
     player,
     "curLuck",
@@ -557,6 +597,7 @@ function adjustLuck(player: PlayerEntity, amount: number) {
       ),
     ),
   );
+  return annotated;
 }
 
 const randomItemTable = [
@@ -696,22 +737,26 @@ export function applyEffects(
         moveToken(player.id, player.location, dest);
         break;
       case EffectType.Gold:
-        adjustGold(player, effect.amount);
+        effect.annotatedValue = adjustGold(player, effect.amount);
         break;
       case EffectType.Reputation:
-        adjustReputation(player, effect.amount);
+        effect.annotatedValue = adjustReputation(player, effect.amount);
         break;
       case EffectType.Health:
-        adjustHealth(player, effect.amount);
+        effect.annotatedValue = adjustHealth(player, effect.amount);
         break;
       case EffectType.Turns:
         adjustTurns(player, effect.amount);
         break;
       case EffectType.Luck:
-        adjustLuck(player, effect.amount);
+        effect.annotatedValue = adjustLuck(player, effect.amount);
         break;
       case EffectType.Resource:
-        adjustResource(player, effect.resourceType, effect.amount);
+        effect.annotatedValue = adjustResource(
+          player,
+          effect.resourceType,
+          effect.amount,
+        );
         break;
       case EffectType.SkillXp:
         const currentXp = getField(player, "skill_xp")[effect.skill] ?? 0;
@@ -1477,7 +1522,7 @@ export function continueEncounter(
     `[continueEncounter] ${getField(player, "name")} ${active.id} new checks: ${nextSkillChecks
       .map(
         (check) =>
-          `${check.name} vs ${check.target} (roll ${check.roll} + ${check.modifier} = ${check.total})`,
+          `${check.name} vs ${check.target} (roll ${check.roll} + ${check.modifier.finalValue} = ${check.total})`,
       )
       .join("; ")}`,
   );

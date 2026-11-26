@@ -32,9 +32,14 @@ export type AnnotatedValue = {
   baseValue: SingleValueEntry;
   modifierValues: SingleValueEntry[];
 };
-export type PlayerEntityDto = Omit<PlayerEntity, "maxHealth" | "speed"> & {
+export type PlayerEntityDto = Omit<
+  PlayerEntity,
+  "maxHealth" | "maxLuck" | "speed"
+> & {
   maxHealth: AnnotatedValue;
+  maxLuck: AnnotatedValue;
   speed: AnnotatedValue;
+  skills: Record<string, AnnotatedValue>;
 };
 export type GameData = {
   hexes: Hex[];
@@ -93,37 +98,67 @@ export type EncounterTemplate = {
 };
 
 export type Effect =
-  | { type: EffectType.Gold; amount: number }
-  | { type: EffectType.Reputation; amount: number }
-  | { type: EffectType.Health; amount: number }
-  | { type: EffectType.Turns; amount: number }
-  | { type: EffectType.Luck; amount: number }
-  | { type: EffectType.Resource; resourceType: string; amount: number }
-  | { type: EffectType.FreeXp; amount: number }
-  | { type: EffectType.ControlledTeleport; radius: number }
+  | { type: EffectType.Gold; amount: number; annotatedValue?: AnnotatedValue }
+  | {
+      type: EffectType.Reputation;
+      amount: number;
+      annotatedValue?: AnnotatedValue;
+    }
+  | { type: EffectType.Health; amount: number; annotatedValue?: AnnotatedValue }
+  | { type: EffectType.Turns; amount: number; annotatedValue?: AnnotatedValue }
+  | { type: EffectType.Luck; amount: number; annotatedValue?: AnnotatedValue }
+  | {
+      type: EffectType.Resource;
+      resourceType: string;
+      amount: number;
+      annotatedValue?: AnnotatedValue;
+    }
+  | { type: EffectType.FreeXp; amount: number; annotatedValue?: AnnotatedValue }
+  | {
+      type: EffectType.ControlledTeleport;
+      radius: number;
+      annotatedValue?: AnnotatedValue;
+    }
   | {
       type: EffectType.SkillXp;
       skill: string;
       amount: number;
       newLevel?: number;
+      annotatedValue?: AnnotatedValue;
     }
-  | { type: EffectType.RemoveItems; itemIds: string[] }
+  | {
+      type: EffectType.RemoveItems;
+      itemIds: string[];
+      annotatedValue?: AnnotatedValue;
+    }
   | {
       type: EffectType.GainRandomItem;
       quality: number;
       itemId?: string;
+      annotatedValue?: AnnotatedValue;
     }
-  | { type: EffectType.RemoveRandomItem; itemId?: string }
+  | {
+      type: EffectType.RemoveRandomItem;
+      itemId?: string;
+      annotatedValue?: AnnotatedValue;
+    }
   | {
       type: EffectType.AddTableauCard;
       encounterTemplate?: EncounterTemplate;
       qualityMod?: number;
+      annotatedValue?: AnnotatedValue;
     }
   | {
       type: EffectType.RefreshTableau;
       qualityMods?: number[];
+      annotatedValue?: AnnotatedValue;
     }
-  | { type: EffectType.Teleport; radius: number; centerHex: string };
+  | {
+      type: EffectType.Teleport;
+      radius: number;
+      centerHex: string;
+      annotatedValue?: AnnotatedValue;
+    };
 
 export enum TriggerType {
   EndOfTurn = "end_of_turn",
@@ -152,7 +187,7 @@ export type ActiveEncounterSkillCheck = {
   name: string;
   target: number;
   roll: number;
-  modifier: number;
+  modifier: AnnotatedValue;
   total: number;
   success: boolean;
 };

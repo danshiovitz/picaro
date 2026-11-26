@@ -241,7 +241,7 @@ function formatEffects(effects: Effect[]) {
           effect.type === EffectType.AddTableauCard ||
           effect.type === EffectType.RefreshTableau
             ? effectLabel(effect)
-            : `${effect.amount} ${effectLabel(effect)}`,
+            : `${effect.annotatedValue?.finalValue ?? effect.amount} ${effectLabel(effect)}`,
         )
         .join(", ")
     : "none";
@@ -302,8 +302,17 @@ function outcomeLine(
   return `${parts.join(", ")}`;
 }
 
-function skillLine(check: EncounterSkillCheck, showTarget = true) {
-  return showTarget ? `${check.name} vs ${check.target}` : check.name;
+function skillLine(
+  check: EncounterSkillCheck,
+  skills: Record<string, number | AnnotatedValue> | undefined,
+  showTarget = true,
+) {
+  const skillValue = skills?.[check.name];
+  const skillLabel =
+    skillValue !== undefined
+      ? `${esc(check.name)} ${renderEntityValue(skillValue)}`
+      : esc(check.name);
+  return showTarget ? `${skillLabel} vs ${esc(check.target)}` : skillLabel;
 }
 
 type EncounterCard = TableauCard;
@@ -331,7 +340,10 @@ function renderEncounterPips(difficulty: number, qualityMod = 0) {
   ].join("");
 }
 
-function renderEncounterCard(card: EncounterCard) {
+function renderEncounterCard(
+  card: EncounterCard,
+  skills: Record<string, number | AnnotatedValue> | undefined,
+) {
   const circles = renderEncounterPips(card.difficulty, card.qualityMod ?? 0);
   const activeClass =
     card.id === activeEncounterId ? " active-tableau-encounter" : "";
@@ -352,14 +364,17 @@ function renderEncounterCard(card: EncounterCard) {
      .slice(0, 1)
      .map(
        (check) =>
-         `<p class="encounter-check">${esc(skillLine(check, false))}</p>`,
+         `<p class="encounter-check">${skillLine(check, skills, false)}</p>`,
      )
      .join("")}
   </div>
  </article>`;
 }
 
-function renderActiveEncounterCard(card: ActiveEncounter) {
+function renderActiveEncounterCard(
+  card: ActiveEncounter,
+  skills: Record<string, number | AnnotatedValue> | undefined,
+) {
   const nextPenalty = card.nextPenalty
     ? `<p class="encounter-next-penalty">Next penalty: -${esc(labelForType(card.nextPenalty))}</p>`
     : "";
@@ -375,8 +390,7 @@ function renderActiveEncounterCard(card: ActiveEncounter) {
    <div class="encounter-spacer"></div>
    ${skillChecks
      .map(
-       (check) =>
-         `<p class="encounter-check">${esc(`${check.name} vs ${check.target}`)}</p>`,
+       (check) => `<p class="encounter-check">${skillLine(check, skills)}</p>`,
      )
      .join("")}
    ${nextPenalty}
@@ -435,10 +449,10 @@ function renderEncounterSummary(card: ActiveEncounter) {
 function renderEncounterResults(card: ActiveEncounter) {
   const skillChecks = card.currentSkillChecks;
   return `<div class="encounter-results">${skillChecks
-    .map(
-      (check) =>
-        `<p class="encounter-result-line">${esc(`1d10 (${check.roll}) + ${check.modifier} = ${check.total} .. ${check.success ? "Success!" : "Failure!"}`)}</p>`,
-    )
+    .map((check) => {
+      const modifier = renderEntityValue(check.modifier);
+      return `<p class="encounter-result-line">1d10 (${esc(check.roll)}) + ${modifier} = ${esc(check.total)} .. ${esc(check.success ? "Success!" : "Failure!")}</p>`;
+    })
     .join("")}</div>`;
 }
 
@@ -497,7 +511,7 @@ function render(
   );
   const itemNameCache = new Map<string, string>();
   for (const item of player.inventory) itemNameCache.set(item.id, item.name);
-  app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button><label class="map-toggle"><input type="checkbox" id="show-region-borders"/> show region borders</label><button id="fit">Fit</button><button id="snap">Snap</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableauData.encounters.map(renderEncounterCard).join("")}</section></div></div></div><section class="character-panel"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><div class="action-buttons-row"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="scout" class="action-button" type="button"><img src="/images/actions/telescope.svg" alt=""/><span>Scout</span></button></div><div id="special-actions" class="special-actions"></div></section></section></main><aside class="right-panel"><section class="activity-panel"><h2 id="activity-panel-title" hidden></h2><div id="activity-panel-content"></div></section></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div><div id="entity-popup" class="entity-popup" hidden><div class="entity-popup-backdrop" data-entity-popup-close></div><article class="play-card entity-popup-card"><button id="entity-popup-close" class="entity-popup-close" type="button" aria-label="Close">×</button><div id="entity-popup-content" class="entity-popup-content"></div></article></div>`;
+  app.innerHTML = `<div class="layout"><main><section class="top-strip"><div class="bar"><button id="minus">-</button><span id="z"></span><button id="plus">+</button><label class="map-toggle"><input type="checkbox" id="show-region-borders"/> show region borders</label><button id="fit">Fit</button><button id="snap">Snap</button></div></section><div class="map-shell"><div class="map-pane"><div id="map-scroll"><div id="map"></div><section class="tableau">${tableauData.encounters.map((encounter) => renderEncounterCard(encounter, player.skills)).join("")}</section></div></div></div><section class="character-panel"><section class="character-summary"><h2>Character</h2><div id="character-stats"></div></section><section class="action-section"><div class="action-buttons-row"><button id="travel" class="action-button" type="button"><img src="/images/actions/boots.svg" alt=""/><span>Travel</span></button><button id="camp" class="action-button" type="button"><img src="/images/actions/campfire.svg" alt=""/><span>Camp</span></button><button id="scout" class="action-button" type="button"><img src="/images/actions/telescope.svg" alt=""/><span>Scout</span></button></div><div id="special-actions" class="special-actions"></div></section></section></main><aside class="right-panel"><section class="activity-panel"><h2 id="activity-panel-title" hidden></h2><div id="activity-panel-content"></div></section></aside><footer><b>Log</b><p>Bogus bottom panel: marching orders, dice results, chat, and event feed will appear here.</p></footer></div><div id="tip"></div><div id="entity-popup" class="entity-popup" hidden><div class="entity-popup-backdrop" data-entity-popup-close></div><article class="play-card entity-popup-card"><button id="entity-popup-close" class="entity-popup-close" type="button" aria-label="Close">×</button><div id="entity-popup-content" class="entity-popup-content"></div></article></div>`;
   const map = document.querySelector("#map") as HTMLElement;
   const mapScroll = document.querySelector("#map-scroll") as HTMLElement;
   const tip = document.querySelector("#tip") as HTMLElement;
@@ -1101,7 +1115,7 @@ function render(
     syncTableau(tableauData);
     setActivityPanel(
       "Encounter",
-      `${renderEncounterSummary(card)}${renderActiveEncounterCard(card)}${renderEncounterResults(card)}${encounterButtons(card)}`,
+      `${renderEncounterSummary(card)}${renderActiveEncounterCard(card, player.skills)}${renderEncounterResults(card)}${encounterButtons(card)}`,
       true,
     );
     document
@@ -1222,21 +1236,21 @@ function render(
   }
 
   function renderSkills(
-    skills: Record<string, number> | undefined,
+    skills: Record<string, number | AnnotatedValue> | undefined,
     skillXp: Record<string, number> | undefined,
   ) {
     const safeSkills = skills ?? {};
     const safeSkillXp = skillXp ?? {};
     const visibleSkills = Object.entries(safeSkills)
       .sort(([a], [b]) => a.localeCompare(b))
-      .filter(([, value]) => !hideZeroSkills || value !== 0);
+      .filter(([, value]) => !hideZeroSkills || finalValue(value) !== 0);
     return visibleSkills.length
       ? `<ul class="skill-list">${visibleSkills
           .map(([name, value]) => {
             const xp = safeSkillXp[name] ?? 0;
             const progress = skillXpDisplay(xp);
             const fill = Math.max(0, Math.min(1, progress.fill));
-            return `<li class="skill-row"><div class="skill-top-row"><span class="skill-name">${esc(name)}</span><span class="skill-value">${esc(value)}</span></div><div class="skill-bottom-row"><span class="skill-bar" aria-hidden="true"><span class="skill-bar-fill" style="width: ${Math.round(fill * 100)}%"></span></span><span class="skill-xp-text">${esc(progress.text)}</span></div></li>`;
+            return `<li class="skill-row"><div class="skill-top-row"><span class="skill-name">${esc(name)}</span><span class="skill-value">${renderEntityValue(value)}</span></div><div class="skill-bottom-row"><span class="skill-bar" aria-hidden="true"><span class="skill-bar-fill" style="width: ${Math.round(fill * 100)}%"></span></span><span class="skill-xp-text">${esc(progress.text)}</span></div></li>`;
           })
           .join("")}</ul>`
       : `<p class="skill-empty">None</p>`;
@@ -1287,7 +1301,7 @@ function render(
   }
 
   function renderSummary() {
-    stats.innerHTML = `<div class="summary-basic"><div><dd>${esc(player.name)}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${renderEntityValue(player.maxHealth)}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${player.maxLuck}</dd></div><div><dt>Speed</dt><dd>${renderEntityValue(player.speed)}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div></div>${renderSummarySection("resources", "Resources", `<label class="skills-filter"><input type="checkbox" id="hide-zero-resources"${hideZeroResources ? " checked" : ""}/> hide 0 resources</label>${renderResources(player.resources)}`)}${renderSummarySection("inventory", "Inventory", renderInventory(player.inventory))}${renderSummarySection("conditions", "Conditions", renderConditions(player.conditions))}${renderSummarySection("skills", "Skills", `<label class="skills-filter"><input type="checkbox" id="hide-zero-skills"${hideZeroSkills ? " checked" : ""}/> hide 0 skills</label>${renderSkills(player.skills, player.skill_xp)}`)}${renderSummarySection("extraFields", "Additional Fields", renderExtraFields(player))}`;
+    stats.innerHTML = `<div class="summary-basic"><div><dd>${esc(player.name)}</dd></div><div><dt>Location</dt><dd>${esc(player.location)}</dd></div><div><dt>Health</dt><dd>${player.curHealth}/${renderEntityValue(player.maxHealth)}</dd></div><div><dt>Luck</dt><dd>${player.curLuck}/${renderEntityValue(player.maxLuck)}</dd></div><div><dt>Speed</dt><dd>${renderEntityValue(player.speed)}</dd></div><div><dt>Gold</dt><dd>${player.gold}</dd></div><div><dt>Reputation</dt><dd>${player.reputation}</dd></div><div><dt>Turns</dt><dd>${player.turns}</dd></div></div>${renderSummarySection("resources", "Resources", `<label class="skills-filter"><input type="checkbox" id="hide-zero-resources"${hideZeroResources ? " checked" : ""}/> hide 0 resources</label>${renderResources(player.resources)}`)}${renderSummarySection("inventory", "Inventory", renderInventory(player.inventory))}${renderSummarySection("conditions", "Conditions", renderConditions(player.conditions))}${renderSummarySection("skills", "Skills", `<label class="skills-filter"><input type="checkbox" id="hide-zero-skills"${hideZeroSkills ? " checked" : ""}/> hide 0 skills</label>${renderSkills(player.skills, player.skill_xp)}`)}${renderSummarySection("extraFields", "Additional Fields", renderExtraFields(player))}`;
     stats
       .querySelectorAll<HTMLButtonElement>("[data-summary-toggle]")
       .forEach((button) => {
@@ -1421,7 +1435,7 @@ function render(
     });
     setPlay(
       `<article class="play-card"><h3>${esc(title)}</h3><div class="play-card-body">${lines
-        .map((line) => `<p>${esc(line)}</p>`)
+        .map((line) => `<p>${line}</p>`)
         .join(
           "",
         )}</div></article><button id="card-ok" class="card-ok" type="button">OK</button>`,
@@ -1447,7 +1461,7 @@ function render(
       ),
     );
     tableauEl.innerHTML = tableauData.encounters
-      .map(renderEncounterCard)
+      .map((encounter) => renderEncounterCard(encounter, player.skills))
       .join("");
   }
 
@@ -1524,7 +1538,7 @@ function render(
       { type: EffectType.Turns, amount: 1 },
     ]);
     setPlay(
-      `${renderEncounterCard(card)}<div class="encounter-controls"><button id="encounter-ok" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You\'re out of turns." aria-disabled="true"'}>OK</button><button id="encounter-cancel" class="card-ok" type="button">Cancel</button></div>`,
+      `${renderEncounterCard(card, player.skills)}<div class="encounter-controls"><button id="encounter-ok" class="card-ok" type="button"${canAfford ? "" : ' disabled title="You\'re out of turns." aria-disabled="true"'}>OK</button><button id="encounter-cancel" class="card-ok" type="button">Cancel</button></div>`,
       "Encounter",
       true,
     );

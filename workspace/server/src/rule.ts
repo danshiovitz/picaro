@@ -31,10 +31,15 @@ export function getFieldValue(
       return getField(player, "speed");
     case ValueType.maxHealth:
       return getField(player, "maxHealth");
+    case ValueType.maxLuck:
+      return getField(player, "maxLuck");
     case ValueType.skill:
       return skillLevelFromXp(
         getField(player, "skill_xp")[valueSubtype ?? ""] ?? 0,
       );
+    case ValueType.healthLoss:
+    case ValueType.healthGain:
+      return 0;
     default: {
       const exhaustiveCheck: never = valueType;
       throw new Error(`Unsupported value type: ${exhaustiveCheck}`);
@@ -54,13 +59,18 @@ export function computeAnnotatedEffectiveValue(
   player: PlayerEntity,
   valueType: ValueType,
   valueSubtype?: string,
+  baseValueOverride?: number,
 ): AnnotatedValue {
   const key = valueKey(valueType, valueSubtype);
   const baseRules = rulesByTypeKey.get(RuleType.BaseValue)?.get(key) ?? [];
   const modRules = rulesByTypeKey.get(RuleType.ModifierValue)?.get(key) ?? [];
 
-  let baseValue = getFieldValue(player, valueType, valueSubtype);
-  let baseText = "default";
+  let baseValue =
+    baseValueOverride ?? getFieldValue(player, valueType, valueSubtype);
+  let baseText =
+    baseValueOverride !== undefined
+      ? valueType.replaceAll("_", " ")
+      : "default";
 
   for (const rule of baseRules) {
     if (rule.subtype == ValueRuleType.Item) {
@@ -143,9 +153,14 @@ export function computeEffectiveValue(
   player: PlayerEntity,
   valueType: ValueType,
   valueSubtype?: string,
+  baseValueOverride?: number,
 ) {
-  return computeAnnotatedEffectiveValue(player, valueType, valueSubtype)
-    .finalValue;
+  return computeAnnotatedEffectiveValue(
+    player,
+    valueType,
+    valueSubtype,
+    baseValueOverride,
+  ).finalValue;
 }
 
 export function evalTriggers(triggerType: TriggerType, player: PlayerEntity) {
