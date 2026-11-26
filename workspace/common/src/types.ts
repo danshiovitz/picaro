@@ -47,6 +47,7 @@ export type GameData = {
   regions: Region[];
   claims: Claim[];
   resourceTypes: string[];
+  elementTypes: string[];
   entities: Entity[];
 };
 export enum RewardType {
@@ -89,6 +90,7 @@ export enum EffectType {
 export type EncounterSkillCheck = { name: string; target: number };
 export type EncounterTemplate = {
   title: string;
+  element: string;
   difficulty_mod: number;
   qualityMod?: number;
   rewards: RewardType[];
@@ -194,6 +196,7 @@ export type ActiveEncounterSkillCheck = {
 export type TableauCard = {
   id: string;
   title: string;
+  element: string;
   location: string;
   difficulty: number;
   qualityMod: number;
@@ -244,6 +247,7 @@ export type ActiveEncounter = {
   id: string;
   tableauId?: string;
   title: string;
+  element: string;
   state: EncounterState;
   successThreshold: number;
   criticalThreshold?: number;

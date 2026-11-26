@@ -10,6 +10,7 @@ import {
   ValueType,
 } from "./types.js";
 import {
+  elementTypes,
   generalPenaltyTypes,
   generalRewardTypes,
   getApiState,
@@ -90,6 +91,8 @@ export function instantiateEncounterTemplate(
   return {
     id: randomUUID(),
     title: template.title,
+    element:
+      getRng().next() < 0.9 ? template.element : getRng().pick(elementTypes),
     location,
     difficulty,
     qualityMod,

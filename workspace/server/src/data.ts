@@ -80,6 +80,8 @@ export const resourceTypes = [
   "Wine",
 ];
 
+export const elementTypes = ["Savage", "Civilized", "Eldritch"];
+
 export const claims: Claim[] = claimColors.map((icon, i) => ({
   name: `Faction ${i + 1}`,
   icon,
@@ -150,6 +152,7 @@ export const terrainEncounterTemplates: Record<string, EncounterTemplate[]> =
       [
         {
           title: `Beast of the ${terrain.name}`,
+          element: "Savage",
           difficulty_mod: 2,
           rewards: [RewardType.Gold],
           criticalRewards: [RewardType.Gold],
@@ -170,6 +173,7 @@ export const generalPenaltyTypes = Object.values(PenaltyType) as PenaltyType[];
 export const encounterTemplates: EncounterTemplate[] = [
   {
     title: "Dungeon Raid",
+    element: "Civilized",
     difficulty_mod: 0,
     rewards: [RewardType.Gold],
     criticalRewards: [RewardType.Gold],
@@ -185,6 +189,7 @@ export const encounterTemplates: EncounterTemplate[] = [
   },
   {
     title: "Parley",
+    element: "Civilized",
     difficulty_mod: 2,
     rewards: [RewardType.Gold],
     criticalRewards: [],
@@ -200,6 +205,7 @@ export const encounterTemplates: EncounterTemplate[] = [
   },
   {
     title: "Wandering Sage",
+    element: "Eldritch",
     difficulty_mod: 1,
     rewards: [RewardType.Gold],
     criticalRewards: [],
@@ -215,6 +221,7 @@ export const encounterTemplates: EncounterTemplate[] = [
   },
   {
     title: "Bandit Ambush",
+    element: "Savage",
     difficulty_mod: 1,
     rewards: [RewardType.Gold],
     criticalRewards: [],
@@ -230,6 +237,7 @@ export const encounterTemplates: EncounterTemplate[] = [
   },
   {
     title: "Ancient Ruins",
+    element: "Eldritch",
     difficulty_mod: 2,
     rewards: [RewardType.FreeXp],
     criticalRewards: [RewardType.Gold],
@@ -245,6 +253,7 @@ export const encounterTemplates: EncounterTemplate[] = [
   },
   {
     title: "Court Intrigue",
+    element: "Civilized",
     difficulty_mod: 1,
     rewards: [RewardType.ControlledTeleport],
     criticalRewards: [],

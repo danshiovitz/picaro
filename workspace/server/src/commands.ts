@@ -43,6 +43,7 @@ import {
   claims,
   encounterTemplates,
   resourceTypes,
+  elementTypes,
   skillNames,
   terrainEncounterTemplates,
   specialActions,
@@ -349,6 +350,7 @@ function activeEncounterFor(
     id: card.id,
     tableauId: card.id,
     title: card.title,
+    element: card.element,
     state,
     successThreshold: card.successThreshold,
     criticalThreshold: card.criticalThreshold,
@@ -1280,6 +1282,7 @@ export function getGame() {
     claims,
     entities: state.entities.values().map(serializeEntity),
     resourceTypes,
+    elementTypes,
   };
   return ret;
 }

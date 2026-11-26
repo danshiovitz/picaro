@@ -347,10 +347,11 @@ function renderEncounterCard(
   const circles = renderEncounterPips(card.difficulty, card.qualityMod ?? 0);
   const activeClass =
     card.id === activeEncounterId ? " active-tableau-encounter" : "";
+  const elementSuffix = card.element ? ` (${card.element[0]})` : "";
   return `<article class="play-card encounter-card tableau-encounter${activeClass}" data-encounter-id="${esc(card.id)}">
   <div class="encounter-header">
    <div class="encounter-title-row">
-    <span class="encounter-title">${esc(card.title)}</span>
+    <span class="encounter-title">${esc(card.title + elementSuffix)}</span>
    </div>
    <div class="encounter-meta-row">
     <span class="encounter-location">${esc(card.location)}</span>
@@ -379,10 +380,11 @@ function renderActiveEncounterCard(
     ? `<p class="encounter-next-penalty">Next penalty: -${esc(labelForType(card.nextPenalty))}</p>`
     : "";
   const skillChecks = card.currentSkillChecks;
+  const elementSuffix = card.element ? ` (${card.element[0]})` : "";
   return `<article class="play-card encounter-card active-encounter-card" data-encounter-id="${esc(card.id)}">
   <div class="encounter-header">
    <div class="encounter-title-row">
-    <span class="encounter-title">${esc(card.title)}</span>
+    <span class="encounter-title">${esc(card.title + elementSuffix)}</span>
    </div>
   </div>
   <div class="play-card-body encounter-body">
