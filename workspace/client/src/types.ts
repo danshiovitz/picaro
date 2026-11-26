@@ -22,7 +22,7 @@ import type {
   SelectionChoice as CommonSelectionChoice,
   AvailableSpecialAction as CommonAvailableSpecialAction,
   SpecialAction as CommonSpecialAction,
-  SpecialActionType as CommonSpecialActionType,
+  RuleScope as CommonRuleScope,
   TableauCard as CommonTableauCard,
   TableauData as CommonTableauData,
   Terrain as CommonTerrain,
@@ -52,7 +52,7 @@ export type TableauCard = CommonTableauCard;
 export type TableauData = CommonTableauData;
 export type SpecialAction = CommonSpecialAction;
 export type AvailableSpecialAction = CommonAvailableSpecialAction;
-export { SpecialActionType } from "../../common/src/types.js";
+export { RuleScope } from "../../common/src/types.js";
 export type SelectionChoice = CommonSelectionChoice;
 export type Selection = SelectionBase;
 export type Notification = CommonNotification;

@@ -1,12 +1,7 @@
 import { entityEntries, getField, hydrateEntity, setField } from "./entity";
 import { SCHEMAS, resolveSchemaFields } from "./schemas";
 import { GameStore } from "./store";
-import {
-  EffectType,
-  PenaltyType,
-  RewardType,
-  SpecialActionType,
-} from "./types";
+import { EffectType, PenaltyType, RewardType, RuleScope } from "./types";
 import { renderActivityLines } from "./activity-ui";
 import type {
   ActivityNextActive,
@@ -153,8 +148,12 @@ function annotatedValueTooltip(value: AnnotatedValue) {
   return lines.join("\n");
 }
 
-function renderAnnotatedValue(value: AnnotatedValue) {
-  return `<span class="annotated-value" title="${esc(annotatedValueTooltip(value))}">${esc(value.finalValue)}</span>`;
+function renderAnnotatedValue(value: AnnotatedValue, showSign = false) {
+  const display =
+    showSign && value.finalValue >= 0
+      ? `+${value.finalValue}`
+      : value.finalValue;
+  return `<span class="annotated-value" title="${esc(annotatedValueTooltip(value))}">${esc(display)}</span>`;
 }
 
 function renderEntityValue(value: unknown) {
@@ -835,7 +834,7 @@ function render(
     for (const entity of store.tokensForHex(hex.name)) {
       const actions = specialActions.filter(
         (action) =>
-          action.type === SpecialActionType.NearbyEntity &&
+          action.type === RuleScope.NearbyEntity &&
           action.entityId === entity.id,
       );
       if (!actions.length) continue;
@@ -851,7 +850,7 @@ function render(
   function visibleGeneralSpecialActions() {
     const origin = currentLocationHex();
     return specialActions.filter((action) => {
-      if (action.type !== SpecialActionType.General) return false;
+      if (action.type !== RuleScope.General) return false;
       if (!action.locations?.length) return true;
       if (!origin) return false;
       return action.locations.some((location) => {
@@ -900,7 +899,7 @@ function render(
     const disabled = busy || activityBlocksControls;
     const generalActions = visibleGeneralSpecialActions();
     const nearbyEntityActions = specialActions.filter(
-      (action) => action.type === SpecialActionType.NearbyEntity,
+      (action) => action.type === RuleScope.NearbyEntity,
     );
     const nearbyGroups = new Map<string, AvailableSpecialAction[]>();
     for (const action of nearbyEntityActions) {
@@ -952,10 +951,10 @@ function render(
 
   function specialActionTitle(action: SpecialAction, targetName?: string) {
     if (!targetName) return `Perform ${action.name}?`;
-    if (action.type === SpecialActionType.NearbyEntity) {
+    if (action.type === RuleScope.NearbyEntity) {
       return `Perform ${action.name} with ${targetName}?`;
     }
-    if (action.type === SpecialActionType.Item) {
+    if (action.type === RuleScope.Item) {
       return `Perform ${action.name} on ${targetName}?`;
     }
     if (action.locations?.length) {
@@ -966,12 +965,12 @@ function render(
 
   function specialActionTargetName(action: AvailableSpecialAction) {
     if (!action.entityId) return undefined;
-    if (action.type === SpecialActionType.Item) {
+    if (action.type === RuleScope.Item) {
       return (player.inventory as Item[]).find(
         (item) => item.id === action.entityId,
       )?.name;
     }
-    if (action.type === SpecialActionType.NearbyEntity) {
+    if (action.type === RuleScope.NearbyEntity) {
       if (store.entities.has(action.entityId)) {
         const entity = store.entities.get(action.entityId)! as Token;
         return entity.name;
@@ -1074,11 +1073,11 @@ function render(
     const targetHex = button.dataset.specialActionTargetHex;
     const targetName =
       button.dataset.specialActionTargetName ?? specialActionTargetName(action);
-    if (action.type === SpecialActionType.Item) {
+    if (action.type === RuleScope.Item) {
       showSpecialActionPrompt(action, targetName, entityId);
       return;
     }
-    if (action.type === SpecialActionType.NearbyEntity) {
+    if (action.type === RuleScope.NearbyEntity) {
       if (!targetHex) {
         showSpecialActionPrompt(action, targetName, entityId);
         return;
@@ -1200,7 +1199,7 @@ function render(
   function renderInventory(items: Item[]) {
     const itemActionsById = new Map<string, AvailableSpecialAction[]>();
     for (const action of specialActions) {
-      if (action.type !== SpecialActionType.Item || !action.entityId) continue;
+      if (action.type !== RuleScope.Item || !action.entityId) continue;
       const actions = itemActionsById.get(action.entityId) ?? [];
       actions.push(action);
       itemActionsById.set(action.entityId, actions);

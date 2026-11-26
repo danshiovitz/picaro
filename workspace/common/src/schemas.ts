@@ -99,8 +99,8 @@ export const SCHEMAS = {
   condition: {
     id: "condition",
     name: "Condition",
+    extends: ["item"],
     fields: {
-      name: { type: "string", defaultValue: "" },
       duration: { type: "int", defaultValue: 0 },
     },
   },

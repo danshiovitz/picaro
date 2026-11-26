@@ -95,6 +95,7 @@ function startingConditions() {
     createEntity<Condition>("condition", {
       name: "Flatulent",
       duration: 5,
+      speed_boost: 1,
     }),
   ];
 }

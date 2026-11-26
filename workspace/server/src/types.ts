@@ -27,12 +27,12 @@ import type {
   AvailableSpecialAction as CommonAvailableSpecialAction,
   SpecialAction as CommonSpecialAction,
   SpecialActionRequest as CommonSpecialActionRequest,
-  SpecialActionType as CommonSpecialActionType,
   TableauCard as CommonTableauCard,
   TableauData as CommonTableauData,
   Terrain as CommonTerrain,
   Token as CommonToken,
 } from "@common/types.js";
+import { RuleScope } from "@common/types.js";
 import type { Entity as CommonEntity, EntityOf } from "@common/schemas.js";
 import type { EntityStore } from "./entity.js";
 
@@ -47,6 +47,7 @@ export type Condition = CommonCondition;
 export type Hex = CommonHex;
 export type GameData = CommonGameData;
 export type PlayerSummary = CommonPlayerSummary;
+export { RuleScope };
 export {
   RewardType,
   PenaltyType,
@@ -77,55 +78,23 @@ export enum RuleType {
   BaseValue = "BaseValue",
   ModifierValue = "ModifierValue",
 }
-export type RuleBase = {
+export type Rule = {
   id: string;
   name: string;
   priority?: number;
+  valueType: ValueType;
+  valueSubtype?: string;
+  type: RuleType;
+  scope: RuleScope;
+  predicate: string;
+  value: string;
 };
-export enum ValueRuleType {
-  General = "General",
-  Item = "Item",
-}
-export type Rule =
-  | (RuleBase & {
-      valueType: ValueType;
-      valueSubtype?: string;
-      type: RuleType.BaseValue;
-      subtype: ValueRuleType.General;
-      condition: string;
-      value: string;
-    })
-  | (RuleBase & {
-      valueType: ValueType;
-      valueSubtype?: string;
-      type: RuleType.BaseValue;
-      subtype: ValueRuleType.Item;
-      condition: string;
-      value: string;
-    })
-  | (RuleBase & {
-      valueType: ValueType;
-      valueSubtype?: string;
-      type: RuleType.ModifierValue;
-      subtype: ValueRuleType.General;
-      condition: string;
-      value: string;
-    })
-  | (RuleBase & {
-      valueType: ValueType;
-      valueSubtype?: string;
-      type: RuleType.ModifierValue;
-      subtype: ValueRuleType.Item;
-      condition: string;
-      value: string;
-    });
 
 export type ActiveEncounterSkillCheck = CommonActiveEncounterSkillCheck;
 export type TableauCard = CommonTableauCard;
 export type TableauData = CommonTableauData;
 export type SpecialAction = CommonSpecialAction;
 export type AvailableSpecialAction = CommonAvailableSpecialAction;
-export { SpecialActionType } from "@common/types.js";
 export type SelectionChoice = CommonSelectionChoice;
 export type SelectionViewChoice = CommonSelectionChoice;
 export type SelectionView = SelectionBase;

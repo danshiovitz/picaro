@@ -20,12 +20,11 @@ import {
   Selection,
   SelectionChoice,
   SpecialActionDefinition,
-  SpecialActionType,
+  RuleScope,
   TableauCard,
   Trigger,
   TriggerType,
   Notification,
-  ValueRuleType,
   ValueType,
   FunctionType,
   FunctionParamType,
@@ -292,7 +291,7 @@ export const functionParamTypesByType = new Map<
   FunctionParamType[]
 >([
   [
-    FunctionType.RuleCondition,
+    FunctionType.RulePredicate,
     [FunctionParamType.Player, FunctionParamType.RawData],
   ],
   [
@@ -495,6 +494,15 @@ export function moveToken(id: string, fromHex: string, toHex: string) {
   }
 }
 
+export function nearbyEntitiesForPlayer(player: PlayerEntity) {
+  const state = getApiState();
+  const location = getField(player, "location");
+  return (state.hexTokens.get(location) ?? [])
+    .filter((entId) => entId !== player.id)
+    .map((entId) => state.entities.getById<Token>(entId))
+    .filter((entity): entity is Token => Boolean(entity));
+}
+
 export const rulesByTypeKey = new Map<RuleType, Map<string, Rule[]>>();
 const ruleNames = new Set<string>();
 
@@ -539,8 +547,8 @@ function hasItemNamed(player: PlayerEntity, itemName: string) {
 }
 
 registerFunction(
-  "rule-item-speed-boost-condition",
-  FunctionType.RuleCondition,
+  "rule-item-speed-boost-predicate",
+  FunctionType.RulePredicate,
   (_player, item) => getField(item, "speed_boost") != 0,
 );
 registerFunction(
@@ -549,8 +557,8 @@ registerFunction(
   (_player, item) => getField(item, "speed_boost"),
 );
 registerFunction(
-  "rule-endurance-shield-base-condition",
-  FunctionType.RuleCondition,
+  "rule-endurance-shield-base-predicate",
+  FunctionType.RulePredicate,
   (player) => hasItem(player, "shield"),
 );
 registerFunction(
@@ -564,8 +572,8 @@ addRule({
   name: "Item Speed Boost",
   valueType: ValueType.speed,
   type: RuleType.ModifierValue,
-  subtype: ValueRuleType.Item,
-  condition: "rule-item-speed-boost-condition",
+  scope: RuleScope.Item,
+  predicate: "rule-item-speed-boost-predicate",
   value: "rule-item-speed-boost-value",
 });
 
@@ -575,8 +583,8 @@ addRule({
   valueType: ValueType.skill,
   valueSubtype: "Endurance",
   type: RuleType.BaseValue,
-  subtype: ValueRuleType.General,
-  condition: "rule-endurance-shield-base-condition",
+  scope: RuleScope.General,
+  predicate: "rule-endurance-shield-base-predicate",
   value: "rule-endurance-shield-base-value",
 });
 
@@ -799,7 +807,7 @@ export const specialActions: SpecialActionDefinition[] = [
   {
     id: "medical-visit",
     name: "Medical Visit",
-    type: SpecialActionType.General,
+    type: RuleScope.General,
     locations: ["C10"],
     cost: [{ type: EffectType.Gold, amount: -2 }],
     availability: "special-medical-visit-availability",
@@ -808,7 +816,7 @@ export const specialActions: SpecialActionDefinition[] = [
   {
     id: "use",
     name: "Use",
-    type: SpecialActionType.Item,
+    type: RuleScope.Item,
     cost: [],
     availability: "special-use-availability",
     execute: "special-use-execute",
@@ -816,7 +824,7 @@ export const specialActions: SpecialActionDefinition[] = [
   {
     id: "discard",
     name: "Discard",
-    type: SpecialActionType.Item,
+    type: RuleScope.Item,
     cost: [],
     availability: "special-discard-availability",
     execute: "special-discard-execute",
@@ -824,7 +832,7 @@ export const specialActions: SpecialActionDefinition[] = [
   {
     id: "trade",
     name: "Trade",
-    type: SpecialActionType.NearbyEntity,
+    type: RuleScope.NearbyEntity,
     cost: [],
     availability: "special-trade-availability",
     execute: "special-trade-execute",
@@ -832,7 +840,7 @@ export const specialActions: SpecialActionDefinition[] = [
   {
     id: "wish",
     name: "Wish",
-    type: SpecialActionType.General,
+    type: RuleScope.General,
     cost: [],
     availability: "special-wish-availability",
     execute: "special-wish-execute",

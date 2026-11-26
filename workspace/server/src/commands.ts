@@ -22,7 +22,7 @@ import {
   SpecialAction,
   SpecialActionDefinition,
   SpecialActionRequest,
-  SpecialActionType,
+  RuleScope,
   TableauCard,
   TableauData,
   CityEntity,
@@ -51,6 +51,7 @@ import {
   invoke,
   registerFunction,
   moveToken,
+  nearbyEntitiesForPlayer,
 } from "./data.js";
 import {
   instantiateEncounterTemplate,
@@ -83,15 +84,6 @@ export type EncounterRequest = {
 function specialActionBase(action: SpecialActionDefinition) {
   const { availability: _availability, ...rest } = action;
   return rest;
-}
-
-function nearbyEntitiesForPlayer(player: PlayerEntity) {
-  const state = getApiState();
-  const location = getField(player, "location");
-  return (state.hexTokens.get(location) ?? [])
-    .filter((entId) => entId !== player.id)
-    .map((entId) => state.entities.getById<Entity>(entId))
-    .filter((entity): entity is Entity => Boolean(entity));
 }
 
 export function addPlayer(
@@ -1175,7 +1167,7 @@ export function getSpecialActions(
   const state = getApiState();
   const available: AvailableSpecialAction[] = [];
   for (const action of specialActions) {
-    if (action.type === SpecialActionType.General) {
+    if (action.type === RuleScope.General) {
       if (
         invoke<boolean>(
           action.availability,
@@ -1187,7 +1179,7 @@ export function getSpecialActions(
       }
       continue;
     }
-    if (action.type === SpecialActionType.Item) {
+    if (action.type === RuleScope.Item) {
       for (const item of player.inventory as Item[]) {
         if (
           invoke<boolean>(
@@ -1201,7 +1193,7 @@ export function getSpecialActions(
       }
       continue;
     }
-    if (action.type === SpecialActionType.NearbyEntity) {
+    if (action.type === RuleScope.NearbyEntity) {
       for (const entity of nearbyEntitiesForPlayer(player)) {
         if (
           invoke<boolean>(
@@ -1231,9 +1223,9 @@ export function performSpecialAction(
   let target: Item | Entity | undefined;
   let params: unknown[] = [player];
   switch (action.type) {
-    case SpecialActionType.General:
+    case RuleScope.General:
       break;
-    case SpecialActionType.Item: {
+    case RuleScope.Item: {
       target = (player.inventory as Item[]).find(
         (item) => item.id === request.entityId,
       );
@@ -1241,7 +1233,7 @@ export function performSpecialAction(
       params = [player, target];
       break;
     }
-    case SpecialActionType.NearbyEntity: {
+    case RuleScope.NearbyEntity: {
       target = nearbyEntitiesForPlayer(player).find(
         (entity) => entity.id === request.entityId,
       );

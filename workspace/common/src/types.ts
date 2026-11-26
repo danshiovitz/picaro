@@ -11,7 +11,7 @@ export type Token = EntityOf<"token">;
 export type PlayerEntity = EntityOf<"player">;
 export type PlayerSummary = { id: string; name: string };
 export enum FunctionType {
-  RuleCondition = "rule_condition",
+  RulePredicate = "rule_predicate",
   RuleValue = "rule_value",
   SelectionCallback = "selection_callback",
   SpecialActionAvailability = "special_action_availability",
@@ -210,7 +210,7 @@ export type TableauCard = {
   skillChecks: EncounterSkillCheck[];
 };
 export type TableauData = { encounters: TableauCard[] };
-export enum SpecialActionType {
+export enum RuleScope {
   General = "general",
   Item = "item",
   NearbyEntity = "nearby_entity",
@@ -218,7 +218,7 @@ export enum SpecialActionType {
 export type SpecialAction = {
   id: string;
   name: string;
-  type: SpecialActionType;
+  type: RuleScope;
   locations?: string[];
   cost: Effect[];
 };

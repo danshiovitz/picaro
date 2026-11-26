@@ -1,11 +1,11 @@
 import { getTriggersForType, invoke } from "./data.js";
-import { rulesByTypeKey } from "./data.js";
+import { nearbyEntitiesForPlayer, rulesByTypeKey } from "./data.js";
 import { getField } from "./entity.js";
 import {
   AnnotatedValue,
   PlayerEntity,
   RuleType,
-  ValueRuleType,
+  RuleScope,
   ValueType,
   FunctionType,
   TriggerType,
@@ -73,10 +73,10 @@ export function computeAnnotatedEffectiveValue(
       : "default";
 
   for (const rule of baseRules) {
-    if (rule.subtype == ValueRuleType.Item) {
+    if (rule.scope === RuleScope.Item) {
       for (const item of getField(player, "inventory")) {
         if (
-          invoke<boolean>(rule.condition, FunctionType.RuleCondition, [
+          invoke<boolean>(rule.predicate, FunctionType.RulePredicate, [
             player,
             item,
           ])
@@ -89,9 +89,41 @@ export function computeAnnotatedEffectiveValue(
           break;
         }
       }
+
+      for (const item of getField(player, "conditions")) {
+        if (
+          invoke<boolean>(rule.predicate, FunctionType.RulePredicate, [
+            player,
+            item,
+          ])
+        ) {
+          baseValue = invoke<number>(rule.value, FunctionType.RuleValue, [
+            player,
+            item,
+          ]);
+          baseText = getField(item, "name");
+          break;
+        }
+      }
+    } else if (rule.scope === RuleScope.NearbyEntity) {
+      for (const entity of nearbyEntitiesForPlayer(player)) {
+        if (
+          invoke<boolean>(rule.predicate, FunctionType.RulePredicate, [
+            player,
+            entity,
+          ])
+        ) {
+          baseValue = invoke<number>(rule.value, FunctionType.RuleValue, [
+            player,
+            entity,
+          ]);
+          baseText = getField(entity, "name");
+          break;
+        }
+      }
     } else {
       if (
-        invoke<boolean>(rule.condition, FunctionType.RuleCondition, [
+        invoke<boolean>(rule.predicate, FunctionType.RulePredicate, [
           player,
           undefined,
         ])
@@ -109,10 +141,10 @@ export function computeAnnotatedEffectiveValue(
   const modifierValues = [] as AnnotatedValue["modifierValues"];
   let finalValue = baseValue;
   for (const rule of modRules) {
-    if (rule.subtype == ValueRuleType.Item) {
+    if (rule.scope == RuleScope.Item) {
       for (const item of getField(player, "inventory")) {
         if (
-          invoke<boolean>(rule.condition, FunctionType.RuleCondition, [
+          invoke<boolean>(rule.predicate, FunctionType.RulePredicate, [
             player,
             item,
           ])
@@ -125,9 +157,41 @@ export function computeAnnotatedEffectiveValue(
           finalValue += value;
         }
       }
+
+      for (const item of getField(player, "conditions")) {
+        if (
+          invoke<boolean>(rule.predicate, FunctionType.RulePredicate, [
+            player,
+            item,
+          ])
+        ) {
+          const value = invoke<number>(rule.value, FunctionType.RuleValue, [
+            player,
+            item,
+          ]);
+          modifierValues.push({ value, text: getField(item, "name") });
+          finalValue += value;
+        }
+      }
+    } else if (rule.scope === RuleScope.NearbyEntity) {
+      for (const entity of nearbyEntitiesForPlayer(player)) {
+        if (
+          invoke<boolean>(rule.predicate, FunctionType.RulePredicate, [
+            player,
+            entity,
+          ])
+        ) {
+          const value = invoke<number>(rule.value, FunctionType.RuleValue, [
+            player,
+            entity,
+          ]);
+          modifierValues.push({ value, text: getField(entity, "name") });
+          finalValue += value;
+        }
+      }
     } else {
       if (
-        invoke<boolean>(rule.condition, FunctionType.RuleCondition, [
+        invoke<boolean>(rule.predicate, FunctionType.RulePredicate, [
           player,
           undefined,
         ])

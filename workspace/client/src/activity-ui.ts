@@ -19,7 +19,11 @@ function esc(value: unknown) {
   );
 }
 
-function renderAnnotatedValue(value: AnnotatedValue) {
+function renderAnnotatedValue(value: AnnotatedValue, showSign = false) {
+  const display =
+    showSign && value.finalValue >= 0
+      ? `+${value.finalValue}`
+      : value.finalValue;
   return `<span class="annotated-value" title="${esc(
     [
       `${value.baseValue.value} base value from ${value.baseValue.text}`,
@@ -29,7 +33,7 @@ function renderAnnotatedValue(value: AnnotatedValue) {
       ),
       `=${value.finalValue} final`,
     ].join("\n"),
-  )}">${esc(value.finalValue)}</span>`;
+  )}">${esc(display)}</span>`;
 }
 
 export async function renderEffectText(
@@ -46,7 +50,7 @@ export async function renderEffectText(
   ) {
     const suffix =
       effect.type === EffectType.Resource ? ` (${effect.resourceType})` : "";
-    return `${renderAnnotatedValue(effect.annotatedValue)} ${labelForType(effect.type)}${suffix}`;
+    return `${renderAnnotatedValue(effect.annotatedValue, true)} ${labelForType(effect.type)}${suffix}`;
   }
   if (effect.type === EffectType.FreeXp)
     return `${effect.amount >= 0 ? "+" : "-"}${Math.abs(effect.amount)} ${labelForType(effect.type)}`;
@@ -84,7 +88,7 @@ export async function renderEffectText(
     return `Teleported to: ${effect.centerHex}`;
   }
   if (effect.annotatedValue) {
-    return `${renderAnnotatedValue(effect.annotatedValue)} ${labelForType(effect.type)}`;
+    return `${renderAnnotatedValue(effect.annotatedValue, true)} ${labelForType(effect.type)}`;
   }
   return `${effect.amount >= 0 ? "+" : "-"}${Math.abs(effect.amount)} ${labelForType(effect.type)}`;
 }
